@@ -1,6 +1,6 @@
 # Installation
 
-Download the latest installer from [Super Releases](https://github.com/dolag233/Super/releases).
+Authorized installers are published through [Super Releases](https://github.com/aimtowin/Super/releases) or supplied directly by the project team.
 
 ## Requirements
 
@@ -8,7 +8,7 @@ Download the latest installer from [Super Releases](https://github.com/dolag233/
 - Windows: 64-bit Windows 10 or Windows 11
 - The app uses about 500 MB; library data needs additional space
 
-Use [Super Releases](https://github.com/dolag233/Super/releases) for the current Windows installer and version notes.
+Use [Super Releases](https://github.com/aimtowin/Super/releases) for the current Windows installer and version notes.
 
 ## macOS
 
@@ -32,7 +32,7 @@ Unsigned development builds may trigger SmartScreen. Verify the source, then cho
 
 ## Browser extension
 
-Download the browser extension (Chrome / Edge / Firefox) from the [extension releases](https://github.com/dolag233/Super-Extension/releases). Installation and usage: see [Browser extension](browser-extension.en.md).
+The project team distributes the browser extension package with supported releases. For installation and usage, see [Browser extension](browser-extension.en.md).
 
 ## Upgrading
 

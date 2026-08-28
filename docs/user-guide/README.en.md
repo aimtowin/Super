@@ -25,7 +25,7 @@ Data stays in your local library directory; for syncing across machines, use Web
 
 A typical workspace has library navigation on the left, the asset canvas in the center, and the Inspector on the right. On Windows, the upper-left Main menu contains File, Edit, Window, Library, and Settings; macOS also exposes the same commands in the native menu. Import, search, filtering, and sorting stay in the top toolbar.
 
-![Super library overview](../assets/ui/Super-Preview.png)
+![Super library overview](../assets/ui/super-Preview.png)
 
 See [Basics](basics.en.md) for the complete workflow.
 

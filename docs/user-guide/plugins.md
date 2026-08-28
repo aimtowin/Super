@@ -6,9 +6,9 @@
 
 1. 打开「设置」→「插件」，点击安装。
 2. 选择插件来源：本地文件夹、本地 ZIP，或 GitHub 地址。
-3. 如果从 GitHub 安装，直接粘贴插件项目地址即可。例如：
+3. 如果从 GitHub 安装，直接粘贴项目团队或插件作者提供的完整项目地址。例如：
 
-   `https://github.com/dolag233/Super-Plugin-ImageUpscaler`
+   `https://github.com/<owner>/<repository>`
 
 4. 选择安装到「全局」或当前资源库。全局插件可用于所有资源库；资源库插件只在当前资源库中使用。
 

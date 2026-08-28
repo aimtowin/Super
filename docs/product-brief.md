@@ -2,7 +2,7 @@
 
 ## 当前愿景
 
-构建一款开源、免费的跨平台数字资产管理软件。Eagle 和 Billfish 是最直接的竞品。产品以本地资产管理体验为基础，并逐步提供 AI 自动分类、集中式资产同步及团队资产库能力。
+构建一款专有的跨平台数字资产管理软件。Eagle 和 Billfish 是最直接的竞品。产品以本地资产管理体验为基础，并逐步提供 AI 自动分类、集中式资产同步及团队资产库能力。
 
 游戏美术、影视后期和平面/UI/品牌设计师都是首发目标用户，不区分单一优先人群。MVP 先打透这些用户共有的图片与视频管理工作流，不提供垂直行业制作管线。
 
@@ -14,7 +14,7 @@
 
 ## 产品原则
 
-- 开源、免费。
+- 专有发布；安装包、扩展包与访问权限由项目团队管理。
 - Windows 与 macOS 首发；不计划提供移动端。
 - MVP 图形界面至少支持简体中文和英文，以及亮色、暗色和跟随系统主题；自定义主题推迟。
 - 普通导入将文件复制进自包含资源库；只有“导入文件夹”可以明确选择“以链接方式导入”。
@@ -210,8 +210,7 @@ EXR、TIFF 和 TGA 在 MVP 中显示常规预览，并支持基本色彩管理�
 Super 不设置隐藏优先级。
 
 第一阶段支持本地包、本地目录和符合规范的 GitHub 仓库 URL，不建设插件社区，也不执行
-远程仓库中的依赖安装、构建或生命周期脚本。完整边界见
-[`0024-script-plugin-platform.md`](internal/implementation/0024-script-plugin-platform.md)。
+远程仓库中的依赖安装、构建或生命周期脚本。完整边界以随产品交付的插件开发手册和 API 参考为准。
 
 资产调用外部应用只通过右键菜单中的“使用外部应用打开/打开方式”进入。
 
@@ -233,7 +232,7 @@ MVP 的设计容量上限为单个资源库最多约 10 万个文件、2 TB 原�
 
 MVP 性能行为要求：
 
-- **禁止同步阻塞加载。** 打开资源库、浏览、查看、搜索、导入等 IO 瓶颈路径都必须先进入可交互界面，未就绪内容用 placeholder（与默认缩略图同一套 UX），后台再补齐。详见 [`docs/internal/ui/0006-progressive-loading-ux-principles.md`](internal/ui/0006-progressive-loading-ux-principles.md)。
+- **禁止同步阻塞加载。** 打开资源库、浏览、查看、搜索、导入等 IO 瓶颈路径都必须先进入可交互界面，未就绪内容用 placeholder（与默认缩略图同一套 UX），后台再补齐。
 - 用户点击打开资源库后，**力争约 1 秒内**进入可交互主界面（可切换文件夹、滚动、选择、搜索）。不得等迁移、全库扫描、缩略图或 AI 全部完成后再显示。
 - 普通过滤、排序和关键词搜索在 1 秒内返回首屏。
 - 新增文件立即显示占位项，缩略图和 AI 在后台完成。
@@ -321,10 +320,10 @@ MVP 只支持导出整个资源库，不提供按合集导出。
 
 “源链接”特指浏览器扩展保存网页图片或视频时记录的用户所见网页地址，不保存媒体文件的直接地址，也不等于本地文件路径或云存储地址。Super 不创建只有 URL 的书签资产。
 
-## 分发与开源
+## 分发与许可
 
-- 客户端采用 MIT 许可证。
-- 依赖选型需要经过许可证兼容性检查；若依赖的许可证要求改变整体分发条件，应避免采用或单独重新决策。
+- Super 客户端为专有软件；源码、安装包与更新渠道仅面向获授权的人员和环境。
+- 依赖选型必须经过许可兼容性检查；第三方组件继续遵循其自身许可与归属要求，详见交付包中的许可文件。
 - 浏览器扩展首发支持 Chromium 系浏览器。
 - 桌面客户端采用 Electron 与 TypeScript，前后端主要贡献语言统一为 TypeScript/JavaScript。
 - MVP 不收集匿名使用数据或崩溃遥测；以后若重新考虑，需要新的明确决策。
@@ -353,10 +352,10 @@ MVP：
 
 ## 相关研究
 
-- [创意资产的版本、同步、锁与审批](internal/research/asset-versioning-and-sync.md)：建议 MVP 推迟版本管理 UI，但底层预留稳定资产身份、不可变修订与冲突保全。
-- [Electron 后台任务架构调研](internal/research/electron-background-worker-architecture.md)：建议沙箱化 Renderer、精简 Main、单个 UtilityProcess 和按需 FFmpeg 子进程。
-- [数据库与全文搜索技术调研](internal/research/database-and-fulltext-search.md)：建议 better-sqlite3、SQLite FTS5、应用单实例、每库单连接和按存储位置切换 journal 模式。
-- [媒体解析与预览技术栈](internal/research/media-preview-stack.md)：建议 Chromium 播放、LGPL-only FFmpeg、sharp、OpenImageIO 和 OpenColorIO。
+- 创意资产的版本、同步、锁与审批：建议 MVP 推迟版本管理 UI，但底层预留稳定资产身份、不可变修订与冲突保全。
+- Electron 后台任务架构调研：建议沙箱化 Renderer、精简 Main、单个 UtilityProcess 和按需 FFmpeg 子进程。
+- 数据库与全文搜索技术调研：建议 better-sqlite3、SQLite FTS5、应用单实例、每库单连接和按存储位置切换 journal 模式。
+- 媒体解析与预览技术栈：建议 Chromium 播放、LGPL-only FFmpeg、sharp、OpenImageIO 和 OpenColorIO。
 
 ## 访谈原则
 

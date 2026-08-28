@@ -40,4 +40,4 @@ Super 会为部分图像、RAW、视频、音频和 3D 格式生成预览。先�
 
 ## 仍有问题
 
-通过 GitHub Issues 反馈时附上：操作系统和版本、Super 版本、资源库类型、可复现步骤、错误提示/错误码，以及 `.super/` 中相关日志。不要上传 API Key、完整 Token 或未脱敏的个人文件路径。
+通过[项目 Issue](https://github.com/aimtowin/Super/issues)反馈时附上：操作系统和版本、Super 版本、资源库类型、可复现步骤、错误提示/错误码，以及 `.super/` 中相关日志。不要上传 API Key、完整 Token 或未脱敏的个人文件路径。

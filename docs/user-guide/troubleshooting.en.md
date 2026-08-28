@@ -40,4 +40,4 @@ Shortcut handling follows focus and modal priority. Settings, the viewer, and me
 
 ## Still stuck
 
-Open a GitHub Issue with your OS/version, Super version, library type, reproducible steps, error text/code, and relevant `.super/` logs. Never attach an API key, full token, or unsanitized personal paths.
+Open a [project issue](https://github.com/aimtowin/Super/issues) with your OS/version, Super version, library type, reproducible steps, error text/code, and relevant `.super/` logs. Never attach an API key, full token, or unsanitized personal paths.

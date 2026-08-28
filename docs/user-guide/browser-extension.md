@@ -6,24 +6,24 @@
 
 ## 安装
 
-> 扩展尚未上架浏览器商店，需要手动安装。所有安装文件在[扩展发布页](https://github.com/dolag233/Super-Extension/releases/latest)下载，按浏览器选择对应文件。
+> 扩展尚未上架浏览器商店，需要手动安装。请使用项目团队提供的扩展包，并按浏览器选择对应文件。
 
 ### Chrome / Edge
 
-1. 到[扩展发布页](https://github.com/dolag233/Super-Extension/releases/latest)下载 `super-extension-<版本>.zip`，解压到固定文件夹（例如「文档/Super-extension」），文件夹内需直接包含 `manifest.json`。
+1. 获取 `super-extension-<版本>.zip`，解压到固定文件夹（例如「文档/Super-extension」），文件夹内需直接包含 `manifest.json`。
 2. 打开 `chrome://extensions`（Edge 为 `edge://extensions`），开启右上角「开发者模式」。
 3. 点击「加载已解压的扩展程序」，选择解压出的文件夹。
 
 ### Firefox
 
-1. 到[扩展发布页](https://github.com/dolag233/Super-Extension/releases/latest)下载 `super-extension-firefox-<版本>-signed.xpi`。
+1. 获取 `super-extension-firefox-<版本>-signed.xpi`。
 2. 打开 `about:addons` → 齿轮图标 →「从文件安装附加组件…」→ 选择下载的 `.xpi`。
 3. 安装后**重启 Firefox 仍然生效**，与商店安装一致。
 
 ### 更新
 
-- **Chrome / Edge**：到发布页下载新版本 zip → 解压覆盖 → 在 `chrome://extensions` 扩展卡片上点「刷新」（或移除后重新加载）。
-- **Firefox**：到发布页下载新版本 `.xpi` → 重复安装步骤，覆盖旧版本。
+- **Chrome / Edge**：获取新版本 zip → 解压覆盖 → 在 `chrome://extensions` 扩展卡片上点「刷新」（或移除后重新加载）。
+- **Firefox**：获取新版本 `.xpi` → 重复安装步骤，覆盖旧版本。
 
 ## 使用
 
@@ -62,7 +62,7 @@
 
 **扩展能访问所有网站吗？安全吗？**
 
-扩展请求了「访问所有网站」权限，这是保存任意网页图片/视频所必需的。扩展只连接本机 Super（`127.0.0.1` 固定端口），不向任何远程服务器发送数据。代码开源（MIT）。
+扩展请求了「访问所有网站」权限，这是保存任意网页图片/视频所必需的。扩展只连接本机 Super（`127.0.0.1` 固定端口），不向任何远程服务器发送数据。请仅安装由项目团队提供的扩展包。
 
 ## 隐私
 

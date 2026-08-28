@@ -6,9 +6,9 @@ Plugins add tools, menus, or workflows to Super. They are not ordinary library a
 
 1. Open **Settings → Plugins** and choose Install.
 2. Choose a local folder, a local ZIP, or a GitHub address.
-3. For a GitHub plugin, paste the project address directly. For example:
+3. For a GitHub plugin, paste the complete project address supplied by the project team or plugin author. For example:
 
-   `https://github.com/dolag233/Super-Plugin-ImageUpscaler`
+   `https://github.com/<owner>/<repository>`
 
 4. Choose **User-wide** or **This library**. A user-wide plugin is available in every library; a library plugin is used only in the current library.
 

@@ -4,7 +4,7 @@
 
 完整走通过「无限制运行时 + 原生二进制 + 后台 Job + 内容写回 + GitHub 平台包」这条路径的参考实现：
 
-- 仓库：[Super-Plugin-ImageUpscaler](https://github.com/dolag233/Super-Plugin-ImageUpscaler)
+- 参考实现：由项目团队单独提供的 Super-Plugin-ImageUpscaler 成品包与源码
 - 插件 ID：`com.dolag.super.image-upscaler`
 - 安装方式：GitHub Release 平台 ZIP，不要对源码目录执行 `npm install`
 

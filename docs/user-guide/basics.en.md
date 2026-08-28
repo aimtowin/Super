@@ -60,7 +60,7 @@ In the dialog, adjust the frame range and FPS, then choose whether to import onl
 
 Click to select and double-click to open the viewer. Drag on empty canvas space to marquee-select; use `⌘` on macOS or `Ctrl` on Windows while clicking to add to a selection. `Tab` moves focus between assets; `Shift` enables range selection where supported. Folders, collections, and smart collections support context-menu actions, inline `F2` rename, and `Delete`; deleting a non-empty container confirms first, and deleting a collection never deletes its assets.
 
-![Library, Inspector, filters, and AI overview](../assets/ui/Super-Preview.png)
+![Library, Inspector, filters, and AI overview](../assets/ui/super-Preview.png)
 
 ## Viewer
 

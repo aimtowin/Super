@@ -1,6 +1,6 @@
 # 安装
 
-最新安装包见 [Super Releases](https://github.com/dolag233/Super/releases)。
+获授权的最新安装包由项目团队在 [Super Releases](https://github.com/aimtowin/Super/releases) 发布或单独提供。
 
 ## 系统要求
 
@@ -8,7 +8,7 @@
 - Windows：64 位 Windows 10 或 Windows 11
 - 应用本身约需 500 MB；资源库数据另占空间
 
-Windows 安装包和版本说明以 [Super Releases](https://github.com/dolag233/Super/releases) 为准。
+Windows 安装包和版本说明以 [Super Releases](https://github.com/aimtowin/Super/releases) 为准。
 
 ## macOS
 
@@ -32,7 +32,7 @@ xattr -cr /Applications/Super.app
 
 ## 浏览器扩展
 
-从[扩展发布页](https://github.com/dolag233/Super-Extension/releases)下载浏览器扩展（Chrome / Edge / Firefox），安装与使用见[浏览器扩展](browser-extension.md)。
+浏览器扩展包由项目团队随版本交付；安装与使用见[浏览器扩展](browser-extension.md)。
 
 ## 升级
 

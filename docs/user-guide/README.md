@@ -25,7 +25,7 @@
 
 典型工作区由左侧资源库导航、中部资产画布和右侧 Inspector 组成。Windows 使用左上角「主菜单」承载文件、编辑、窗口、资源库和设置；macOS 还提供同内容的系统菜单。导入、搜索、过滤和排序集中在顶部工具栏。
 
-![Super 资源库总览](../assets/ui/Super-Preview.png)
+![Super 资源库总览](../assets/ui/super-Preview.png)
 
 完整流程见[基本使用](basics.md)。
 

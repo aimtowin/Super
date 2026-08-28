@@ -12,7 +12,7 @@
 | 编写自动化脚本 | [脚本开发指南](scripts/development.md) | [脚本 API 参考](scripts/api-reference.md) |
 | 接入 MCP | [MCP 开发指南](mcp/development.md) | [MCP API 参考](mcp/api-reference.md) |
 
-脚本与 MCP 共用同一套 Gateway Action。脚本在 Desktop Console 中运行，MCP 通过 Desktop 内嵌的 loopback Streamable HTTP 服务连接；两者的命令名、参数、权限和执行状态应保持一致。脚本的 TypeScript 声明文件也可直接查看：[automation-api.d.ts](../internal/skills/super-automation/automation-api.d.ts)。
+脚本与 MCP 共用同一套 Gateway Action。脚本在 Desktop Console 中运行，MCP 通过 Desktop 内嵌的 loopback Streamable HTTP 服务连接；两者的命令名、参数、权限和执行状态应保持一致。运行时类型声明随产品构建提供；本手册中的 API 参考是对外交付的稳定说明。
 
 ## 三种扩展方式如何选择
 
@@ -37,12 +37,11 @@
 4. 资源库切换、插件停用和 Worker 崩溃都可能使上下文失效；开发者应把 `libraryId`、资产 ID、revision 和执行 ID 当作需要重新校验的边界。
 5. 文档中的 API 名称以当前实现和类型声明为准；如果规范文档、旧 Skill 或示例与 [脚本 API 参考](scripts/api-reference.md) 冲突，应优先采用 API 参考并记录问题。
 
-## 相关规范
+## 相关文档
 
-- [脚本自动化 Skill](../internal/skills/super-automation/SKILL.md)：面向 Agent 的操作约束和运行提示。
 - [插件分发与更新](plugins/distribution-and-updates.md)：GitHub Release、ZIP、文件夹安装及更新策略。
-- [插件平台最终设计](../internal/implementation/0024-script-plugin-platform.md)：Host/插件边界、贡献模型和生命周期的设计来源。
-- [脚本/MCP 框架实施规格](../internal/implementation/0023-automation-scripting-mcp-framework.md)：自动化 Gateway、脚本运行时和 MCP 的实现背景。
+- [脚本开发指南](scripts/development.md) 与 [脚本 API 参考](scripts/api-reference.md)：脚本运行约束、权限和命令定义。
+- [MCP 开发指南](mcp/development.md) 与 [MCP API 参考](mcp/api-reference.md)：本机服务接入、认证和工具契约。
 
 ## 文档状态
 

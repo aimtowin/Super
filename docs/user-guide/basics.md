@@ -60,7 +60,7 @@
 
 单击选择，双击打开查看器；拖拽画布空白区域可框选，macOS 使用 `⌘`、Windows 使用 `Ctrl` 加单击可增选。按 `Tab` 在资产间移动焦点，`Shift` 结合选择操作可连续选择。文件夹、合集和智能合集支持右键操作、`F2` inline 重命名和 `Delete` 删除；包含内容时会先确认，删除合集不会删除其中的资产。
 
-![资源库、Inspector、过滤和 AI 总览](../assets/ui/Super-Preview.png)
+![资源库、Inspector、过滤和 AI 总览](../assets/ui/super-Preview.png)
 
 ## 查看器
 

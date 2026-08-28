@@ -12,7 +12,7 @@
 | [插件 API 参考](api-reference.md) | `super.*` 方法、权限和错误码 |
 | [插件分发与更新](distribution-and-updates.md) | 安装通道、平台 token、GitHub Release 文件名 |
 | [插件开发最佳实践](best-practices.md) | 成品包、ZIP 路径、Job 进度、内容分块、原生二进制 |
-| [Image Upscaler](https://github.com/dolag233/Super-Plugin-ImageUpscaler) | 无限制插件 + 平台 Release 的参考实现 |
+| Image Upscaler（由项目团队单独提供） | 无限制插件 + 平台 Release 的参考实现 |
 
 ## 1. 先了解插件模型
 
@@ -322,7 +322,7 @@ default 必须在 minimum/maximum 内，slider 的 step 必须大于 0。静态�
 自定义页面是 sandboxed iframe，声明在 `contributes.views`，location 为 `sidebar`、`workspace`、`inspector`、`viewer` 或 `settings`，
 可选 `entry` 指向包内 HTML。`ui.entry` 是包级 UI 入口；页面通过 typed bridge 使用 Host/后端能力，不能注入 React、访问宿主 DOM 或 Node。
 插件设置字段已经使用 Host 内部 UI library 的统一 primitives；插件仍不能把宿主 CSS class 当作 API。更复杂的 Host-rendered
-结构化 UI descriptor 使用 `contributes.ui`，设计与字段限制见 [`0029 UI 标准化执行方案与插件原生 UI 契约`](../../internal/implementation/0029-ui-standardization-execution-and-plugin-ui-contract.md)。
+结构化 UI descriptor 使用 `contributes.ui`；字段与运行边界以本手册和 [插件 API 参考](api-reference.md)为准。
 
 ### 8.1 Plugin UI Contract v1
 
@@ -480,7 +480,7 @@ quarantine。`dispose` 应可重复调用且不依赖当前 UI。
 仓库内的 `tests/fixtures/plugins/*-probe/` 覆盖单一扩展点，适合对照 schema 和 Host 行为。
 
 需要对照「可安装、可发布、带原生运行时」的完整插件时，使用
-[Super-Plugin-ImageUpscaler](https://github.com/dolag233/Super-Plugin-ImageUpscaler)。
+由项目团队单独提供的 Super-Plugin-ImageUpscaler 参考实现。
 它演示了 `unrestricted` + `global`、`setup`/`dispose`、冻结 `invocation`、Job 工作单元进度、
 Base64 分块 staging、一次 `replaceContentBatch`，以及 macOS/Windows GitHub Release 平台 ZIP。
 实践说明集中在 [插件开发最佳实践](best-practices.md)。

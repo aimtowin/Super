@@ -6,24 +6,24 @@ Media is downloaded by the **browser** (with cookies and the page Referer) and u
 
 ## Installation
 
-> The extension is not on a browser store yet; install it manually. All install files are downloaded from the [extension releases page](https://github.com/dolag233/Super-Extension/releases/latest) — pick the file for your browser.
+> The extension is not on a browser store yet, so install it manually. Use a package supplied by the project team and choose the file for your browser.
 
 ### Chrome / Edge
 
-1. Download `super-extension-<version>.zip` from the [releases page](https://github.com/dolag233/Super-Extension/releases/latest) and extract it to a fixed folder (e.g. `Documents/Super-extension`). The folder must directly contain `manifest.json`.
+1. Obtain `super-extension-<version>.zip` and extract it to a fixed folder (e.g. `Documents/Super-extension`). The folder must directly contain `manifest.json`.
 2. Open `chrome://extensions` (Edge: `edge://extensions`) and enable Developer mode (top-right).
 3. Click “Load unpacked” and select the extracted folder.
 
 ### Firefox
 
-1. Download `super-extension-firefox-<version>-signed.xpi` from the [releases page](https://github.com/dolag233/Super-Extension/releases/latest).
+1. Obtain `super-extension-firefox-<version>-signed.xpi`.
 2. Open `about:addons` → gear icon → “Install Add-on From File…” → select the downloaded `.xpi`.
 3. The extension stays installed across Firefox restarts, like a store install.
 
 ### Updating
 
-- **Chrome / Edge**: download the new zip from the releases page, extract over the old folder, then click Refresh on the extension card in `chrome://extensions` (or remove and reload).
-- **Firefox**: download the new `.xpi` from the releases page and repeat the install steps; it replaces the old version.
+- **Chrome / Edge**: obtain the new zip, extract over the old folder, then click Refresh on the extension card in `chrome://extensions` (or remove and reload).
+- **Firefox**: obtain the new `.xpi` and repeat the install steps; it replaces the old version.
 
 ## Usage
 
@@ -62,7 +62,7 @@ You installed an unsigned zip. Use the **`-signed.xpi`** file from the releases 
 
 **Does the extension access all websites? Is it safe?**
 
-The extension requests “access to all websites” — required to save images/videos from any page. It only connects to the local Super app (`127.0.0.1`, fixed ports) and never sends data to remote servers. The code is open source (MIT).
+The extension requests “access to all websites” — required to save images/videos from any page. It only connects to the local Super app (`127.0.0.1`, fixed ports) and never sends data to remote servers. Install only a package supplied by the project team.
 
 ## Privacy
 

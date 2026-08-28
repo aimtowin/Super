@@ -4,7 +4,7 @@
 > 安装通道：**GitHub** · **本地 ZIP** · **本地文件夹**  
 > 实现跟踪：`Super-u3nx`（Release asset + 平台匹配）、`Super-8r91`（更新提示与自动更新）  
 
-> 相关：[插件开发手册](development.md)、[插件开发最佳实践](best-practices.md)、[0024](../../internal/implementation/0024-script-plugin-platform.md)、[ADR-0026](../../internal/adr/0026-plugin-runtime-installation-and-trust.md)
+> 相关：[插件开发手册](development.md)、[插件开发最佳实践](best-practices.md)、[插件 API 参考](api-reference.md)
 
 ## 1. 安装通道（产品面）
 
@@ -98,7 +98,7 @@ Host 用 adm-zip **读取** ZIP，不在 Windows 上提供 `zip` 命令。条目
 - 允许 ZIP 内有且仅有一层包裹目录（`my-plugin/super-plugin.json`）；解压后会剥掉该前缀。
 - 禁止符号链接。
 
-Windows 上 `tar -a -c -f out.zip -C dist .` 会稳定写出 `./` 前缀；`Compress-Archive` 可能写出反斜杠。不要依赖这两条命令直接作为 Release 产物。打包方式见 [最佳实践 §8](best-practices.md#8-成品包与-zip-条目名)。参考实现：[Super-Plugin-ImageUpscaler](https://github.com/dolag233/Super-Plugin-ImageUpscaler)。
+Windows 上 `tar -a -c -f out.zip -C dist .` 会稳定写出 `./` 前缀；`Compress-Archive` 可能写出反斜杠。不要依赖这两条命令直接作为 Release 产物。打包方式见 [最佳实践 §8](best-practices.md#8-成品包与-zip-条目名)。完整参考实现由项目团队单独提供。
 
 ## 4. GitHub Release 结构与 asset 命名
 
