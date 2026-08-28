@@ -20,15 +20,18 @@ test-results/
 .env.*
 !.env.example
 
-# Large platform media bundles are produced by the trusted build pipeline or
-# acquired from a checksum-pinned release. Never commit local/system binaries.
-resources/ffmpeg/
-resources/oiio/
-resources/media-binaries/*/manifest.json
-resources/media-binaries/*/licenses/
+# Media runtime binaries (ffmpeg/ffprobe/oiiotool) are VENDORED and source-built
+# locally via vcpkg (super triplet). The repo is self-contained — packaging needs
+# no external download. Only the vcpkg build tree and rebuildable bundle zips stay out.
+resources/ffmpeg/*/
+!resources/ffmpeg/win32-x64/
+resources/oiio/*/
+!resources/oiio/win32-x64/
 resources/media-binaries/vcpkg/vcpkg_installed/
 .media-build/
-artifacts/media-binaries/
+artifacts/media-binaries/*
+!artifacts/media-binaries/*.zip
+!artifacts/media-binaries/*.sha256
 
 # Beads / Dolt files (added by bd init)
 .dolt/
@@ -39,9 +42,10 @@ artifacts/media-binaries/
 .beads/issues.jsonl.*.tmp
 /skills
 
-# 媒体产物目录（manifest 等为构建生成，来源/锁文件在 media-binaries/ 根）
+# 媒体产物目录（vcpkg 构建树与源码锁文件；win32-x64 平台产物已入库）
 resources/media-binaries/*/
 !resources/media-binaries/vcpkg/
+!resources/media-binaries/win32-x64/
 
 # 开发文件（2026-08-21 用户要求：仅属 dev，main 不得引入）
 # 注意：ignore 只拦未跟踪文件——dev 上已跟踪的开发文件不受影响照常提交；

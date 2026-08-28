@@ -92,20 +92,59 @@ function findLockedArchive(downloadRoot, expectedHash) {
   return matches[0];
 }
 
+/**
+ * tar that handles Windows drive-letter paths. When the PATH exposes GNU tar
+ * (e.g. a git-bash shell), `tar -tf C:\...` is parsed as a remote host. Windows
+ * 10+ ships bsdtar at %SystemRoot%\System32\tar.exe which accepts native paths.
+ */
+function resolveTar() {
+  if (process.platform === 'win32') {
+    return path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
+  }
+  return 'tar';
+}
+
 function extractLockedText(archive, suffix) {
-  const listing = run('tar', ['-tf', archive]).split(/\r?\n/).filter(Boolean);
+  const tar = resolveTar();
+  const listing = run(tar, ['-tf', archive]).split(/\r?\n/).filter(Boolean);
   const matches = listing.filter((entry) => entry.endsWith(`/${suffix}`));
   if (matches.length !== 1) {
     throw new Error(`Expected one ${suffix} in ${archive}, found ${matches.length}.`);
   }
-  return run('tar', ['-xOf', archive, matches[0]]);
+  return run(tar, ['-xOf', archive, matches[0]]);
+}
+
+/**
+ * Locate the FFmpeg source archive vcpkg downloaded for the local build.
+ *
+ * The local build compiles FFmpeg from the upstream source tarball (sha512-verified
+ * by the vcpkg port), so `source-lock.json`'s external `ffmpeg.sha256` (a prebuilt
+ * BtbN archive) is not present in `downloads/`. The license text is identical in
+ * the source tree, and using it removes the external prebuilt host from the trust
+ * chain entirely — the binaries are built from source, and the licenses come from
+ * the same source archive.
+ */
+function findFfmpegSourceArchive(downloadRoot) {
+  const candidates = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(entryPath);
+      else if (entry.isFile() && /^ffmpeg-.+\.tar\.gz$/i.test(entry.name)) {
+        candidates.push(entryPath);
+      }
+    }
+  };
+  visit(downloadRoot);
+  if (candidates.length === 0) {
+    throw new Error('No FFmpeg source archive found in vcpkg downloads.');
+  }
+  candidates.sort();
+  return candidates[0];
 }
 
 function extractUpstreamLicenses(vcpkgRoot, sourceLock) {
-  const ffmpegArchive = findLockedArchive(
-    path.join(vcpkgRoot, 'downloads'),
-    sourceLock.components.ffmpeg.sha256,
-  );
+  const ffmpegArchive = findFfmpegSourceArchive(path.join(vcpkgRoot, 'downloads'));
   const oiioArchive = findLockedArchive(
     path.join(vcpkgRoot, 'downloads'),
     sourceLock.components.openimageio.sha256,

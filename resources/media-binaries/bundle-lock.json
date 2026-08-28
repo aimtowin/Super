@@ -10,11 +10,11 @@
   },
   "win32-x64": {
    "status": "ready",
-   "url": "https://github.com/dolag233/Super-Build/releases/download/media-v0.1.2/super-media-win32-x64.zip",
-   "sha256": "4b722ef546cb802fc05eb1baae9de6dda6721749713b05f34d4317271118cbe5",
-   "size": 103539191,
-   "manifestSha256": "8464bca777de24a9646046f13926632177140d10a83ad89ff545223f0409ecea",
-   "promotedAt": "2026-08-25T12:45:00.000Z"
+   "url": "https://github.com/aimtowin/Super/releases/download/media-v0.1.2/super-media-win32-x64.zip",
+   "sha256": "4afcbe880aa7acb9575e3718198fb950e217ed80d1301b3dd360d02e9847fd83",
+   "size": 30070504,
+   "manifestSha256": "bc0cf4777f308a86f080d7e896ae3cb3b46c7d6829b744fe5e5533e8429fe49b",
+   "promotedAt": "2026-08-28T12:50:00.000Z"
   }
  }
 }

@@ -15,9 +15,9 @@
  },
  "components": {
   "ffmpeg": {
-   "version": "n8.1",
-   "sourceUrl": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-win64-lgpl-8.1.zip",
-   "sha256": "fd8f8af0878942e2009aee3d7b399077e7e4367723380cd388350c28530f222f",
+   "version": "8.1",
+   "sourceUrl": "https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n8.1.tar.gz",
+   "sha256": "dd308201bb1239a1b73185f80c6b4121f4efdfa424a009ce544fd00bf736bb2e",
    "license": "LGPL-2.1-or-later",
    "requiredConfigureFlags": [
     "--enable-libvpx",
@@ -26,7 +26,7 @@
     "--enable-libharfbuzz",
     "--enable-zlib"
    ],
-   "external": true
+   "external": false
   },
   "openimageio": {
    "version": "3.1.12.0",

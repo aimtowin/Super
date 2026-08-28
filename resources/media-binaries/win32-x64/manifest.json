@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "platform": "win32-x64",
+  "generatedAt": "2026-08-28T12:49:06.734Z",
+  "components": {
+    "ffmpeg": {
+      "version": "8.1",
+      "sourceUrl": "https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n8.1.tar.gz",
+      "sha256": "dd308201bb1239a1b73185f80c6b4121f4efdfa424a009ce544fd00bf736bb2e",
+      "license": "LGPL-2.1-or-later",
+      "requiredConfigureFlags": [
+        "--enable-libvpx",
+        "--enable-libopus",
+        "--enable-libfreetype",
+        "--enable-libharfbuzz",
+        "--enable-zlib"
+      ],
+      "external": false
+    },
+    "openimageio": {
+      "version": "3.1.12.0",
+      "portVersion": 0,
+      "sourceUrl": "https://github.com/AcademySoftwareFoundation/OpenImageIO/archive/refs/tags/v3.1.12.0.tar.gz",
+      "sha256": "24aa5a7af5c7a98887a8f495e18079d82ef73913370e906fa5d73016d37964c7",
+      "sha512": "d00877c1bca8c5ca19e4534787783a12c892215403282425d1685920b5f424b6fac217f049243c2106e5d981c7508115145e08ce5c5dd78633073c1ddd883f3e",
+      "license": "Apache-2.0"
+    }
+  },
+  "reportedVersions": {
+    "ffmpegVersion": "ffmpeg version 8.1 Copyright (c) 2000-2026 the FFmpeg developers",
+    "ffprobeVersion": "ffprobe version 8.1 Copyright (c) 2007-2026 the FFmpeg developers",
+    "oiiotoolVersion": "3.1.12.0"
+  },
+  "files": [
+    {
+      "path": "ffmpeg/win32-x64/ffmpeg.exe",
+      "role": "executable",
+      "component": "ffmpeg",
+      "sha256": "ae61089060f7d2543053d7266eb3342a417d23682296ca19eeaf8d00455635ad"
+    },
+    {
+      "path": "ffmpeg/win32-x64/ffprobe.exe",
+      "role": "executable",
+      "component": "ffmpeg",
+      "sha256": "6068e9c28baa673cc2dae8a9f6a368e55ab4d5f304db7235486988a3cc516241"
+    },
+    {
+      "path": "oiio/win32-x64/oiiotool.exe",
+      "role": "executable",
+      "component": "openimageio",
+      "sha256": "da10675fce5bebb0339c74434b026e785fbd09f4472e40af8d8639f7e6676578"
+    },
+    {
+      "path": "media-binaries/win32-x64/licenses/FFmpeg-LICENSE.md",
+      "role": "license",
+      "component": "ffmpeg",
+      "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
+    },
+    {
+      "path": "media-binaries/win32-x64/licenses/COPYING.LGPLv2.1",
+      "role": "license",
+      "component": "ffmpeg",
+      "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+    },
+    {
+      "path": "media-binaries/win32-x64/licenses/OpenImageIO-LICENSE.md",
+      "role": "license",
+      "component": "openimageio",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "media-binaries/win32-x64/licenses/OpenImageIO-THIRD-PARTY.md",
+      "role": "license",
+      "component": "openimageio",
+      "sha256": "1e86c485c25256a807b11c6f56014acac43bdc297944c2d6b4af16fd65188c2b"
+    },
+    {
+      "path": "media-binaries/win32-x64/licenses/Build-Dependency-NOTICES.txt",
+      "role": "license",
+      "component": "build-dependencies",
+      "sha256": "84991c735d595e9abc58d740b435ed06bc8394dcbc98efaef5decae3ea619d7d"
+    }
+  ]
+}
