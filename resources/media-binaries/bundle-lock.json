@@ -1,0 +1,20 @@
+{
+ "schemaVersion": 1,
+ "bundles": {
+  "darwin-arm64": {
+   "status": "ready",
+   "url": "https://github.com/dolag233/Super-Build/releases/download/media-v0.1.2/super-media-darwin-arm64.zip",
+   "sha256": "e13e392d555797229e3dbe32857c7dd0f0f30df820b379eb6f7c436ecd09b774",
+   "size": 32647951,
+   "manifestSha256": "92bf182a2cc7dbf855b038ea92098fb153d799c24edcb1c09cf63f1c0d641472"
+  },
+  "win32-x64": {
+   "status": "ready",
+   "url": "https://github.com/dolag233/Super-Build/releases/download/media-v0.1.2/super-media-win32-x64.zip",
+   "sha256": "4b722ef546cb802fc05eb1baae9de6dda6721749713b05f34d4317271118cbe5",
+   "size": 103539191,
+   "manifestSha256": "8464bca777de24a9646046f13926632177140d10a83ad89ff545223f0409ecea",
+   "promotedAt": "2026-08-25T12:45:00.000Z"
+  }
+ }
+}
