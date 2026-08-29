@@ -107,7 +107,11 @@ export function AboutDialog({
             </div>
           ) : null}
           <span className="about-dialog-update-status">
-            {checkingForUpdates ? t("dialog.about.updateChecking") : updateStatus(updateResult, t)}
+            {downloadingUpdate
+              ? t("dialog.about.updateDownloading")
+              : checkingForUpdates
+                ? t("dialog.about.updateChecking")
+                : updateStatus(updateResult, t)}
           </span>
           {downloadingUpdate ? (
             <div className="about-dialog-update-progress">

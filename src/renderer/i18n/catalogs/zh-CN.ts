@@ -131,7 +131,7 @@ export const zhCN = {
     mainMenuClearSelection: "清除选择",
     mainMenuBackgroundJobs: "后台任务",
     mainMenuAbout: "关于",
-    mainMenuAboutSuper: "关于 Super",
+    mainMenuAboutSuper: "关于 Super Lib",
     mainMenuServices: "服务",
     mainMenuHide: "隐藏 Super",
     mainMenuHideOthers: "隐藏其他",
@@ -954,9 +954,9 @@ export const zhCN = {
       title: "资源库恢复"
     },
     about: {
-      productName: "Super",
-      logoAlt: "Super 图标",
-      closeAria: "关闭关于 Super",
+      productName: "Super Lib",
+      logoAlt: "Super Lib 图标",
+      closeAria: "关闭关于 Super Lib",
       close: "关闭",
       version: "版本 {version}",
       description: "",

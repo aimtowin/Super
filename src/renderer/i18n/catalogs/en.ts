@@ -142,7 +142,7 @@ export const en = {
     mainMenuClearSelection: "Clear selection",
     mainMenuBackgroundJobs: "Background jobs",
     mainMenuAbout: "About",
-    mainMenuAboutSuper: "About Super",
+    mainMenuAboutSuper: "About Super Lib",
     mainMenuServices: "Services",
     mainMenuHide: "Hide Super",
     mainMenuHideOthers: "Hide Others",
@@ -967,9 +967,9 @@ export const en = {
       details: "Technical details"
     },
     about: {
-      productName: "Super",
-      logoAlt: "Super icon",
-      closeAria: "Close About Super",
+      productName: "Super Lib",
+      logoAlt: "Super Lib icon",
+      closeAria: "Close About Super Lib",
       close: "Close",
       version: "Version {version}",
       description: "",

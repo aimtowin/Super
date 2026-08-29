@@ -1209,13 +1209,17 @@ function AppInner() {
     if (appUpdateApi === undefined || appUpdateDownloading) return;
     setAppUpdateDownloading(true);
     setAppUpdateProgress(null);
+    // The About window can retain a previous failed check while an automatic
+    // check has already made an update available. Do not let that stale result
+    // describe an active download as a failed update check.
+    if (availableAppUpdate !== null) setAppUpdateResult(availableAppUpdate);
     try {
       const result = await appUpdateApi.downloadUpdate();
       if (!result.ok) setAppUpdateResult(result);
     } finally {
       setAppUpdateDownloading(false);
     }
-  }, [appUpdateApi, appUpdateDownloading]);
+  }, [appUpdateApi, appUpdateDownloading, availableAppUpdate]);
 
   const cancelAppUpdateDownload = useCallback(() => {
     appUpdateApi?.cancelDownload();
