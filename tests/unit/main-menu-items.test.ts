@@ -107,11 +107,11 @@ describe("main-menu-items (Super-bnah)", () => {
     expect(edit?.items?.find((item) => item.id === "edit.clear-selection")?.disabled).toBe(true);
   });
 
-  it("exposes only the private Super about entry", () => {
+  it("exposes only the private Super Lib about entry", () => {
     const { sections } = build();
     const about = sections.find((section) => section.id === "about");
     expect(about?.items).toEqual([
-      expect.objectContaining({ id: "about.super", label: "关于 Super" }),
+      expect.objectContaining({ id: "about.super", label: "关于 Super Lib" }),
     ]);
   });
 

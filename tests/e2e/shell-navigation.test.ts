@@ -146,7 +146,7 @@ test("library switcher, breadcrumbs, and workspace history", async () => {
 
       await settingsButton.click();
       await window.getByRole("menuitem", { name: "关于", exact: true }).hover();
-      await window.getByRole("menuitem", { name: "关于 Super", exact: true }).click();
+      await window.getByRole("menuitem", { name: "关于 Super Lib", exact: true }).click();
       const aboutDialog = window.getByRole("dialog", { name: "Super" });
       await expect(aboutDialog).toBeVisible();
       await expect(window.getByText(`版本 ${packageVersion}`, { exact: true })).toBeVisible();
@@ -167,7 +167,7 @@ test("library switcher, breadcrumbs, and workspace history", async () => {
     } else {
       await application.evaluate(({ BrowserWindow, Menu }) => {
         const item = Menu.getApplicationMenu()?.getMenuItemById("about.super");
-        if (!item?.click) throw new Error("The native About Super menu item is unavailable.");
+        if (!item?.click) throw new Error("The native About Super Lib menu item is unavailable.");
         item.click(item, BrowserWindow.getFocusedWindow() ?? undefined);
       });
       const aboutDialog = window.getByRole("dialog", { name: "Super" });
