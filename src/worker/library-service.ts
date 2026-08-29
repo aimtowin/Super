@@ -25753,8 +25753,12 @@ export class LibraryService {
         const row = rows[index]!;
         const entry: Record<string, unknown> = {
           assetId: row.asset_id,
-          width: row.layout_width ?? null,
-          height: row.layout_height ?? null,
+          // Extracted metadata for audio-only/corrupt media can persist 0x0.
+          // The IPC schema deliberately accepts positive dimensions or null;
+          // a single unknown-size asset must not invalidate the full browse
+          // layout and take the library worker offline.
+          width: row.layout_width != null && row.layout_width > 0 ? row.layout_width : null,
+          height: row.layout_height != null && row.layout_height > 0 ? row.layout_height : null,
           previewArtifactId: row.layout_preview_artifact_id ?? null,
           displayName: path.posix.basename(row.relative_file_path),
           relativeFilePath: row.relative_file_path,

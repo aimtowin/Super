@@ -1710,6 +1710,30 @@ describe('pagination', () => {
     service.closeAll();
   });
 
+  it('coerces persisted 0x0 layout metadata to unknown geometry instead of rejecting the full layout', () => {
+    const { service, libraryId, libraryPath, assetId } = createLibraryWithAssetAndTags();
+    const db = new TestDatabase(path.join(libraryPath, '.super', 'library.db'));
+    const revision = db.prepare(
+      'SELECT current_revision_id FROM assets WHERE asset_id = ?',
+    ).get(assetId) as { current_revision_id: string };
+    db.prepare(
+      `INSERT INTO revision_artifacts
+         (artifact_id, revision_id, kind, mime_type, byte_size, file_path,
+          width, height, generator_version, status, generated_at)
+       VALUES (?, ?, 'extracted_metadata', 'application/json', 2, ?, 0, 0, 'test', 'ready', ?)`,
+    ).run(randomUUID(), revision.current_revision_id, 'unknown-size.json', new Date().toISOString());
+    db.close();
+
+    const result = service.searchAssets({ libraryId, layoutOnly: true });
+    expect(result.layout).toEqual([expect.objectContaining({
+      assetId,
+      width: null,
+      height: null,
+    })]);
+
+    service.closeAll();
+  });
+
   it('idsOnly respects the scope (trash) and keeps soft-deleted assets out of normal ids', () => {
     const { service, libraryId, assetId } = createLibraryWithAssetAndTags();
     service.trashAssets({ libraryId, assetIds: [assetId] });
