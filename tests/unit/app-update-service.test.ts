@@ -547,6 +547,73 @@ describe('Super app update release contract', () => {
     }
   });
 
+  it('stages a verified Windows installer until shutdown launches it silently', async () => {
+    const installerBytes = Buffer.from('Super installer bytes');
+    const archive = new AdmZip();
+    archive.addFile('SuperSetup.exe', installerBytes);
+    const archiveBytes = archive.toBuffer();
+    const checksum = createHash('sha256').update(archiveBytes).digest('hex');
+    const root = await mkdtemp(path.join(tmpdir(), 'super-app-update-stage-test-'));
+    const launched: Array<{ path: string; mode: string }> = [];
+    try {
+      const payload = releasePayload({
+        assets: [{
+          name: 'Super-win-x86-64-0.1.3-setup.zip',
+          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-setup.zip',
+          size: archiveBytes.byteLength,
+        }, {
+          name: 'Super-win-x86-64-0.1.3-setup.zip.sha256',
+          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
+          size: checksum.length,
+        }],
+      });
+      const service = createAppUpdateService({
+        currentVersion: '0.1.1',
+        isPackaged: true,
+        platform: 'win32',
+        arch: 'x64',
+        executablePath: path.join(root, 'Super.exe'),
+        tempDirectory: root,
+        downloadsDirectory: path.join(root, 'Downloads'),
+        environment: { SUPER_DISTRIBUTION: 'installed' },
+        fetchImpl: async (url) => {
+          if (url.endsWith('/releases/latest')) return new Response(JSON.stringify(payload));
+          if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
+          return new Response(archiveBytes as unknown as BodyInit);
+        },
+        launchInstaller: async (installerPath, mode) => {
+          launched.push({ path: installerPath, mode });
+          expect(await readFile(installerPath)).toEqual(installerBytes);
+        },
+      });
+
+      const prepared = await service.prepareUpdate();
+      expect(prepared).toEqual({
+        ok: true,
+        status: 'completed',
+        action: 'installer-staged',
+        version: '0.1.3',
+        distribution: 'installed',
+      });
+      expect((await readdir(root)).some((entry) => entry.startsWith('super-installer-'))).toBe(true);
+
+      const launchedResult = await service.launchPreparedUpdate('silent');
+      expect(launchedResult).toEqual({
+        ok: true,
+        status: 'completed',
+        action: 'installer-opened',
+        version: '0.1.3',
+        distribution: 'installed',
+      });
+      expect(launched).toHaveLength(1);
+      expect(launched[0]?.mode).toBe('silent');
+      expect((await readdir(root)).filter((entry) => entry.startsWith('super-installer-')))
+        .toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('extracts and opens the verified Windows installer for an installed launch', async () => {
     const installerBytes = Buffer.from('Super installer bytes');
     const archive = new AdmZip();

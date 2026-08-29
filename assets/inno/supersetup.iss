@@ -68,3 +68,5 @@ end;
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; 静默更新由 Super 在正常退出后启动；无需用户删除旧版本，完成后直接重启新版。
+Filename: "{app}\{#AppExeName}"; Parameters: "--updated"; Flags: nowait runasoriginaluser skipifdoesntexist skipifnotsilent

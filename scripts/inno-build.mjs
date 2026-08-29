@@ -14,9 +14,11 @@
  * 用法：node scripts/inno-build.mjs [--out <dir>]
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, statSync, mkdirSync, readFileSync } from 'node:fs';
+import { createWriteStream, existsSync, statSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import archiver from 'archiver';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -46,7 +48,25 @@ function fail(message) {
   process.exit(1);
 }
 
-function main() {
+function createUpdateArchive(setupExe, outputDirectory, version) {
+  const archivePath = path.join(
+    outputDirectory,
+    `Super-win-x86-64-${version}-setup.zip`,
+  );
+  rmSync(archivePath, { force: true });
+  return new Promise((resolve, reject) => {
+    const output = createWriteStream(archivePath, { flags: 'wx' });
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    output.once('close', () => resolve(archivePath));
+    output.once('error', reject);
+    archive.once('error', reject);
+    archive.pipe(output);
+    archive.file(setupExe, { name: 'SuperSetup.exe' });
+    void archive.finalize();
+  });
+}
+
+async function main() {
   const outDir = process.argv.includes('--out')
     ? path.resolve(process.argv[process.argv.indexOf('--out') + 1])
     : defaultOut;
@@ -82,6 +102,13 @@ function main() {
     fail(`Installer not produced or suspiciously small: ${setupExe}`);
   }
   console.log(`[inno-build] Windows installer written to ${setupExe} (${(statSync(setupExe).size / 1024 / 1024).toFixed(1)} MB)`);
+  const updateArchive = await createUpdateArchive(setupExe, path.dirname(outDir), version);
+  if (!existsSync(updateArchive) || statSync(updateArchive).size === 0) {
+    fail(`Update archive was not produced: ${updateArchive}`);
+  }
+  console.log(`[inno-build] GitHub update archive written to ${updateArchive}`);
 }
 
-main();
+main().catch((error) => {
+  fail(error instanceof Error ? error.message : String(error));
+});

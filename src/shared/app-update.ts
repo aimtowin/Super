@@ -75,7 +75,7 @@ export type AppUpdateCheckResult = z.infer<typeof appUpdateCheckResultSchema>;
 const appUpdateInstallSuccessSchema = z.object({
   ok: z.literal(true),
   status: z.literal('completed'),
-  action: z.enum(['installer-opened', 'portable-downloaded']),
+  action: z.enum(['installer-opened', 'installer-staged', 'portable-downloaded']),
   version: z.string().min(1).max(64),
   distribution: z.enum(['installed', 'portable']),
 });

@@ -98,7 +98,11 @@ export type AppUpdateServiceOptions = {
   fetchImpl?: AppUpdateFetch;
   openPath?: (filePath: string) => Promise<string>;
   showItemInFolder?: (filePath: string) => void;
-  launchInstaller?: (installerPath: string) => Promise<void>;
+  launchInstaller?: (
+    installerPath: string,
+    mode: 'interactive' | 'silent',
+  ) => Promise<void>;
+  scheduleInstallerCleanup?: (installerPath: string) => void;
   onDownloadProgress?: (progress: AppUpdateProgress) => void;
   logger?: AppUpdateLogger;
 };
@@ -107,6 +111,14 @@ type CachedUpdate = {
   release: GitHubRelease;
   target: AppUpdateTarget;
   selected: SelectedUpdateAsset;
+};
+
+type PreparedInstaller = {
+  installerPath: string;
+  cleanupPath: string;
+  platform: AppUpdatePlatform;
+  version: string;
+  distribution: 'installed';
 };
 
 function isRecord(input: unknown): input is Record<string, unknown> {
@@ -481,6 +493,7 @@ export class AppUpdateService {
   readonly #options: AppUpdateServiceOptions;
   readonly #fetch: AppUpdateFetch;
   #cachedUpdate: CachedUpdate | undefined;
+  #preparedInstaller: PreparedInstaller | undefined;
   #busy = false;
   #downloadAbort: AbortController | undefined;
 
@@ -591,8 +604,10 @@ export class AppUpdateService {
     }
   }
 
-  async downloadAndInstall(): Promise<AppUpdateInstallResult> {
+  /** Download and verify the latest update without replacing the running app. */
+  async prepareUpdate(): Promise<AppUpdateInstallResult> {
     if (this.#busy) return installResultError('busy');
+    await this.discardPreparedUpdate();
     this.#busy = true;
     this.#downloadAbort = new AbortController();
     const { signal } = this.#downloadAbort;
@@ -718,32 +733,29 @@ export class AppUpdateService {
         launchPath = extracted.installerPath;
         extractedInstallerDirectory = extracted.outputDirectory;
       }
-      emitDownloadProgress(this.#options.onDownloadProgress, {
-        phase: 'launching',
-        downloadedBytes: totalBytes ?? asset.size,
-        totalBytes,
-      });
-      if (this.#options.launchInstaller !== undefined) {
-        await this.#options.launchInstaller(launchPath);
-      } else {
-        const openError = await (this.#options.openPath?.(launchPath) ?? Promise.resolve(''));
-        if (openError !== '') {
-          this.#options.logger?.error('app-update.open', new Error(openError), {
-            version: update.release.version,
-            assetName: asset.name,
-          });
-          return installResultError('open-failed');
+      let cleanupPath: string;
+      if (update.target.platform === 'win32') {
+        if (extractedInstallerDirectory === undefined) {
+          return installResultError('download-failed');
         }
+        cleanupPath = extractedInstallerDirectory;
+        extractedInstallerDirectory = undefined;
+      } else {
+        cleanupPath = downloadPath;
+        keepDownloadedUpdate = true;
       }
-      this.#options.logger?.info('app-update.install', 'Update installer opened.', {
+      this.#preparedInstaller = {
+        installerPath: launchPath,
+        cleanupPath,
+        platform: update.target.platform,
         version: update.release.version,
-        assetName: asset.name,
-      });
+        distribution: 'installed',
+      };
       this.#cachedUpdate = undefined;
       return {
         ok: true,
         status: 'completed',
-        action: 'installer-opened',
+        action: 'installer-staged',
         version: update.release.version,
         distribution: 'installed',
       };
@@ -774,6 +786,73 @@ export class AppUpdateService {
       this.#downloadAbort = undefined;
       this.#busy = false;
     }
+  }
+
+  /** Launch a previously verified installer. The caller must then exit Super. */
+  async launchPreparedUpdate(
+    mode: 'interactive' | 'silent' = 'interactive',
+  ): Promise<AppUpdateInstallResult> {
+    if (this.#busy) return installResultError('busy');
+    const prepared = this.#preparedInstaller;
+    if (prepared === undefined) return installResultError('not-available');
+    this.#busy = true;
+    try {
+      emitDownloadProgress(this.#options.onDownloadProgress, {
+        phase: 'launching',
+        downloadedBytes: 0,
+      });
+      if (this.#options.launchInstaller !== undefined) {
+        await this.#options.launchInstaller(prepared.installerPath, mode);
+      } else {
+        const openError = await (this.#options.openPath?.(prepared.installerPath) ?? Promise.resolve(''));
+        if (openError !== '') {
+          this.#options.logger?.error('app-update.open', new Error(openError), {
+            version: prepared.version,
+          });
+          throw new Error(openError);
+        }
+      }
+      this.#preparedInstaller = undefined;
+      if (prepared.platform === 'win32' && this.#options.scheduleInstallerCleanup !== undefined) {
+        this.#options.scheduleInstallerCleanup(prepared.installerPath);
+      } else {
+        await removeUpdateArtifact(prepared.cleanupPath);
+      }
+      this.#options.logger?.info('app-update.install', 'Update installer opened.', {
+        version: prepared.version,
+        mode,
+      });
+      return {
+        ok: true,
+        status: 'completed',
+        action: 'installer-opened',
+        version: prepared.version,
+        distribution: prepared.distribution,
+      };
+    } catch (error) {
+      await this.discardPreparedUpdate().catch((cleanupError: unknown) => {
+        this.#options.logger?.error('app-update.cleanup', cleanupError);
+      });
+      this.#options.logger?.error('app-update.install', error, { code: 'open-failed' });
+      return installResultError('open-failed');
+    } finally {
+      this.#busy = false;
+    }
+  }
+
+  /** Remove a staged update that will not be launched. */
+  async discardPreparedUpdate(): Promise<void> {
+    const prepared = this.#preparedInstaller;
+    this.#preparedInstaller = undefined;
+    if (prepared === undefined) return;
+    await removeUpdateArtifact(prepared.cleanupPath);
+  }
+
+  /** Keep the existing explicit-update API as prepare followed by launch. */
+  async downloadAndInstall(): Promise<AppUpdateInstallResult> {
+    const prepared = await this.prepareUpdate();
+    if (!prepared.ok || prepared.action !== 'installer-staged') return prepared;
+    return this.launchPreparedUpdate('interactive');
   }
 }
 

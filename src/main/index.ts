@@ -585,6 +585,9 @@ let logger: AppLogger | undefined;
 const VIEWER_TIMING_LOG = process.env.SUPER_VIEWER_TIMING_LOG === "1";
 let appLogPath: string | undefined;
 let appUpdateService: AppUpdateService | undefined;
+let automaticUpdateTimer: NodeJS.Timeout | undefined;
+let automaticUpdatePrepared = false;
+let shutdownStarted = false;
 let automationExecutionJournal: AutomationExecutionJournal | undefined;
 let embeddedMcpServer: EmbeddedMcpServer | undefined;
 let automationCommandGateway: AutomationCommandGateway | undefined;
@@ -5816,6 +5819,58 @@ function scheduleWindowsInstallerCleanup(installerPath: string): void {
   }
 }
 
+const AUTOMATIC_UPDATE_CHECK_DELAY_MS = 12_000;
+
+/**
+ * Installed Windows releases check after the first window is usable, then keep
+ * a checksum-verified installer ready for the next ordinary application exit.
+ * Development and portable launches deliberately retain the explicit workflow.
+ */
+function scheduleAutomaticWindowsUpdate(): void {
+  if (
+    process.platform !== 'win32'
+    || !app.isPackaged
+    || process.env.SUPER_DISABLE_AUTOMATIC_UPDATES === '1'
+    || automaticUpdateTimer !== undefined
+  ) {
+    return;
+  }
+  automaticUpdateTimer = setTimeout(() => {
+    automaticUpdateTimer = undefined;
+    void (async () => {
+      const service = appUpdateService;
+      if (service === undefined || shutdownStarted || quitAfterShutdown) return;
+      const checked = await service.checkForUpdates();
+      if (shutdownStarted) return;
+      if (
+        !checked.ok
+        || checked.status !== 'available'
+        || checked.distribution !== 'installed'
+        || checked.assetKind !== 'installer'
+      ) {
+        return;
+      }
+      const prepared = await service.prepareUpdate();
+      if (prepared.ok && prepared.action === 'installer-staged') {
+        if (shutdownStarted) {
+          await service.discardPreparedUpdate();
+          return;
+        }
+        automaticUpdatePrepared = true;
+        logger?.info('app-update.auto', 'Verified update staged for installation on exit.', {
+          version: prepared.version,
+        });
+      } else if (!prepared.ok) {
+        logger?.info('app-update.auto', 'Automatic update preparation was not completed.', {
+          code: prepared.code,
+        });
+      }
+    })().catch((error: unknown) => {
+      logger?.error('app-update.auto', error);
+    });
+  }, AUTOMATIC_UPDATE_CHECK_DELAY_MS);
+}
+
 async function startApplication(): Promise<void> {
   // Super-tluf: the macOS About panel is customized here (ready-late is
   // fine for it); app.setName lives at module top level so the application
@@ -5852,18 +5907,18 @@ async function startApplication(): Promise<void> {
     environment: process.env,
     openPath: (filePath) => shell.openPath(filePath),
     showItemInFolder: (filePath) => shell.showItemInFolder(filePath),
-    launchInstaller: async (installerPath) => {
+    launchInstaller: async (installerPath, mode) => {
       if (process.platform === 'win32') {
-        spawn(installerPath, [], { detached: true, stdio: 'ignore' }).unref();
-        scheduleWindowsInstallerCleanup(installerPath);
+        const args = mode === 'silent'
+          ? ['/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS']
+          : [];
+        spawn(installerPath, args, { detached: true, stdio: 'ignore', windowsHide: mode === 'silent' }).unref();
       } else {
         const openError = await shell.openPath(installerPath);
         if (openError !== '') throw new Error(openError);
       }
-      setImmediate(() => {
-        app.quit();
-      });
     },
+    scheduleInstallerCleanup: scheduleWindowsInstallerCleanup,
     onDownloadProgress: (progress) => {
       mainWindow?.webContents.send(APP_UPDATE_PROGRESS_CHANNEL, progress);
     },
@@ -7584,7 +7639,12 @@ async function startApplication(): Promise<void> {
       if (appUpdateService === undefined) {
         return { ok: false, status: 'error', code: 'service-unavailable' };
       }
-      return appUpdateService.downloadAndInstall();
+      const result = await appUpdateService.downloadAndInstall();
+      if (result.ok && result.action === 'installer-opened') {
+        automaticUpdatePrepared = false;
+        setImmediate(() => app.quit());
+      }
+      return result;
     },
   );
 
@@ -7886,6 +7946,7 @@ async function startApplication(): Promise<void> {
   initializePreviewCache();
 
   startupComplete = true;
+  scheduleAutomaticWindowsUpdate();
 }
 
 // Super-tluf: must run before app ready — the macOS application menu's
@@ -7929,6 +7990,11 @@ if (!hasSingleInstanceLock) {
   });
 
   app.on("before-quit", (event) => {
+    shutdownStarted = true;
+    if (automaticUpdateTimer !== undefined) {
+      clearTimeout(automaticUpdateTimer);
+      automaticUpdateTimer = undefined;
+    }
     aiQueueScheduler.clearAll();
     criticalConfirmationWindowManager?.dispose();
     criticalConfirmationWindowManager = undefined;
@@ -7955,6 +8021,19 @@ if (!hasSingleInstanceLock) {
         logger?.error("automation.mcp.close", error);
       })
       .then(() => workerClient?.shutdown())
+      .then(async () => {
+        if (!automaticUpdatePrepared) return;
+        automaticUpdatePrepared = false;
+        const result = await appUpdateService?.launchPreparedUpdate('silent');
+        if (result?.ok !== true) {
+          logger?.info('app-update.auto', 'Prepared update could not be launched during shutdown.', {
+            code: result && !result.ok ? result.code : 'service-unavailable',
+          });
+        }
+      })
+      .catch((error: unknown) => {
+        logger?.error('app-update.auto', error);
+      })
       .finally(() => {
         quitAfterShutdown = true;
       // The first app.quit() is intentionally intercepted above while the
