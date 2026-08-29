@@ -4,7 +4,7 @@
 ; 安装（UAC 一开始提示）；卸载器 unins000.exe 自动生成。
 ; 构建：ISCC.exe assets\inno\supersetup.iss（SourceDir 指向打包产物父目录）
 
-#define AppName "Super"
+#define AppName "Super Lib"
 ; 版本由 inno-build.mjs 从 package.json 以 -DAppVersion 传入（npm version 提升后
 ; 安装器版本自动跟随）；缺省 0.0.1 仅为直接手工编译 ISCC 时的兜底。
 #ifndef AppVersion
@@ -17,7 +17,7 @@ AppId={{F3A7C2E1-9B5D-4E8A-8C3F-1D6B2A9E4C71}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
-AppPublisher=Super
+AppPublisher=Super Lib
 ; autopf：按 PrivilegesRequired 自动选择（admin → Program Files）
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
