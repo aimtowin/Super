@@ -89,8 +89,15 @@ export type AppUpdateInstallResult = z.infer<typeof appUpdateInstallResultSchema
 
 export const appUpdatePreparedSchema = z.strictObject({
   version: z.string().min(1).max(64),
+  releaseNotes: z.string().max(12_000),
 });
 export type AppUpdatePrepared = z.infer<typeof appUpdatePreparedSchema>;
+
+export const appUpdateCompletedSchema = z.strictObject({
+  version: z.string().min(1).max(64),
+  releaseNotes: z.string().max(12_000),
+});
+export type AppUpdateCompleted = z.infer<typeof appUpdateCompletedSchema>;
 
 export const appUpdateProgressSchema = z.object({
   phase: z.enum(['downloading', 'verifying', 'extracting', 'launching']),
@@ -124,11 +131,19 @@ export function parseAppUpdatePrepared(input: unknown): AppUpdatePrepared | null
   return parsed.success ? parsed.data : null;
 }
 
+export function parseAppUpdateCompleted(input: unknown): AppUpdateCompleted | null {
+  const parsed = appUpdateCompletedSchema.safeParse(input);
+  return parsed.success ? parsed.data : null;
+}
+
 export interface SuperAppUpdateApi {
   checkForUpdates(): Promise<AppUpdateCheckResult>;
-  downloadAndInstall(): Promise<AppUpdateInstallResult>;
+  /** Downloads only after explicit user approval; it never replaces the running app. */
+  downloadUpdate(): Promise<AppUpdateInstallResult>;
   installPreparedUpdate(): Promise<AppUpdateInstallResult>;
+  consumeCompletedUpdate(): Promise<AppUpdateCompleted | null>;
   cancelDownload(): void;
   onDownloadProgress(listener: (progress: AppUpdateProgress) => void): () => void;
+  onUpdateAvailable(listener: (update: Extract<AppUpdateCheckResult, { ok: true; status: 'available' }>) => void): () => void;
   onPreparedUpdate(listener: (update: AppUpdatePrepared) => void): () => void;
 }

@@ -39,7 +39,8 @@ function releasePayload(overrides: Record<string, unknown> = {}) {
 
 describe('Super app update release contract', () => {
   it('accepts only a bounded prepared-update notification payload', () => {
-    expect(parseAppUpdatePrepared({ version: '0.1.3' })).toEqual({ version: '0.1.3' });
+    expect(parseAppUpdatePrepared({ version: '0.1.3', releaseNotes: 'Release notes' }))
+      .toEqual({ version: '0.1.3', releaseNotes: 'Release notes' });
     expect(parseAppUpdatePrepared({ version: '' })).toBeNull();
     expect(parseAppUpdatePrepared({ version: '0.1.3', installerPath: 'C:\\temp\\setup.exe' }))
       .toBeNull();

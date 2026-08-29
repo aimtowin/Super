@@ -981,12 +981,16 @@ export const en = {
       updateUnsupported: "Automatic updates are unavailable for this launch.",
       updateUpToDate: "You're up to date ({version}).",
       updateAvailable: "Version {version} is available",
+      updateAvailableMessage: "The new version is ready. Download starts only after you approve.",
+      updateDownload: "Download update",
       updateDownloading: "Downloading update…",
       updateError: "Could not check for updates. Check your network or update-service configuration.",
       updateReadyTitle: "Update ready",
       updateReadyMessage: "Version {version} has been downloaded and verified. Finish your work, then restart to update.",
       updateRestart: "Restart to update",
-      updateRestarting: "Restarting…"
+      updateRestarting: "Restarting…",
+      updateLater: "Later",
+      updateCompletedTitle: "Updated to {version}"
     },
     openSource: {
       title: "Open-source components & licenses",

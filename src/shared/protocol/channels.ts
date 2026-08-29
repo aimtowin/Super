@@ -18,7 +18,7 @@ export const APP_LOCALE_CHANNEL = 'super:app-locale' as const;
 export const OPEN_EXTERNAL_URL_CHANNEL = 'super:shell:open-external-url' as const;
 /** Renderer → Main: inspect the latest public GitHub Release for Super. */
 export const APP_UPDATE_CHECK_CHANNEL = 'super:app-update:check' as const;
-/** Renderer → Main: download and open the verified update asset. */
+/** Renderer → Main: download and stage a verified update after user approval. */
 export const APP_UPDATE_INSTALL_CHANNEL = 'super:app-update:install' as const;
 /** Renderer → Main: install an already downloaded and verified update. */
 export const APP_UPDATE_RESTART_CHANNEL = 'super:app-update:restart' as const;
@@ -28,6 +28,10 @@ export const APP_UPDATE_CANCEL_CHANNEL = 'super:app-update:cancel' as const;
 export const APP_UPDATE_PROGRESS_CHANNEL = 'super:app-update:progress' as const;
 /** Main → Renderer: a verified automatic update is ready for user approval. */
 export const APP_UPDATE_READY_CHANNEL = 'super:app-update:ready' as const;
+/** Renderer → Main: consume the one-time notice created by a successful deferred update. */
+export const APP_UPDATE_COMPLETED_CHANNEL = 'super:app-update:completed' as const;
+/** Main → Renderer: a new update is available but has not been downloaded. */
+export const APP_UPDATE_AVAILABLE_CHANNEL = 'super:app-update:available' as const;
 /** Main → Renderer: script/MCP/plugin user-visible toast or blocking dialog. */
 export const SHELL_NOTIFY_CHANNEL = 'super:shell:notify' as const;
 /**

@@ -1136,7 +1136,9 @@ function AppInner() {
   const [appUpdateProgress, setAppUpdateProgress] = useState<AppUpdateProgress | null>(null);
   const [appUpdateChecking, setAppUpdateChecking] = useState(false);
   const [appUpdateDownloading, setAppUpdateDownloading] = useState(false);
-  const [preparedAppUpdateVersion, setPreparedAppUpdateVersion] = useState<string | null>(null);
+  const [availableAppUpdate, setAvailableAppUpdate] = useState<Extract<AppUpdateCheckResult, { ok: true; status: 'available' }> | null>(null);
+  const [preparedAppUpdate, setPreparedAppUpdate] = useState<{ version: string; releaseNotes: string } | null>(null);
+  const [completedAppUpdate, setCompletedAppUpdate] = useState<{ version: string; releaseNotes: string } | null>(null);
   const [appUpdateRestarting, setAppUpdateRestarting] = useState(false);
   // Retained solely for the shared Escape-stack contract. The proprietary
   // Super UI no longer mounts an open-source licenses dialog.
@@ -1167,9 +1169,26 @@ function AppInner() {
 
   useEffect(() => {
     if (appUpdateApi === undefined) return;
-    return appUpdateApi.onPreparedUpdate(({ version }) => {
+    return appUpdateApi.onUpdateAvailable((update) => {
+      setAppUpdateResult(update);
+      setAvailableAppUpdate(update);
+    });
+  }, [appUpdateApi]);
+
+  useEffect(() => {
+    if (appUpdateApi === undefined) return;
+    return appUpdateApi.onPreparedUpdate(({ version, releaseNotes }) => {
       setAppUpdateProgress(null);
-      setPreparedAppUpdateVersion(version);
+      setAppUpdateDownloading(false);
+      setAvailableAppUpdate(null);
+      setPreparedAppUpdate({ version, releaseNotes });
+    });
+  }, [appUpdateApi]);
+
+  useEffect(() => {
+    if (appUpdateApi === undefined) return;
+    void appUpdateApi.consumeCompletedUpdate().then((update) => {
+      if (update !== null) setCompletedAppUpdate(update);
     });
   }, [appUpdateApi]);
 
@@ -1178,18 +1197,20 @@ function AppInner() {
     setAppUpdateChecking(true);
     setAppUpdateProgress(null);
     try {
-      setAppUpdateResult(await appUpdateApi.checkForUpdates());
+      const result = await appUpdateApi.checkForUpdates();
+      setAppUpdateResult(result);
+      setAvailableAppUpdate(result.ok && result.status === 'available' ? result : null);
     } finally {
       setAppUpdateChecking(false);
     }
   }, [appUpdateApi, appUpdateChecking, appUpdateDownloading]);
 
-  const downloadAndInstallAppUpdate = useCallback(async () => {
+  const downloadAppUpdate = useCallback(async () => {
     if (appUpdateApi === undefined || appUpdateDownloading) return;
     setAppUpdateDownloading(true);
     setAppUpdateProgress(null);
     try {
-      const result = await appUpdateApi.downloadAndInstall();
+      const result = await appUpdateApi.downloadUpdate();
       if (!result.ok) setAppUpdateResult(result);
     } finally {
       setAppUpdateDownloading(false);
@@ -9817,7 +9838,7 @@ function AppInner() {
                 document.body,
               )
             : null}
-          {preparedAppUpdateVersion !== null
+          {(availableAppUpdate !== null || appUpdateDownloading || preparedAppUpdate !== null)
             ? createPortal(
                 <section
                   aria-live="polite"
@@ -9825,23 +9846,54 @@ function AppInner() {
                   role="status"
                 >
                   <div className="app-update-ready-copy">
-                    <strong>{t('dialog.about.updateReadyTitle')}</strong>
-                    <span>
-                      {t('dialog.about.updateReadyMessage', {
-                        version: preparedAppUpdateVersion,
-                      })}
-                    </span>
+                    <strong>{appUpdateDownloading
+                      ? t('dialog.about.updateDownloading')
+                      : preparedAppUpdate !== null
+                        ? t('dialog.about.updateReadyTitle')
+                        : t('dialog.about.updateAvailable', { version: availableAppUpdate?.latestVersion ?? '' })}</strong>
+                    {appUpdateDownloading ? (
+                      <>
+                        <span>{appUpdateProgress?.totalBytes === undefined
+                          ? t('dialog.about.updateDownloading')
+                          : `${formatBytes(appUpdateProgress.downloadedBytes)} / ${formatBytes(appUpdateProgress.totalBytes)}`}</span>
+                        <div className="app-update-mini-progress" aria-label={t('dialog.about.updateDownloading')}>
+                          <span style={{ width: `${Math.min(100, Math.round((appUpdateProgress?.downloadedBytes ?? 0) / Math.max(1, appUpdateProgress?.totalBytes ?? 1) * 100))}%` }} />
+                        </div>
+                      </>
+                    ) : preparedAppUpdate !== null ? (
+                      <span>{t('dialog.about.updateReadyMessage', { version: preparedAppUpdate.version })}</span>
+                    ) : (
+                      <span>{availableAppUpdate?.releaseNotes || t('dialog.about.updateAvailableMessage')}</span>
+                    )}
                   </div>
-                  <button
-                    className="primary-button app-update-ready-action"
-                    disabled={appUpdateRestarting}
-                    onClick={() => void completePreparedAppUpdate()}
-                    type="button"
-                  >
-                    {appUpdateRestarting
-                      ? t('dialog.about.updateRestarting')
-                      : t('dialog.about.updateRestart')}
-                  </button>
+                  {appUpdateDownloading ? (
+                    <button className="secondary-button app-update-ready-action" onClick={cancelAppUpdateDownload} type="button">
+                      {t('dialog.about.cancelDownload')}
+                    </button>
+                  ) : preparedAppUpdate !== null ? (
+                    <div className="app-update-ready-actions">
+                      <button className="secondary-button app-update-ready-action" onClick={() => setPreparedAppUpdate(null)} type="button">
+                        {t('dialog.about.updateLater')}
+                      </button>
+                      <button className="primary-button app-update-ready-action" disabled={appUpdateRestarting} onClick={() => void completePreparedAppUpdate()} type="button">
+                        {appUpdateRestarting ? t('dialog.about.updateRestarting') : t('dialog.about.updateRestart')}
+                      </button>
+                    </div>
+                  ) : (
+                    <button className="primary-button app-update-ready-action" onClick={() => void downloadAppUpdate()} type="button">
+                      {t('dialog.about.updateDownload')}
+                    </button>
+                  )}
+                </section>,
+                document.body,
+              )
+            : null}
+          {completedAppUpdate !== null
+            ? createPortal(
+                <section aria-live="polite" className="app-update-completed-prompt" role="status">
+                  <button className="app-update-completed-close" onClick={() => setCompletedAppUpdate(null)} type="button" aria-label={t('dialog.about.closeAria')}>×</button>
+                  <strong>{t('dialog.about.updateCompletedTitle', { version: completedAppUpdate.version })}</strong>
+                  {completedAppUpdate.releaseNotes ? <span>{completedAppUpdate.releaseNotes}</span> : null}
                 </section>,
                 document.body,
               )
@@ -11383,7 +11435,7 @@ function AppInner() {
         checkingForUpdates={appUpdateChecking}
         downloadingUpdate={appUpdateDownloading}
         onCheckForUpdates={() => void checkForAppUpdates()}
-        onDownloadAndInstall={() => void downloadAndInstallAppUpdate()}
+        onDownloadAndInstall={() => void downloadAppUpdate()}
         onCancelDownload={cancelAppUpdateDownload}
       />
       {smartCollectionSettings ? (

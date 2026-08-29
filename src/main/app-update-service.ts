@@ -92,6 +92,8 @@ export type AppUpdateServiceOptions = {
   executablePath: string;
   tempDirectory: string;
   downloadsDirectory: string;
+  /** Per-user cache for an installed update that the user elected to defer. */
+  preparedUpdateDirectory?: string;
   environment?: Record<string, string | undefined>;
   fetchImpl?: AppUpdateFetch;
   openPath?: (filePath: string) => Promise<string>;
@@ -117,6 +119,14 @@ type PreparedInstaller = {
   platform: AppUpdatePlatform;
   version: string;
   distribution: 'installed';
+  releaseNotes: string;
+};
+
+export type RestoredPreparedUpdate = {
+  installerPath: string;
+  cleanupPath: string;
+  version: string;
+  releaseNotes: string;
 };
 
 function isRecord(input: unknown): input is Record<string, unknown> {
@@ -501,6 +511,37 @@ export class AppUpdateService {
     this.#downloadAbort?.abort();
   }
 
+  getPreparedUpdate(): RestoredPreparedUpdate | undefined {
+    const prepared = this.#preparedInstaller;
+    return prepared === undefined ? undefined : {
+      installerPath: prepared.installerPath,
+      cleanupPath: prepared.cleanupPath,
+      version: prepared.version,
+      releaseNotes: prepared.releaseNotes,
+    };
+  }
+
+  restorePreparedUpdate(update: RestoredPreparedUpdate): boolean {
+    const cacheDirectory = this.#options.preparedUpdateDirectory;
+    if (cacheDirectory === undefined || this.#busy || this.#preparedInstaller !== undefined) return false;
+    const isWithinCache = (candidate: string) => {
+      const relative = path.relative(path.resolve(cacheDirectory), path.resolve(candidate));
+      return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+    };
+    if (!isWithinCache(update.installerPath) || !isWithinCache(update.cleanupPath) || !existsSync(update.installerPath)) {
+      return false;
+    }
+    this.#preparedInstaller = {
+      installerPath: update.installerPath,
+      cleanupPath: update.cleanupPath,
+      platform: 'win32',
+      version: update.version,
+      distribution: 'installed',
+      releaseNotes: update.releaseNotes,
+    };
+    return true;
+  }
+
   async checkForUpdates(): Promise<AppUpdateCheckResult> {
     this.#cachedUpdate = undefined;
     const distribution = detectAppDistribution({
@@ -653,10 +694,15 @@ export class AppUpdateService {
         return installResultError('verification-failed');
       }
 
-      downloadPath = await nextAvailableDownloadPath(
-        this.#options.downloadsDirectory,
-        asset.name,
-      );
+      const installedCacheDirectory = update.target.distribution === 'installed'
+        ? this.#options.preparedUpdateDirectory
+        : undefined;
+      const updateDirectory = installedCacheDirectory === undefined
+        ? undefined
+        : await mkdtemp(path.join(installedCacheDirectory, 'super-update-'));
+      downloadPath = updateDirectory === undefined
+        ? await nextAvailableDownloadPath(this.#options.downloadsDirectory, asset.name)
+        : path.join(updateDirectory, asset.name);
       const response = await this.#fetch(asset.browserDownloadUrl, {
         headers: superUpdateRequestHeaders(this.#options, 'application/octet-stream'),
         redirect: 'follow',
@@ -721,7 +767,10 @@ export class AppUpdateService {
           downloadedBytes: totalBytes ?? asset.size,
           totalBytes,
         });
-        const extracted = await extractWindowsInstaller(downloadPath, this.#options.tempDirectory);
+        const extracted = await extractWindowsInstaller(
+          downloadPath,
+          updateDirectory ?? this.#options.tempDirectory,
+        );
         launchPath = extracted.installerPath;
         extractedInstallerDirectory = extracted.outputDirectory;
       }
@@ -730,7 +779,7 @@ export class AppUpdateService {
         if (extractedInstallerDirectory === undefined) {
           return installResultError('download-failed');
         }
-        cleanupPath = extractedInstallerDirectory;
+        cleanupPath = updateDirectory ?? extractedInstallerDirectory;
         extractedInstallerDirectory = undefined;
       } else {
         cleanupPath = downloadPath;
@@ -742,6 +791,7 @@ export class AppUpdateService {
         platform: update.target.platform,
         version: update.release.version,
         distribution: 'installed',
+        releaseNotes: update.release.notes,
       };
       this.#cachedUpdate = undefined;
       return {

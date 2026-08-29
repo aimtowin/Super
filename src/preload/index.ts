@@ -39,6 +39,8 @@ import {
   APP_UPDATE_CANCEL_CHANNEL,
   APP_UPDATE_PROGRESS_CHANNEL,
   APP_UPDATE_READY_CHANNEL,
+  APP_UPDATE_COMPLETED_CHANNEL,
+  APP_UPDATE_AVAILABLE_CHANNEL,
   REVEAL_APP_LOG_CHANNEL,
   READ_APP_LOG_CHANNEL,
   SHOW_EDIT_CONTEXT_MENU_CHANNEL,
@@ -125,6 +127,7 @@ import {
   parseAppUpdateCheckResult,
   parseAppUpdateInstallResult,
   parseAppUpdatePrepared,
+  parseAppUpdateCompleted,
   type AppUpdatePrepared,
   parseAppUpdateProgress,
   type AppUpdateProgress,
@@ -2600,7 +2603,7 @@ const appUpdate: SuperAppUpdateApi = Object.freeze({
       await ipcRenderer.invoke(APP_UPDATE_CHECK_CHANNEL),
     );
   },
-  async downloadAndInstall() {
+  async downloadUpdate() {
     return parseAppUpdateInstallResult(
       await ipcRenderer.invoke(APP_UPDATE_INSTALL_CHANNEL),
     );
@@ -2608,6 +2611,11 @@ const appUpdate: SuperAppUpdateApi = Object.freeze({
   async installPreparedUpdate() {
     return parseAppUpdateInstallResult(
       await ipcRenderer.invoke(APP_UPDATE_RESTART_CHANNEL),
+    );
+  },
+  async consumeCompletedUpdate() {
+    return parseAppUpdateCompleted(
+      await ipcRenderer.invoke(APP_UPDATE_COMPLETED_CHANNEL),
     );
   },
   cancelDownload() {
@@ -2621,6 +2629,16 @@ const appUpdate: SuperAppUpdateApi = Object.freeze({
     ipcRenderer.on(APP_UPDATE_PROGRESS_CHANNEL, handler);
     return () => {
       ipcRenderer.removeListener(APP_UPDATE_PROGRESS_CHANNEL, handler);
+    };
+  },
+  onUpdateAvailable(listener: (update: Extract<ReturnType<typeof parseAppUpdateCheckResult>, { ok: true; status: 'available' }>) => void) {
+    const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+      const update = parseAppUpdateCheckResult(payload);
+      if (update.ok && update.status === 'available') listener(update);
+    };
+    ipcRenderer.on(APP_UPDATE_AVAILABLE_CHANNEL, handler);
+    return () => {
+      ipcRenderer.removeListener(APP_UPDATE_AVAILABLE_CHANNEL, handler);
     };
   },
   onPreparedUpdate(listener: (update: AppUpdatePrepared) => void) {

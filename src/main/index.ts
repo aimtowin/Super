@@ -67,6 +67,7 @@ import {
   createAppUpdateService,
   type AppUpdateService,
 } from './app-update-service';
+import { PendingAppUpdateStore, type AppUpdateNotice } from './pending-app-update';
 import type {
   AppUpdateCheckResult,
   AppUpdateInstallResult,
@@ -111,6 +112,8 @@ import {
   APP_UPDATE_CANCEL_CHANNEL,
   APP_UPDATE_PROGRESS_CHANNEL,
   APP_UPDATE_READY_CHANNEL,
+  APP_UPDATE_COMPLETED_CHANNEL,
+  APP_UPDATE_AVAILABLE_CHANNEL,
   REVEAL_APP_LOG_CHANNEL,
   READ_APP_LOG_CHANNEL,
   SHOW_EDIT_CONTEXT_MENU_CHANNEL,
@@ -587,6 +590,8 @@ let logger: AppLogger | undefined;
 const VIEWER_TIMING_LOG = process.env.SUPER_VIEWER_TIMING_LOG === "1";
 let appLogPath: string | undefined;
 let appUpdateService: AppUpdateService | undefined;
+let pendingAppUpdateStore: PendingAppUpdateStore | undefined;
+let completedAppUpdateNotice: AppUpdateNotice | undefined;
 let automaticUpdateTimer: NodeJS.Timeout | undefined;
 let automaticUpdatePrepared = false;
 let shutdownStarted = false;
@@ -5824,9 +5829,9 @@ function scheduleWindowsInstallerCleanup(installerPath: string): void {
 const AUTOMATIC_UPDATE_CHECK_DELAY_MS = 12_000;
 
 /**
- * Installed Windows releases check after the first window is usable, then keep
- * a checksum-verified installer ready for the next ordinary application exit.
- * Development and portable launches deliberately retain the explicit workflow.
+ * Installed Windows releases check after the first window is usable. Discovery
+ * is deliberately non-invasive: downloading starts only after an explicit
+ * renderer action from the lower-left update prompt.
  */
 function scheduleAutomaticWindowsUpdate(): void {
   if (
@@ -5852,24 +5857,10 @@ function scheduleAutomaticWindowsUpdate(): void {
       ) {
         return;
       }
-      const prepared = await service.prepareUpdate();
-      if (prepared.ok && prepared.action === 'installer-staged') {
-        if (shutdownStarted) {
-          await service.discardPreparedUpdate();
-          return;
-        }
-        automaticUpdatePrepared = true;
-        logger?.info('app-update.auto', 'Verified update staged and waiting for user approval.', {
-          version: prepared.version,
-        });
-        mainWindow?.webContents.send(APP_UPDATE_READY_CHANNEL, {
-          version: prepared.version,
-        });
-      } else if (!prepared.ok) {
-        logger?.info('app-update.auto', 'Automatic update preparation was not completed.', {
-          code: prepared.code,
-        });
-      }
+      logger?.info('app-update.auto', 'Update available; waiting for user download approval.', {
+        version: checked.latestVersion,
+      });
+      mainWindow?.webContents.send(APP_UPDATE_AVAILABLE_CHANNEL, checked);
     })().catch((error: unknown) => {
       logger?.error('app-update.auto', error);
     });
@@ -5909,6 +5900,7 @@ async function startApplication(): Promise<void> {
     executablePath: app.getPath('exe'),
     tempDirectory: app.getPath('temp'),
     downloadsDirectory: app.getPath('downloads'),
+    preparedUpdateDirectory: path.join(app.getPath('userData'), 'updates'),
     environment: process.env,
     openPath: (filePath) => shell.openPath(filePath),
     showItemInFolder: (filePath) => shell.showItemInFolder(filePath),
@@ -5929,6 +5921,31 @@ async function startApplication(): Promise<void> {
     },
     logger,
   });
+  pendingAppUpdateStore = new PendingAppUpdateStore(path.join(app.getPath('userData'), 'updates'));
+  if (process.argv.includes('--updated')) {
+    completedAppUpdateNotice = await pendingAppUpdateStore.consumeCompletion();
+  }
+  const deferredUpdate = await pendingAppUpdateStore.loadPending();
+  if (deferredUpdate !== undefined && appUpdateService.restorePreparedUpdate(deferredUpdate)) {
+    await pendingAppUpdateStore.saveCompletion({
+      version: deferredUpdate.version,
+      releaseNotes: deferredUpdate.releaseNotes,
+    });
+    const launched = await appUpdateService.launchPreparedUpdate('silent');
+    if (launched.ok && launched.action === 'installer-opened') {
+      await pendingAppUpdateStore.clearPending();
+      logger?.info('app-update.deferred', 'Launching a user-approved update before normal startup.', {
+        version: deferredUpdate.version,
+      });
+      setImmediate(() => app.quit());
+      return;
+    }
+    await pendingAppUpdateStore.clearPending();
+    await pendingAppUpdateStore.consumeCompletion();
+    logger?.info('app-update.deferred', 'Discarded an update that could not be launched.', {
+      version: deferredUpdate.version,
+    });
+  }
   // Super-wgmy: 会话日志最多保留最近 100 份，启动时清理最旧；
   // 清理失败不得阻断启动。
   try {
@@ -7644,12 +7661,25 @@ async function startApplication(): Promise<void> {
       if (appUpdateService === undefined) {
         return { ok: false, status: 'error', code: 'service-unavailable' };
       }
-      const result = automaticUpdatePrepared
-        ? await appUpdateService.launchPreparedUpdate('interactive')
-        : await appUpdateService.downloadAndInstall();
-      if (result.ok && result.action === 'installer-opened') {
-        automaticUpdatePrepared = false;
-        setImmediate(() => app.quit());
+      const result = await appUpdateService.prepareUpdate();
+      if (result.ok && result.action === 'installer-staged') {
+        const prepared = appUpdateService.getPreparedUpdate();
+        if (prepared === undefined || pendingAppUpdateStore === undefined) {
+          await appUpdateService.discardPreparedUpdate();
+          return { ok: false, status: 'error', code: 'service-unavailable' };
+        }
+        try {
+          await pendingAppUpdateStore.savePending(prepared);
+        } catch (error) {
+          logger?.error('app-update.persist', error, { version: prepared.version });
+          await appUpdateService.discardPreparedUpdate();
+          return { ok: false, status: 'error', code: 'download-failed' };
+        }
+        automaticUpdatePrepared = true;
+        mainWindow.webContents.send(APP_UPDATE_READY_CHANNEL, {
+          version: prepared.version,
+          releaseNotes: prepared.releaseNotes,
+        });
       }
       return result;
     },
@@ -7667,10 +7697,21 @@ async function startApplication(): Promise<void> {
       if (!automaticUpdatePrepared || appUpdateService === undefined) {
         return { ok: false, status: 'error', code: 'not-available' };
       }
+      const prepared = appUpdateService.getPreparedUpdate();
+      if (prepared === undefined || pendingAppUpdateStore === undefined) {
+        return { ok: false, status: 'error', code: 'not-available' };
+      }
+      await pendingAppUpdateStore.saveCompletion({
+        version: prepared.version,
+        releaseNotes: prepared.releaseNotes,
+      });
       const result = await appUpdateService.launchPreparedUpdate('silent');
       if (result.ok && result.action === 'installer-opened') {
+        await pendingAppUpdateStore.clearPending();
         automaticUpdatePrepared = false;
         setImmediate(() => app.quit());
+      } else {
+        await pendingAppUpdateStore.consumeCompletion();
       }
       return result;
     },
@@ -7684,6 +7725,13 @@ async function startApplication(): Promise<void> {
       return;
     }
     appUpdateService?.cancelDownload();
+  });
+
+  ipcMain.handle(APP_UPDATE_COMPLETED_CHANNEL, async (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return null;
+    const notice = completedAppUpdateNotice;
+    completedAppUpdateNotice = undefined;
+    return notice ?? null;
   });
 
   // 渲染进程请求在系统浏览器打开外部链接（检查器「源链接」跳转）。
@@ -8049,11 +8097,9 @@ if (!hasSingleInstanceLock) {
         logger?.error("automation.mcp.close", error);
       })
       .then(() => workerClient?.shutdown())
-      .then(async () => {
-        if (!automaticUpdatePrepared) return;
-        automaticUpdatePrepared = false;
-        await appUpdateService?.discardPreparedUpdate();
-      })
+      // A staged update is intentionally retained here. The user may choose
+      // “later”; the next launch consumes the persisted, already verified
+      // installer before creating the normal application window.
       .catch((error: unknown) => {
         logger?.error('app-update.auto', error);
       })
