@@ -15,10 +15,12 @@
  */
 import { spawnSync } from 'node:child_process';
 import { createWriteStream, existsSync, statSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import archiver from 'archiver';
+const require = createRequire(import.meta.url);
+const { ZipArchive } = require('archiver');
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -56,7 +58,7 @@ function createUpdateArchive(setupExe, outputDirectory, version) {
   rmSync(archivePath, { force: true });
   return new Promise((resolve, reject) => {
     const output = createWriteStream(archivePath, { flags: 'wx' });
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = new ZipArchive({ zlib: { level: 9 } });
     output.once('close', () => resolve(archivePath));
     output.once('error', reject);
     archive.once('error', reject);
