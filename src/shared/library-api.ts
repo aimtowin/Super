@@ -186,6 +186,24 @@ export interface LinkedFolderRemovalJobStatus {
   jobs: LinkedFolderRemovalJob[];
 }
 
+export interface LinkedFolderIndexJob {
+  jobId: string;
+  folderId: string;
+  folderName: string;
+  indexedAssets: number;
+  scannedDirectories: number;
+  pendingDirectories: number;
+  status: 'queued' | 'running' | 'paused' | 'failed' | 'succeeded';
+  errorCode: string | null;
+  errorDetail: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LinkedFolderIndexJobStatus {
+  jobs: LinkedFolderIndexJob[];
+}
+
 export interface AiJobStatus {
   queued: number;
   running: number;
@@ -716,6 +734,9 @@ export interface SuperLibraryApi {
   listLinkedFolderRemovalJobs(input: { libraryId: string }): Promise<LibraryApiResult<LinkedFolderRemovalJobStatus>>;
   pauseLinkedFolderRemovalJobs(input: { libraryId: string; jobIds?: string[] }): Promise<LibraryApiResult<{ pausedCount: number }>>;
   resumeLinkedFolderRemovalJobs(input: { libraryId: string; jobIds?: string[] }): Promise<LibraryApiResult<{ resumedCount: number }>>;
+  listLinkedFolderIndexJobs(input: { libraryId: string }): Promise<LibraryApiResult<LinkedFolderIndexJobStatus>>;
+  pauseLinkedFolderIndexJobs(input: { libraryId: string; jobIds?: string[] }): Promise<LibraryApiResult<{ pausedCount: number }>>;
+  resumeLinkedFolderIndexJobs(input: { libraryId: string; jobIds?: string[] }): Promise<LibraryApiResult<{ resumedCount: number }>>;
   pauseMediaJobs(input: { libraryId: string; jobIds?: string[] }): Promise<LibraryApiResult<{ pausedCount: number }>>;
   resumeMediaJobs(input: { libraryId: string; jobIds?: string[] }): Promise<LibraryApiResult<{ resumedCount: number }>>;
   cancelMediaJobs(input: { libraryId: string; jobIds?: string[] }): Promise<LibraryApiResult<{ cancelledCount: number }>>;

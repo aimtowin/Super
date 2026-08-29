@@ -2304,14 +2304,10 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
     }
     case 'asset.import-linked': {
       const command = request.command;
-      const linkedFolder = await withMediaSchedulingSuspended(command.libraryId, () =>
-        libraryService.importFolderAsLinked(command));
-      const assets = libraryService.listAssets({
-        libraryId: request.command.libraryId,
-        folderId: linkedFolder.folderId,
-        recursive: true,
-      });
-      scheduleThumbnailScene(request.command.libraryId, 'linked', assets.map((asset) => asset.assetId));
+      // Linked roots are created synchronously but their contents are indexed
+      // by a durable yielding task. A 40k-file directory must never make this
+      // request (and therefore the whole renderer) wait for enumeration.
+      const linkedFolder = libraryService.startFolderAsLinkedIndex(command);
       return { ok: true, type: 'asset.import-linked.completed', linkedFolder };
     }
     case 'linked-folder.list':
@@ -3618,6 +3614,24 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
         request.command.jobIds,
       );
       return { ok: true, type: 'linked-folder.removal-jobs-resumed', ...result };
+    }
+    case 'linked-folder-index.list': {
+      const status = libraryService.listLinkedFolderIndexJobs(request.command.libraryId);
+      return { ok: true, type: 'linked-folder.index-jobs', ...status };
+    }
+    case 'linked-folder-index.pause': {
+      const result = libraryService.pauseLinkedFolderIndexJobs(
+        request.command.libraryId,
+        request.command.jobIds,
+      );
+      return { ok: true, type: 'linked-folder.index-jobs-paused', ...result };
+    }
+    case 'linked-folder-index.resume': {
+      const result = libraryService.resumeLinkedFolderIndexJobs(
+        request.command.libraryId,
+        request.command.jobIds,
+      );
+      return { ok: true, type: 'linked-folder.index-jobs-resumed', ...result };
     }
     case 'media.pause-jobs': {
       const result = libraryService.pauseMediaJobs(

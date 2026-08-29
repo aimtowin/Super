@@ -2102,6 +2102,33 @@ const library: SuperLibraryApi = Object.freeze({
     return { ok: true as const, value: { resumedCount: result.resumedCount } };
   },
 
+  async listLinkedFolderIndexJobs({ libraryId }: { libraryId: string }) {
+    const result = await request({ type: 'linked-folder-index.list.request', libraryId });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'linked-folder.index-jobs') {
+      throw new Error('Unexpected linked-folder-index list response.');
+    }
+    return { ok: true as const, value: { jobs: result.jobs } };
+  },
+
+  async pauseLinkedFolderIndexJobs({ libraryId, jobIds }: { libraryId: string; jobIds?: string[] }) {
+    const result = await request({ type: 'linked-folder-index.pause.request', libraryId, jobIds });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'linked-folder.index-jobs-paused') {
+      throw new Error('Unexpected linked-folder-index pause response.');
+    }
+    return { ok: true as const, value: { pausedCount: result.pausedCount } };
+  },
+
+  async resumeLinkedFolderIndexJobs({ libraryId, jobIds }: { libraryId: string; jobIds?: string[] }) {
+    const result = await request({ type: 'linked-folder-index.resume.request', libraryId, jobIds });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'linked-folder.index-jobs-resumed') {
+      throw new Error('Unexpected linked-folder-index resume response.');
+    }
+    return { ok: true as const, value: { resumedCount: result.resumedCount } };
+  },
+
   async listPluginJobs({ libraryId }: { libraryId: string }): Promise<LibraryApiResult<PluginJobStatus>> {
     const result = await request({ type: 'plugin.list-jobs.request', libraryId });
     if (!result.ok) return failure(result);

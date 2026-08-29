@@ -345,6 +345,7 @@ import type {
   AiJobStatus,
   PluginJobStatus,
   LinkedFolderRemovalJobStatus,
+  LinkedFolderIndexJobStatus,
 } from "../shared/library-api";
 import type { SuperShellApi } from "../shared/external-url";
 import type { SuperAutomationScriptApi } from '../shared/automation-script-api';
@@ -631,6 +632,9 @@ function AppInner() {
     submitting: boolean;
   } | null>(null);
   const [assets, setAssets] = useState<AssetSummary[]>([]);
+  // Do not treat the initial empty React array as an empty library while the
+  // first paged result for the current scope is still on its way from Worker.
+  const [contentLoading, setContentLoading] = useState(false);
   const [browseLayout, setBrowseLayout] = useState<BrowseLayoutEntry[]>([]);
   const [layoutThumbnailArtifacts, setLayoutThumbnailArtifacts] = useState<{
     libraryId: string;
@@ -834,6 +838,10 @@ function AppInner() {
   const [folderRecursivePrefs, setFolderRecursivePrefs] = useState(() =>
     loadFolderRecursivePreferences(),
   );
+  // Legacy builds silently wrote `true` for linked roots. Keep only an
+  // explicit toggle made in this application session authoritative for a
+  // root, so opening an old saved browser session cannot flatten its tree.
+  const explicitLinkedRootRecursionRef = useRef(new Set<string>());
   const [collectionEditor, setCollectionEditor] = useState<{
     collectionId: string;
     description: string;
@@ -1709,6 +1717,7 @@ function AppInner() {
   const [aiJobs, setAiJobs] = useState<AiJobStatus | null>(null);
   const [pluginJobs, setPluginJobs] = useState<PluginJobStatus | null>(null);
   const [linkedFolderRemovalJobs, setLinkedFolderRemovalJobs] = useState<LinkedFolderRemovalJobStatus | null>(null);
+  const [linkedFolderIndexJobs, setLinkedFolderIndexJobs] = useState<LinkedFolderIndexJobStatus | null>(null);
   const [hiddenPluginJobActivityId, setHiddenPluginJobActivityId] = useState<string | null>(null);
   const [mediaJobsLoading, setMediaJobsLoading] = useState(false);
   const pluginJobsActive = hasActivePluginJobs(pluginJobs);
@@ -1725,8 +1734,11 @@ function AppInner() {
     const linkedRemovalActive = linkedFolderRemovalJobs?.jobs.some(
       (job) => job.status === "queued" || job.status === "running",
     ) ?? false;
-    return mediaActive || aiActive || pluginJobsActive || linkedRemovalActive;
-  }, [aiAnalyzing, aiJobs, linkedFolderRemovalJobs, mediaJobs, pluginJobsActive]);
+    const linkedIndexActive = linkedFolderIndexJobs?.jobs.some(
+      (job) => job.status === "queued" || job.status === "running",
+    ) ?? false;
+    return mediaActive || aiActive || pluginJobsActive || linkedRemovalActive || linkedIndexActive;
+  }, [aiAnalyzing, aiJobs, linkedFolderIndexJobs, linkedFolderRemovalJobs, mediaJobs, pluginJobsActive]);
   const openMediaJobs = useCallback(() => setMediaJobsOpen(true), []);
   const hidePluginJobActivity = useCallback((jobId: string) => {
     setHiddenPluginJobActivityId(jobId);
@@ -3020,6 +3032,8 @@ function AppInner() {
           : folderBrowseScope(scope, folderRecursiveRef.current));
       const libId = { libraryId: activeLibrary.libraryId };
       const generation = ++contentLoadGenerationRef.current;
+      setContentLoading(true);
+      try {
       const includeLibraryCounts =
         refreshSidebar || trashMode || scope === "all" || scope === "root";
       // Post the primary browse request before sidebar/count hydration. The
@@ -3177,6 +3191,13 @@ function AppInner() {
         offset: assetResult.value.offset,
       });
       return assetResult.value.items;
+      } finally {
+        // A superseded request must not turn off the loading surface that
+        // belongs to the newer scope/library request.
+        if (generation === contentLoadGenerationRef.current) {
+          setContentLoading(false);
+        }
+      }
     },
     [api, beginBrowsePage, showIgnoredItems],
   );
@@ -4056,21 +4077,24 @@ function AppInner() {
         library.libraryId,
         scope,
       );
-      // A linked root is normally a mounted source tree, not a small working
-      // folder. Showing only direct files makes roots such as Flow Library
-      // appear empty when every asset is under a category directory. Use a
-      // recursive first view, then remember either user choice on the same
-      // existing toolbar toggle.
+      // A linked root is a real hierarchy.  Its first view must show direct
+      // category folders, not flatten every descendant asset into the canvas.
+      // This also deliberately clears the earlier automatic recursive choice
+      // persisted by versions that made categorized sources look like one
+      // undifferentiated folder.
       const isLinkedRoot = linkedFolders.some(
         (folder) => folder.folderId === scope && folder.relativePath === "",
       );
-      const enabled = configured ?? isLinkedRoot;
-      if (configured === undefined && isLinkedRoot) {
+      const recursionPreferenceKey = `${library.libraryId}\u0000${scope}`;
+      const enabled = isLinkedRoot
+        ? (explicitLinkedRootRecursionRef.current.has(recursionPreferenceKey) ? (configured ?? false) : false)
+        : (configured ?? false);
+      if (isLinkedRoot && !explicitLinkedRootRecursionRef.current.has(recursionPreferenceKey) && configured !== false) {
         const nextPrefs = withFolderRecursiveEnabled(
           folderRecursivePrefs,
           library.libraryId,
           scope,
-          true,
+          false,
         );
         setFolderRecursivePrefs(nextPrefs);
         saveFolderRecursivePreferences(nextPrefs);
@@ -6374,6 +6398,9 @@ function AppInner() {
         throw new LibraryOperationError(result.error);
       }
       setNotice(t("toast.linkedFolderCreated", { name: result.value.displayName }));
+      // The link itself is ready now; bring the durable indexing progress to
+      // the foreground instead of leaving a large source looking inert.
+      setMediaJobsOpen(true);
       await reloadCurrentContent();
     } catch (caught) {
       setError(toMessage(caught, t("toast.linkFolderFailed"), locale));
@@ -8882,16 +8909,18 @@ function AppInner() {
     let active = true;
     const poll = async () => {
       try {
-        const [mediaResult, aiResult, pluginResult, linkedRemovalResult] = await Promise.all([
+        const [mediaResult, aiResult, pluginResult, linkedRemovalResult, linkedIndexResult] = await Promise.all([
           api.listMediaJobs({ libraryId: library.libraryId }),
           api.getAiJobStatus({ libraryId: library.libraryId }),
           api.listPluginJobs({ libraryId: library.libraryId }),
           api.listLinkedFolderRemovalJobs({ libraryId: library.libraryId }),
+          api.listLinkedFolderIndexJobs({ libraryId: library.libraryId }),
         ]);
         if (active && mediaResult.ok) setMediaJobs(mediaResult.value);
         if (active && aiResult.ok) setAiJobs(aiResult.value);
         if (active && pluginResult.ok) setPluginJobs(pluginResult.value);
         if (active && linkedRemovalResult.ok) setLinkedFolderRemovalJobs(linkedRemovalResult.value);
+        if (active && linkedIndexResult.ok) setLinkedFolderIndexJobs(linkedIndexResult.value);
       } catch {
         // Keep the last known task state during a transient Worker restart.
       } finally {
@@ -8915,16 +8944,18 @@ function AppInner() {
     let active = true;
     const poll = async () => {
       try {
-        const [mediaResult, aiResult, pluginResult, linkedRemovalResult] = await Promise.all([
+        const [mediaResult, aiResult, pluginResult, linkedRemovalResult, linkedIndexResult] = await Promise.all([
           api.listMediaJobs({ libraryId: library.libraryId }),
           api.getAiJobStatus({ libraryId: library.libraryId }),
           api.listPluginJobs({ libraryId: library.libraryId }),
           api.listLinkedFolderRemovalJobs({ libraryId: library.libraryId }),
+          api.listLinkedFolderIndexJobs({ libraryId: library.libraryId }),
         ]);
         if (active && mediaResult.ok) setMediaJobs(mediaResult.value);
         if (active && aiResult.ok) setAiJobs(aiResult.value);
         if (active && pluginResult.ok) setPluginJobs(pluginResult.value);
         if (active && linkedRemovalResult.ok) setLinkedFolderRemovalJobs(linkedRemovalResult.value);
+        if (active && linkedIndexResult.ok) setLinkedFolderIndexJobs(linkedIndexResult.value);
       } catch {
         // Keep the last known task state during a transient Worker restart.
       }
@@ -8989,6 +9020,29 @@ function AppInner() {
       }
       const jobs = await api.listLinkedFolderRemovalJobs({ libraryId: library.libraryId });
       if (jobs.ok) setLinkedFolderRemovalJobs(jobs.value);
+    } catch {
+      setError(t("toast.mediaJobsOpNoResponse"));
+    } finally {
+      setMediaJobsLoading(false);
+    }
+  }
+
+  async function controlLinkedFolderIndex(
+    action: "pause" | "resume",
+    jobIds?: string[],
+  ) {
+    if (!api || !library) return;
+    setMediaJobsLoading(true);
+    try {
+      const result = action === "pause"
+        ? await api.pauseLinkedFolderIndexJobs({ libraryId: library.libraryId, jobIds })
+        : await api.resumeLinkedFolderIndexJobs({ libraryId: library.libraryId, jobIds });
+      if (!result.ok) {
+        setError(toMessage(result.error, t("toast.mediaJobsOpFailed"), locale));
+        return;
+      }
+      const jobs = await api.listLinkedFolderIndexJobs({ libraryId: library.libraryId });
+      if (jobs.ok) setLinkedFolderIndexJobs(jobs.value);
     } catch {
       setError(t("toast.mediaJobsOpNoResponse"));
     } finally {
@@ -9524,6 +9578,13 @@ function AppInner() {
                     // Include-subfolders changes the browse result set (REQ-VIEW-004).
                     void closeAssetPreview(false);
                     const next = !folderRecursiveRef.current;
+                    if (linkedFolders.some(
+                      (folder) => folder.folderId === assetScope && folder.relativePath === "",
+                    )) {
+                      explicitLinkedRootRecursionRef.current.add(
+                        `${library.libraryId}\u0000${assetScope}`,
+                      );
+                    }
                     folderRecursiveRef.current = next;
                     setFolderRecursive(next);
                     const nextPrefs = withFolderRecursiveEnabled(
@@ -10127,7 +10188,12 @@ function AppInner() {
               tags={tags}
             />
           ) : library ? (
-            browseCanvasBodyLayout.mode !== "empty" ? (
+            (contentLoading || !browserSessionReady || uiState === "opening" || uiState === "creating") ? (
+              <div aria-busy="true" className="empty-library" role="status">
+                <div className="empty-orbit"><Icon name="file" size={24} /></div>
+                <h1>{t("common.loading")}</h1>
+              </div>
+            ) : browseCanvasBodyLayout.mode !== "empty" ? (
               <>
                 {browseCanvasBodyLayout.showFolders && (
                   <div
@@ -11718,11 +11784,15 @@ function AppInner() {
         aiJobs={aiJobs}
         pluginJobs={pluginJobs}
         linkedFolderRemovalJobs={linkedFolderRemovalJobs}
+        linkedFolderIndexJobs={linkedFolderIndexJobs}
         onClose={() => setMediaJobsOpen(false)}
         onControlMediaJobs={(action, jobIds) => void controlMediaJobs(action, jobIds)}
         onControlAiJobs={(action, jobIds) => void controlAiJobs(action, jobIds)}
         onControlLinkedFolderRemoval={(action, jobIds) =>
           void controlLinkedFolderRemoval(action, jobIds)
+        }
+        onControlLinkedFolderIndex={(action, jobIds) =>
+          void controlLinkedFolderIndex(action, jobIds)
         }
         onRevealAppLog={() => {
           const shellBridge = (window as RendererWindow).super?.shell;

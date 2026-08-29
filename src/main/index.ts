@@ -2383,6 +2383,20 @@ async function commandFor(
         libraryId: request.libraryId,
         ...(request.jobIds ? { jobIds: request.jobIds } : {}),
       };
+    case "linked-folder-index.list.request":
+      return { type: "linked-folder-index.list", libraryId: request.libraryId };
+    case "linked-folder-index.pause.request":
+      return {
+        type: "linked-folder-index.pause",
+        libraryId: request.libraryId,
+        ...(request.jobIds ? { jobIds: request.jobIds } : {}),
+      };
+    case "linked-folder-index.resume.request":
+      return {
+        type: "linked-folder-index.resume",
+        libraryId: request.libraryId,
+        ...(request.jobIds ? { jobIds: request.jobIds } : {}),
+      };
     case "linked-folder.delete-subtree.request":
       return {
         type: "linked-folder.delete-subtree",

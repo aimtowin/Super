@@ -14,6 +14,7 @@ import type {
   AiJobStatus,
   PluginJobStatus,
   LinkedFolderRemovalJobStatus,
+  LinkedFolderIndexJobStatus,
 } from "../shared/library-api";
 
 function MediaJobAssetLabel({
@@ -40,6 +41,7 @@ export interface MediaJobsDialogProps {
   aiJobs: AiJobStatus | null;
   pluginJobs: PluginJobStatus | null;
   linkedFolderRemovalJobs: LinkedFolderRemovalJobStatus | null;
+  linkedFolderIndexJobs?: LinkedFolderIndexJobStatus | null;
   onClose: () => void;
   onControlMediaJobs: (
     action: "pause" | "resume" | "cancel" | "retry",
@@ -50,6 +52,7 @@ export interface MediaJobsDialogProps {
     jobIds?: string[],
   ) => void;
   onControlLinkedFolderRemoval: (action: "pause" | "resume", jobIds?: string[]) => void;
+  onControlLinkedFolderIndex?: (action: "pause" | "resume", jobIds?: string[]) => void;
   /** Reveal main-process log (Super-iokf). */
   onRevealAppLog?: () => void;
   /** Open the in-app, recent diagnostics view. */
@@ -63,10 +66,12 @@ export function MediaJobsDialog({
   aiJobs,
   pluginJobs,
   linkedFolderRemovalJobs,
+  linkedFolderIndexJobs,
   onClose,
   onControlMediaJobs,
   onControlAiJobs,
   onControlLinkedFolderRemoval,
+  onControlLinkedFolderIndex = () => undefined,
   onRevealAppLog,
   onViewAppLog,
 }: MediaJobsDialogProps) {
@@ -277,6 +282,59 @@ export function MediaJobsDialog({
                     </div>
                   );
                 })}
+              </section>
+            )}
+            {linkedFolderIndexJobs && linkedFolderIndexJobs.jobs.length > 0 && (
+              <section
+                style={{ borderTop: "1px solid var(--border)", marginTop: 16, paddingTop: 12 }}
+              >
+                <h3 className="media-jobs-section-title">
+                  {t("dialog.mediaJobs.linkedIndexSection")}
+                </h3>
+                {linkedFolderIndexJobs.jobs.map((job) => (
+                  <div key={job.jobId} style={{ borderBottom: "1px solid var(--border)", padding: "8px 2px" }}>
+                    <div
+                      style={{
+                        display: "grid", gap: 8,
+                        gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) auto",
+                        alignItems: "center", fontSize: 11,
+                      }}
+                    >
+                      <strong className="media-jobs-grid-cell">{job.folderName}</strong>
+                      <span className="media-jobs-grid-cell">
+                        {t("dialog.mediaJobs.linkedIndexSummary", {
+                          indexed: job.indexedAssets,
+                          scanned: job.scannedDirectories,
+                          pending: job.pendingDirectories,
+                          status: job.status,
+                        })}
+                      </span>
+                      {job.status === "running" || job.status === "queued" ? (
+                        <button
+                          className="secondary-button"
+                          disabled={mediaControlsPending}
+                          onClick={() => void onControlLinkedFolderIndex("pause", [job.jobId])}
+                          type="button"
+                        >
+                          {t("dialog.mediaJobs.pauseLinkedIndex")}
+                        </button>
+                      ) : job.status === "paused" || job.status === "failed" ? (
+                        <button
+                          className="secondary-button"
+                          disabled={mediaControlsPending}
+                          onClick={() => void onControlLinkedFolderIndex("resume", [job.jobId])}
+                          type="button"
+                        >
+                          {t("dialog.mediaJobs.resumeLinkedIndex")}
+                        </button>
+                      ) : null}
+                    </div>
+                    {job.status === "running" || job.status === "queued" ? (
+                      <div className="task-progress-track"><div className="task-progress-indeterminate" /></div>
+                    ) : null}
+                    {job.errorDetail && <p className="field-help">{job.errorDetail}</p>}
+                  </div>
+                ))}
               </section>
             )}
             {aiJobs && (

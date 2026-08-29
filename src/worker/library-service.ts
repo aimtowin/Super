@@ -375,7 +375,10 @@ type MediaJobKind = (typeof MEDIA_JOB_KINDS)[number];
 type SecondaryMediaJobKind = Exclude<MediaJobKind, 'generate_thumbnail' | 'generate_video_poster'>;
 type MediaJobStatus = 'queued' | 'running' | 'paused' | 'succeeded' | 'failed' | 'cancelled';
 type LinkedFolderRemovalJobStatus = 'queued' | 'running' | 'paused' | 'failed' | 'succeeded';
+type LinkedFolderIndexJobStatus = 'queued' | 'running' | 'paused' | 'failed' | 'succeeded';
 const LINKED_FOLDER_REMOVAL_BATCH_SIZE = 128;
+/** Keep linked-source discovery, revision writes, and UI refreshes responsive. */
+const LINKED_FOLDER_INDEX_BATCH_SIZE = 128;
 /** A user explicitly stopped the whole automatic media backlog. */
 const USER_CANCELLED_MEDIA_JOB_ERROR_CODE = 'USER_CANCELLED';
 
@@ -2763,6 +2766,45 @@ const LINKED_FOLDER_REMOVAL_JOBS_SCHEMA_CHECKSUM = createHash('sha256')
   .update(LINKED_FOLDER_REMOVAL_JOBS_SCHEMA_SQL)
   .digest('hex');
 
+/**
+ * Durable queue for a newly linked source.  A folder is visible immediately,
+ * while each source directory is enumerated and persisted in independent
+ * transactions.  The queue intentionally stores only directories: files are
+ * streamed from the directory handle and deduplicated by the existing linked
+ * asset unique index, so an interrupted directory can be safely replayed.
+ */
+const LINKED_FOLDER_INDEX_JOBS_SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS linked_folder_index_jobs (
+    job_id TEXT PRIMARY KEY,
+    library_id TEXT NOT NULL REFERENCES library(library_id) ON DELETE CASCADE,
+    linked_folder_id TEXT NOT NULL REFERENCES linked_folders(folder_id) ON DELETE CASCADE,
+    folder_name TEXT NOT NULL,
+    indexed_assets INTEGER NOT NULL DEFAULT 0 CHECK(indexed_assets >= 0),
+    scanned_directories INTEGER NOT NULL DEFAULT 0 CHECK(scanned_directories >= 0),
+    pending_directories INTEGER NOT NULL DEFAULT 0 CHECK(pending_directories >= 0),
+    status TEXT NOT NULL CHECK(status IN ('queued', 'running', 'paused', 'failed', 'succeeded')),
+    error_code TEXT,
+    error_detail TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS linked_folder_index_jobs_active_folder
+    ON linked_folder_index_jobs(library_id, linked_folder_id)
+    WHERE status IN ('queued', 'running', 'paused', 'failed');
+  CREATE INDEX IF NOT EXISTS linked_folder_index_jobs_library_status
+    ON linked_folder_index_jobs(library_id, status, updated_at DESC);
+  CREATE TABLE IF NOT EXISTS linked_folder_index_queue (
+    job_id TEXT NOT NULL REFERENCES linked_folder_index_jobs(job_id) ON DELETE CASCADE,
+    relative_directory TEXT NOT NULL,
+    PRIMARY KEY (job_id, relative_directory)
+  );
+  CREATE INDEX IF NOT EXISTS linked_folder_index_queue_next
+    ON linked_folder_index_queue(job_id, relative_directory);
+`;
+const LINKED_FOLDER_INDEX_JOBS_SCHEMA_CHECKSUM = createHash('sha256')
+  .update(LINKED_FOLDER_INDEX_JOBS_SCHEMA_SQL)
+  .digest('hex');
+
 // Keep individual recipes bounded so a DB-only mutation cannot turn the
 // library database into an unbounded snapshot store. Large-content/history
 // operations remain a separate phase with explicit byte retention policy.
@@ -2903,6 +2945,11 @@ export const MIGRATIONS = [
     version: 44,
     sql: LINKED_FOLDER_REMOVAL_JOBS_SCHEMA_SQL,
     checksum: LINKED_FOLDER_REMOVAL_JOBS_SCHEMA_CHECKSUM,
+  },
+  {
+    version: 45,
+    sql: LINKED_FOLDER_INDEX_JOBS_SCHEMA_SQL,
+    checksum: LINKED_FOLDER_INDEX_JOBS_SCHEMA_CHECKSUM,
   },
 ] as const;
 export const SUPPORTED_SCHEMA_VERSION = MIGRATIONS.at(-1)!.version;
@@ -5581,6 +5628,8 @@ export class LibraryService {
   }>();
   /** One yielding, persisted index-removal pump per linked-folder job. */
   private readonly activeLinkedFolderRemovalPumps = new Map<string, Promise<void>>();
+  /** One yielding, persisted index-construction pump per linked-folder job. */
+  private readonly activeLinkedFolderIndexPumps = new Map<string, Promise<void>>();
   /**
    * A missing component can be repaired while a library remains open. Once a
    * repair wave has been queued, do not requeue the same component on every
@@ -6260,7 +6309,12 @@ export class LibraryService {
       .prepare(
         `SELECT folder_id, absolute_root_path, status
            FROM linked_folders
-          WHERE library_id = ?`,
+          WHERE library_id = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM linked_folder_index_jobs j
+               WHERE j.linked_folder_id = linked_folders.folder_id
+                 AND j.status IN ('queued', 'running', 'paused')
+            )`,
       )
       .all(libraryId) as Array<{
         folder_id: string;
@@ -14792,6 +14846,414 @@ export class LibraryService {
       relativePath: '',
       parentFolderId: null,
     };
+  }
+
+  /**
+   * Create a linked root immediately, then index it in bounded background
+   * batches.  This is the UI-facing entry point for new links; the older
+   * synchronous importFolderAsLinked remains for migration/test workflows
+   * that explicitly require a completed snapshot before returning.
+   */
+  startFolderAsLinkedIndex(input: {
+    libraryId: string;
+    sourceRootPath: string;
+    displayName?: string;
+  }): LinkedFolderSummary {
+    const openLibrary = this.requireOpenLibrary(input.libraryId);
+    this.assertLibraryWritable(openLibrary);
+    let sourceRoot: string;
+    try {
+      sourceRoot = normalizeAbsolutePath(input.sourceRootPath);
+    } catch (error) {
+      throw serviceError(error, 'INVALID_IMPORT_SOURCE');
+    }
+    let rootStat: BigIntStats;
+    try {
+      rootStat = lstatSync(sourceRoot, { bigint: true });
+    } catch (error) {
+      throw new LibraryServiceError('INVALID_IMPORT_SOURCE', { cause: error });
+    }
+    if (rootStat.isSymbolicLink()) throw unsupportedSourceEntry('SYMBOLIC_LINK_NOT_ALLOWED');
+    if (!rootStat.isDirectory()) throw unsupportedSourceEntry('UNSUPPORTED_FILE_ENTRY');
+
+    const displayName = input.displayName ?? path.basename(sourceRoot);
+    let normalizedName: string;
+    try {
+      normalizedName = normalizeFolderName(displayName);
+    } catch (error) {
+      throw serviceError(error, 'INVALID_FOLDER_NAME');
+    }
+    let canonicalRoot: string;
+    try {
+      canonicalRoot = realpathSync(sourceRoot);
+    } catch (error) {
+      throw new LibraryServiceError('INVALID_IMPORT_SOURCE', { cause: error });
+    }
+    const duplicate = openLibrary.connection
+      .prepare('SELECT folder_id FROM linked_folders WHERE path_identity = ?')
+      .get(canonicalRoot);
+    if (duplicate) throw new LibraryServiceError('FOLDER_ALREADY_EXISTS');
+
+    const folderId = randomUUID();
+    const jobId = randomUUID();
+    const now = new Date().toISOString();
+    const defaultRules = DEFAULT_LINKED_FOLDER_RULES.map((rule) => ({ ...rule, ruleId: randomUUID() }));
+    openLibrary.connection.transaction(() => {
+      openLibrary.connection.prepare(
+        `INSERT INTO linked_folders
+           (folder_id, library_id, display_name, absolute_root_path, source_device_hint,
+            status, path_identity, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'available', ?, ?, ?)`,
+      ).run(
+        folderId,
+        input.libraryId,
+        normalizedName,
+        canonicalRoot,
+        String(rootStat.dev),
+        canonicalRoot,
+        now,
+        now,
+      );
+      const insertRule = openLibrary.connection.prepare(
+        `INSERT INTO linked_folder_rules(rule_id, folder_id, position, action, target, pattern, enabled)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      );
+      defaultRules.forEach((rule, position) => insertRule.run(
+        rule.ruleId, folderId, position, rule.action, rule.target, rule.pattern, 1,
+      ));
+      openLibrary.connection.prepare(
+        `INSERT INTO linked_folder_index_jobs
+           (job_id, library_id, linked_folder_id, folder_name, indexed_assets, scanned_directories,
+            pending_directories, status, error_code, error_detail, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 0, 0, 1, 'queued', NULL, NULL, ?, ?)`,
+      ).run(jobId, input.libraryId, folderId, normalizedName, now, now);
+      openLibrary.connection.prepare(
+        'INSERT INTO linked_folder_index_queue(job_id, relative_directory) VALUES (?, ?)',
+      ).run(jobId, '');
+    })();
+    this.scheduleLinkedFolderIndex(input.libraryId, jobId);
+    return {
+      folderId,
+      displayName: normalizedName,
+      status: 'available',
+      assetCount: 0,
+      absoluteRootPath: canonicalRoot,
+      linkedFolderId: folderId,
+      relativePath: '',
+      parentFolderId: null,
+    };
+  }
+
+  listLinkedFolderIndexJobs(libraryId: string): {
+    jobs: Array<{
+      jobId: string;
+      folderId: string;
+      folderName: string;
+      indexedAssets: number;
+      scannedDirectories: number;
+      pendingDirectories: number;
+      status: LinkedFolderIndexJobStatus;
+      errorCode: string | null;
+      errorDetail: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  } {
+    const openLibrary = this.requireOpenLibrary(libraryId);
+    const rows = openLibrary.connection.prepare(
+      `SELECT job_id, linked_folder_id, folder_name, indexed_assets, scanned_directories,
+              pending_directories, status, error_code, error_detail, created_at, updated_at
+         FROM linked_folder_index_jobs
+        WHERE library_id = ?
+        ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 ELSE 4 END,
+                 updated_at DESC
+        LIMIT 50`,
+    ).all(libraryId) as Array<{
+      job_id: string;
+      linked_folder_id: string;
+      folder_name: string;
+      indexed_assets: number;
+      scanned_directories: number;
+      pending_directories: number;
+      status: LinkedFolderIndexJobStatus;
+      error_code: string | null;
+      error_detail: string | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+    return { jobs: rows.map((row) => ({
+      jobId: row.job_id,
+      folderId: row.linked_folder_id,
+      folderName: row.folder_name,
+      indexedAssets: row.indexed_assets,
+      scannedDirectories: row.scanned_directories,
+      pendingDirectories: row.pending_directories,
+      status: row.status,
+      errorCode: row.error_code,
+      errorDetail: row.error_detail,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    })) };
+  }
+
+  pauseLinkedFolderIndexJobs(libraryId: string, jobIds?: string[]): { pausedCount: number } {
+    const openLibrary = this.requireOpenLibrary(libraryId);
+    const selected = jobIds?.filter((jobId) => jobId.trim() !== '') ?? [];
+    if (jobIds && selected.length === 0) return { pausedCount: 0 };
+    const where = selected.length > 0
+      ? `library_id = ? AND job_id IN (${selected.map(() => '?').join(',')})`
+      : 'library_id = ?';
+    const result = openLibrary.connection.prepare(
+      `UPDATE linked_folder_index_jobs SET status = 'paused', updated_at = ?
+        WHERE ${where} AND status IN ('queued', 'running')`,
+    ).run(new Date().toISOString(), libraryId, ...selected);
+    return { pausedCount: result.changes };
+  }
+
+  resumeLinkedFolderIndexJobs(libraryId: string, jobIds?: string[]): { resumedCount: number } {
+    const openLibrary = this.requireOpenLibrary(libraryId);
+    const selected = jobIds?.filter((jobId) => jobId.trim() !== '') ?? [];
+    if (jobIds && selected.length === 0) return { resumedCount: 0 };
+    const where = selected.length > 0
+      ? `library_id = ? AND job_id IN (${selected.map(() => '?').join(',')})`
+      : 'library_id = ?';
+    const rows = openLibrary.connection.prepare(
+      `SELECT job_id FROM linked_folder_index_jobs
+        WHERE ${where} AND status IN ('paused', 'failed')`,
+    ).all(libraryId, ...selected) as Array<{ job_id: string }>;
+    if (rows.length === 0) return { resumedCount: 0 };
+    openLibrary.connection.prepare(
+      `UPDATE linked_folder_index_jobs
+          SET status = 'queued', error_code = NULL, error_detail = NULL, updated_at = ?
+        WHERE job_id IN (${rows.map(() => '?').join(',')})`,
+    ).run(new Date().toISOString(), ...rows.map((row) => row.job_id));
+    rows.forEach((row) => this.scheduleLinkedFolderIndex(libraryId, row.job_id));
+    return { resumedCount: rows.length };
+  }
+
+  private resumePendingLinkedFolderIndexJobs(libraryId: string): void {
+    const openLibrary = this.openById.get(libraryId);
+    if (!openLibrary) return;
+    openLibrary.connection.prepare(
+      `UPDATE linked_folder_index_jobs SET status = 'queued', updated_at = ?
+        WHERE library_id = ? AND status = 'running'`,
+    ).run(new Date().toISOString(), libraryId);
+    const rows = openLibrary.connection.prepare(
+      `SELECT job_id FROM linked_folder_index_jobs WHERE library_id = ? AND status = 'queued'`,
+    ).all(libraryId) as Array<{ job_id: string }>;
+    rows.forEach((row) => this.scheduleLinkedFolderIndex(libraryId, row.job_id));
+  }
+
+  private scheduleLinkedFolderIndex(libraryId: string, jobId: string): void {
+    if (this.activeLinkedFolderIndexPumps.has(jobId)) return;
+    const pump = this.runLinkedFolderIndex(libraryId, jobId)
+      .catch((error) => this.diagnose('linked-folder-index.pump', error, { libraryId, jobId }))
+      .finally(() => this.activeLinkedFolderIndexPumps.delete(jobId));
+    this.activeLinkedFolderIndexPumps.set(jobId, pump);
+  }
+
+  private async runLinkedFolderIndex(libraryId: string, jobId: string): Promise<void> {
+    const leasedConnection = this.openById.get(libraryId)?.connection;
+    if (!leasedConnection) return;
+    try {
+      for (;;) {
+        const openLibrary = this.openById.get(libraryId);
+        if (!openLibrary || openLibrary.connection !== leasedConnection) return;
+        const job = openLibrary.connection.prepare(
+          `SELECT linked_folder_id, status FROM linked_folder_index_jobs
+            WHERE job_id = ? AND library_id = ?`,
+        ).get(jobId, libraryId) as { linked_folder_id: string; status: LinkedFolderIndexJobStatus } | undefined;
+        if (!job || !['queued', 'running'].includes(job.status)) return;
+        if (job.status === 'queued') {
+          openLibrary.connection.prepare(
+            `UPDATE linked_folder_index_jobs SET status = 'running', updated_at = ?
+              WHERE job_id = ? AND status = 'queued'`,
+          ).run(new Date().toISOString(), jobId);
+        }
+        const next = openLibrary.connection.prepare(
+          `SELECT q.relative_directory, lf.absolute_root_path
+             FROM linked_folder_index_queue q
+             JOIN linked_folders lf ON lf.folder_id = ?
+            WHERE q.job_id = ?
+            ORDER BY q.relative_directory LIMIT 1`,
+        ).get(job.linked_folder_id, jobId) as { relative_directory: string; absolute_root_path: string } | undefined;
+        if (!next) {
+          openLibrary.connection.prepare(
+            `UPDATE linked_folder_index_jobs
+                SET status = 'succeeded', pending_directories = 0, error_code = NULL,
+                    error_detail = NULL, updated_at = ?
+              WHERE job_id = ? AND status = 'running'`,
+          ).run(new Date().toISOString(), jobId);
+          this.reconcileLinkedWatchers(openLibrary);
+          return;
+        }
+        await this.indexLinkedDirectoryBatch(openLibrary, jobId, job.linked_folder_id, next);
+        await transferCheckpoint();
+      }
+    } catch (error) {
+      const openLibrary = this.openById.get(libraryId);
+      if (openLibrary && openLibrary.connection === leasedConnection) {
+        try {
+          openLibrary.connection.prepare(
+            `UPDATE linked_folder_index_jobs
+                SET status = 'failed', error_code = 'LINKED_FOLDER_INDEX_FAILED', error_detail = ?, updated_at = ?
+              WHERE job_id = ? AND status IN ('queued', 'running')`,
+          ).run(publicReasonFromError(error), new Date().toISOString(), jobId);
+        } catch (updateError) {
+          this.diagnose('linked-folder-index.fail', updateError, { libraryId, jobId });
+        }
+      }
+    } finally {
+      // If close/reopen happened while the old pump awaited directory I/O, it
+      // must hand the queued job to the new connection after releasing its
+      // in-memory pump slot.
+      const reopened = this.openById.get(libraryId);
+      if (reopened && reopened.connection !== leasedConnection) {
+        const pending = reopened.connection.prepare(
+          `SELECT 1 AS present FROM linked_folder_index_jobs
+            WHERE job_id = ? AND status = 'queued'`,
+        ).get(jobId) as { present: number } | undefined;
+        if (pending) setImmediate(() => this.scheduleLinkedFolderIndex(libraryId, jobId));
+      }
+    }
+  }
+
+  private async indexLinkedDirectoryBatch(
+    openLibrary: OpenLibrary,
+    jobId: string,
+    linkedFolderId: string,
+    queueEntry: { relative_directory: string; absolute_root_path: string },
+  ): Promise<void> {
+    const rules = this.getLinkedFolderRules({ libraryId: openLibrary.summary.libraryId, folderId: linkedFolderId });
+    const absoluteDirectory = queueEntry.relative_directory === ''
+      ? queueEntry.absolute_root_path
+      : path.join(queueEntry.absolute_root_path, ...queueEntry.relative_directory.split('/'));
+    let directory;
+    try {
+      directory = await opendirAsync(absoluteDirectory);
+    } catch (error) {
+      throw new LibraryServiceError('INVALID_IMPORT_SOURCE', { cause: error });
+    }
+    const assetBatch: Array<{ relativePath: string; byteSize: number; modifiedAt: string; originalFilename: string }> = [];
+    const childDirectories: string[] = [];
+    const flush = () => {
+      if (assetBatch.length === 0 && childDirectories.length === 0) return;
+      const assets = assetBatch.splice(0);
+      const directories = childDirectories.splice(0);
+      this.persistLinkedIndexEntries(openLibrary, jobId, linkedFolderId, assets, directories, false);
+    };
+    try {
+      for await (const child of directory) {
+        const relativePath = queueEntry.relative_directory === ''
+          ? child.name
+          : path.posix.join(queueEntry.relative_directory, child.name);
+        if (child.isSymbolicLink()) continue;
+        if (child.isDirectory()) {
+          if (this.isExplicitlyIgnored(openLibrary, 'linked', linkedFolderId, relativePath, 'folder')) continue;
+          const canPrune = !rules.some((rule) => rule.enabled && rule.action === 'include')
+            && this.linkedPathIsIgnored(path.posix.join(relativePath, '__super_probe__'), rules);
+          if (!canPrune) childDirectories.push(relativePath);
+        } else if (child.isFile()) {
+          let normalized: string;
+          try {
+            normalized = normalizeRelativeAssetPath(relativePath);
+          } catch {
+            continue;
+          }
+          if (this.linkedPathIsIgnored(normalized, rules)
+            || this.isExplicitlyIgnored(openLibrary, 'linked', linkedFolderId, normalized, 'asset')) continue;
+          let stat: BigIntStats | Stats;
+          try {
+            stat = this.options.assetLstat
+              ? this.options.assetLstat(path.join(absoluteDirectory, child.name))
+              : await lstatAsync(path.join(absoluteDirectory, child.name), { bigint: true });
+          } catch (error) {
+            this.diagnose('linked-folder-index.skip-file', error, { linkedFolderId, relativePath: normalized });
+            continue;
+          }
+          if (!stat.isFile() || stat.isSymbolicLink()) continue;
+          const byteSize = Number(stat.size);
+          if (!Number.isSafeInteger(byteSize)) continue;
+          assetBatch.push({
+            relativePath: normalized,
+            byteSize,
+            modifiedAt: stat.mtime.toISOString(),
+            originalFilename: child.name,
+          });
+        }
+        if (assetBatch.length >= LINKED_FOLDER_INDEX_BATCH_SIZE || childDirectories.length >= LINKED_FOLDER_INDEX_BATCH_SIZE) {
+          flush();
+          await transferCheckpoint();
+        }
+      }
+    } finally {
+      await directory.close().catch(() => undefined);
+    }
+    flush();
+    this.persistLinkedIndexEntries(openLibrary, jobId, linkedFolderId, [], [], true, queueEntry.relative_directory);
+  }
+
+  private persistLinkedIndexEntries(
+    openLibrary: OpenLibrary,
+    jobId: string,
+    linkedFolderId: string,
+    entries: readonly { relativePath: string; byteSize: number; modifiedAt: string; originalFilename: string }[],
+    childDirectories: readonly string[],
+    completeDirectory: boolean,
+    completedRelativeDirectory?: string,
+  ): void {
+    const now = new Date().toISOString();
+    let insertedAssets = 0;
+    let insertedDirectories = 0;
+    openLibrary.connection.transaction(() => {
+      const insertDirectory = openLibrary.connection.prepare(
+        'INSERT OR IGNORE INTO linked_folder_index_queue(job_id, relative_directory) VALUES (?, ?)',
+      );
+      for (const relativeDirectory of childDirectories) {
+        if (insertDirectory.run(jobId, relativeDirectory).changes > 0) insertedDirectories += 1;
+      }
+      const insertAsset = openLibrary.connection.prepare(
+        `INSERT OR IGNORE INTO assets
+           (asset_id, location_kind, managed_folder_id, linked_folder_id, relative_file_path,
+            path_identity, current_revision_id, availability, created_at, updated_at)
+         VALUES (?, 'linked', NULL, ?, ?, ?, NULL, 'available', ?, ?)`,
+      );
+      const insertRevision = openLibrary.connection.prepare(
+        `INSERT INTO revisions
+           (revision_id, asset_id, parent_revision_id, byte_size, modified_at, original_filename, origin, accepted_at)
+         VALUES (?, ?, NULL, ?, ?, ?, 'import', ?)`,
+      );
+      const setCurrentRevision = openLibrary.connection.prepare(
+        'UPDATE assets SET current_revision_id = ?, updated_at = ? WHERE asset_id = ?',
+      );
+      for (const entry of entries) {
+        const assetId = randomUUID();
+        if (insertAsset.run(assetId, linkedFolderId, entry.relativePath, portablePathIdentity(entry.relativePath), now, now).changes === 0) continue;
+        const revisionId = randomUUID();
+        insertRevision.run(revisionId, assetId, entry.byteSize, entry.modifiedAt, entry.originalFilename, now);
+        setCurrentRevision.run(revisionId, now, assetId);
+        this.syncAssetSearchContent(openLibrary.connection, assetId);
+        insertedAssets += 1;
+      }
+      if (completeDirectory && completedRelativeDirectory !== undefined) {
+        openLibrary.connection.prepare(
+          'DELETE FROM linked_folder_index_queue WHERE job_id = ? AND relative_directory = ?',
+        ).run(jobId, completedRelativeDirectory);
+      }
+      openLibrary.connection.prepare(
+        `UPDATE linked_folder_index_jobs
+            SET indexed_assets = indexed_assets + ?,
+                pending_directories = MAX(0, pending_directories + ? - ?),
+                scanned_directories = scanned_directories + ?, updated_at = ?
+          WHERE job_id = ?`,
+      ).run(insertedAssets, insertedDirectories, completeDirectory ? 1 : 0, completeDirectory ? 1 : 0, now, jobId);
+    })();
+    if (insertedAssets > 0) {
+      this.options.onAssetsChanged?.({
+        type: 'asset.changed', libraryId: openLibrary.summary.libraryId,
+        changedCount: insertedAssets, missingCount: 0, source: 'client',
+      });
+    }
   }
 
   relinkMissingFolder(input: {
@@ -35613,7 +36075,12 @@ export class LibraryService {
       .prepare(
         `SELECT folder_id, absolute_root_path, status
            FROM linked_folders
-          WHERE library_id = ?`,
+          WHERE library_id = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM linked_folder_index_jobs j
+               WHERE j.linked_folder_id = linked_folders.folder_id
+                 AND j.status IN ('queued', 'running', 'paused')
+            )`,
       )
       .all(libraryId) as Array<{
         folder_id: string;
@@ -37051,9 +37518,10 @@ export class LibraryService {
     this.startAssetWatcher(openLibrary);
     markAdoptStage('asset-watcher');
     this.reconcileLinkedWatchers(openLibrary);
-    // Resume only after watcher reconciliation so every unfinished removal can
-    // immediately detach its own watcher before the next source event arrives.
+    // Resume durable linked tasks only after watcher reconciliation. Removals
+    // detach their watcher; fresh indexes attach theirs when enumeration ends.
     this.resumePendingLinkedFolderRemovalJobs(summary.libraryId);
+    this.resumePendingLinkedFolderIndexJobs(summary.libraryId);
     markAdoptStage('watchers');
     // Super-tumv (LIB-018, progressive open): the disk-heavy reconciliation
     // steps moved out of the synchronous open path and run in the background
@@ -39069,6 +39537,11 @@ export class LibraryService {
     // linked-index removals as queued so the next open continues safely.
     openLibrary.connection.prepare(
       `UPDATE linked_folder_removal_jobs
+          SET status = 'queued', updated_at = ?
+        WHERE library_id = ? AND status = 'running'`,
+    ).run(new Date().toISOString(), libraryId);
+    openLibrary.connection.prepare(
+      `UPDATE linked_folder_index_jobs
           SET status = 'queued', updated_at = ?
         WHERE library_id = ? AND status = 'running'`,
     ).run(new Date().toISOString(), libraryId);

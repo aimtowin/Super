@@ -335,6 +335,20 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     jobIds: z.array(identifierSchema).max(50).optional(),
   }),
   z.strictObject({
+    type: z.literal('linked-folder-index.list.request'),
+    libraryId: identifierSchema,
+  }),
+  z.strictObject({
+    type: z.literal('linked-folder-index.pause.request'),
+    libraryId: identifierSchema,
+    jobIds: z.array(identifierSchema).max(50).optional(),
+  }),
+  z.strictObject({
+    type: z.literal('linked-folder-index.resume.request'),
+    libraryId: identifierSchema,
+    jobIds: z.array(identifierSchema).max(50).optional(),
+  }),
+  z.strictObject({
     type: z.literal('linked-folder.delete-subtree.request'),
     libraryId: identifierSchema,
     linkedFolderId: identifierSchema,
@@ -1451,6 +1465,20 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('linked-folder-removal.resume'),
+    libraryId: identifierSchema,
+    jobIds: z.array(identifierSchema).max(50).optional(),
+  }),
+  z.strictObject({
+    type: z.literal('linked-folder-index.list'),
+    libraryId: identifierSchema,
+  }),
+  z.strictObject({
+    type: z.literal('linked-folder-index.pause'),
+    libraryId: identifierSchema,
+    jobIds: z.array(identifierSchema).max(50).optional(),
+  }),
+  z.strictObject({
+    type: z.literal('linked-folder-index.resume'),
     libraryId: identifierSchema,
     jobIds: z.array(identifierSchema).max(50).optional(),
   }),
