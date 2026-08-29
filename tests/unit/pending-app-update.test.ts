@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 
 import { describe, expect, it } from 'vitest';
@@ -40,6 +40,37 @@ describe('PendingAppUpdateStore', () => {
         installerPath: path.join(root, 'outside.exe'),
         cleanupPath: root,
       })).rejects.toThrow('escaped');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('removes abandoned update directories while retaining the pending update', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'super-pending-update-'));
+    const cache = path.join(root, 'updates');
+    const pendingDirectory = path.join(cache, 'super-update-pending');
+    const abandonedDirectory = path.join(cache, 'super-update-abandoned');
+    const unrelatedDirectory = path.join(cache, 'user-created');
+    const installer = path.join(pendingDirectory, 'SuperSetup.exe');
+    try {
+      await Promise.all([
+        mkdir(pendingDirectory, { recursive: true }),
+        mkdir(abandonedDirectory, { recursive: true }),
+        mkdir(unrelatedDirectory, { recursive: true }),
+      ]);
+      await writeFile(installer, 'installer');
+      const store = new PendingAppUpdateStore(cache);
+      await store.savePending({
+        version: '0.0.8',
+        releaseNotes: 'Test release',
+        installerPath: installer,
+        cleanupPath: pendingDirectory,
+      });
+
+      await expect(store.pruneStaleArtifacts((await store.loadPending())?.cleanupPath)).resolves.toBe(1);
+      await expect(access(pendingDirectory)).resolves.toBeUndefined();
+      await expect(access(unrelatedDirectory)).resolves.toBeUndefined();
+      await expect(access(abandonedDirectory)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

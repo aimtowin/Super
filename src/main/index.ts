@@ -5945,6 +5945,14 @@ async function startApplication(): Promise<void> {
     completedAppUpdateNotice = await pendingAppUpdateStore.consumeCompletion();
   }
   const deferredUpdate = await pendingAppUpdateStore.loadPending();
+  try {
+    const removedCount = await pendingAppUpdateStore.pruneStaleArtifacts(deferredUpdate?.cleanupPath);
+    if (removedCount > 0) {
+      logger?.info('app-update.cleanup', 'Removed abandoned update cache directories.', { removedCount });
+    }
+  } catch (error) {
+    logger?.error('app-update.cleanup', error, { phase: 'startup-prune' });
+  }
   if (deferredUpdate !== undefined && appUpdateService.restorePreparedUpdate(deferredUpdate)) {
     await pendingAppUpdateStore.saveCompletion({
       version: deferredUpdate.version,

@@ -9,6 +9,7 @@
  *   SUPER_UPDATE_SSH_PORT      SSH port (default: 22)
  *   SUPER_UPDATE_SSH_IDENTITY_FILE  explicit PEM/private-key path
  *   SUPER_UPDATE_REMOTE_DIR    ECS update volume (default: /www/wwwroot/resource/data/super-updates)
+ *   SUPER_UPDATE_RETAIN_RELEASES  Number of newest release directories to retain (default: 5)
  *   SUPER_UPDATE_NOTES         bounded release notes shown in Super
  *
  * The server image serves `latest.json` and `releases/<version>/...` from
@@ -25,7 +26,6 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const defaultRemoteDirectory = '/www/wwwroot/resource/data/super-updates';
 const maxNotesLength = 12_000;
-const sha256Pattern = /^[a-f0-9]{64}$/iu;
 const remoteDirectoryPattern = /^\/[A-Za-z0-9._/-]*$/u;
 
 function fail(message) {
@@ -75,6 +75,12 @@ function parsePort(value) {
   const port = Number(value ?? '22');
   if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) fail('SUPER_UPDATE_SSH_PORT must be a valid TCP port.');
   return String(port);
+}
+
+function parseReleaseRetention(value) {
+  if (value === undefined || value.trim() === '') return 5;
+  if (!/^[1-9]\d?$/u.test(value.trim())) fail('SUPER_UPDATE_RETAIN_RELEASES must be an integer from 1 to 99.');
+  return Number(value.trim());
 }
 
 async function main() {
@@ -131,6 +137,7 @@ async function main() {
   if (identityFile && !await exists(identityFile)) fail('SUPER_UPDATE_SSH_IDENTITY_FILE does not exist.');
   const remoteDirectory = process.env.SUPER_UPDATE_REMOTE_DIR?.trim() || defaultRemoteDirectory;
   if (!remoteDirectoryPattern.test(remoteDirectory)) fail('SUPER_UPDATE_REMOTE_DIR must be an absolute safe POSIX path.');
+  const releaseRetention = parseReleaseRetention(process.env.SUPER_UPDATE_RETAIN_RELEASES);
   const destination = `${user}@${host}`;
   const stage = `${remoteDirectory}/.staging-${version}-${randomUUID()}`;
   const releaseDirectory = `${remoteDirectory}/releases/${version}`;
@@ -157,6 +164,10 @@ async function main() {
     `mv ${quoteRemotePath(`${stage}/${setupName}.sha256`)} ${quoteRemotePath(`${releaseDirectory}/${setupName}.sha256`)}`,
     `mv ${quoteRemotePath(`${stage}/super-update-manifest.json`)} ${quoteRemotePath(`${remoteDirectory}/latest.json`)}`,
     `rmdir ${quoteRemotePath(stage)}`,
+    // Release names are generated from package.json and restricted here before deletion.
+    // Keep the newest N semver directories; clients always use latest.json, so older
+    // installers are not needed for normal update delivery.
+    `find ${quoteRemotePath(`${remoteDirectory}/releases`)} -mindepth 1 -maxdepth 1 -type d -printf '%f\\n' | grep -E '^[0-9]+\\.[0-9]+\\.[0-9]+$' | sort -V | head -n -${releaseRetention} | while IFS= read -r oldVersion; do rm -rf ${quoteRemotePath(`${remoteDirectory}/releases`)}/"$oldVersion"; done`,
   ].join('; ');
   await run('ssh', [...sshOptions, destination, moveCommand]);
   console.log(`[publish-ecs-update] Published Super ${version} to ${destination}:${remoteDirectory}`);

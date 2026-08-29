@@ -1,4 +1,5 @@
-import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
+import { access, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { z } from 'zod';
@@ -73,6 +74,39 @@ export class PendingAppUpdateStore {
 
   async clearPending(): Promise<void> {
     await rm(this.#pendingPath, { force: true });
+  }
+
+  /**
+   * Remove abandoned, fully-contained installer directories without touching a
+   * verified update that is waiting for the user's next launch. This is kept
+   * deliberately narrow: only directories created by AppUpdateService are
+   * eligible, and metadata files remain intact.
+   */
+  async pruneStaleArtifacts(preservedCleanupPath?: string): Promise<number> {
+    const preservedPath = preservedCleanupPath === undefined
+      ? undefined
+      : path.resolve(preservedCleanupPath);
+    if (preservedPath !== undefined && !isWithin(this.#cacheDirectory, preservedPath)) {
+      throw new Error('A preserved update path escaped the Super update cache.');
+    }
+
+    let entries: Dirent[];
+    try {
+      entries = await readdir(this.#cacheDirectory, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+      throw error;
+    }
+
+    let removedCount = 0;
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !entry.name.startsWith('super-update-')) continue;
+      const candidate = path.resolve(this.#cacheDirectory, entry.name);
+      if (!isWithin(this.#cacheDirectory, candidate) || candidate === preservedPath) continue;
+      await rm(candidate, { recursive: true, force: true, maxRetries: 2 });
+      removedCount += 1;
+    }
+    return removedCount;
   }
 
   async saveCompletion(notice: AppUpdateNotice): Promise<void> {
