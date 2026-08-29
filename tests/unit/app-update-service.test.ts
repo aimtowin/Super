@@ -14,20 +14,21 @@ import {
   parseSha256,
   resolveAppUpdateTarget,
   selectUpdateAsset,
+  SUPER_UPDATE_MANIFEST_URL,
   updateAssetName,
 } from '../../src/main/app-update-service';
 
 function releasePayload(overrides: Record<string, unknown> = {}) {
   return {
     tag_name: 'v0.1.3',
-    html_url: 'https://github.com/aimtowin/Super/releases/tag/v0.1.3',
+    html_url: 'https://liuyangyang.me/downloads/super/',
     draft: false,
     prerelease: false,
     body: 'Release notes',
     assets: [
       {
         name: 'Super-darwin-arm64-0.1.3-package.dmg',
-        browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-darwin-arm64-0.1.3-package.dmg',
+        browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-darwin-arm64-0.1.3-package.dmg',
         size: 123,
         digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       },
@@ -150,7 +151,7 @@ describe('Super app update release contract', () => {
         ...releasePayload(),
         assets: [{
           name: 'Super-darwin-arm64-0.1.3-package.dmg',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-darwin-arm64-0.1.3-package.dmg',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-darwin-arm64-0.1.3-package.dmg',
           size: 123,
         }],
       })!,
@@ -158,8 +159,9 @@ describe('Super app update release contract', () => {
     )).toBeUndefined();
   });
 
-  it('checks a newer release without exposing a filesystem path to the result', async () => {
+  it('checks the public ECS manifest without sending a GitHub credential', async () => {
     let authorization: string | null = null;
+    let requestedUrl = '';
     const service = createAppUpdateService({
       currentVersion: '0.1.1',
       isPackaged: true,
@@ -170,9 +172,9 @@ describe('Super app update release contract', () => {
       downloadsDirectory: '/tmp',
       environment: {
         SUPER_DISTRIBUTION: 'installed',
-        SUPER_UPDATE_GITHUB_TOKEN: 'test-token',
       },
-      fetchImpl: async (_url, init) => {
+      fetchImpl: async (url, init) => {
+        requestedUrl = url;
         authorization = new Headers(init?.headers).get('authorization');
         return new Response(JSON.stringify(releasePayload()), {
           status: 200,
@@ -188,7 +190,8 @@ describe('Super app update release contract', () => {
       latestVersion: '0.1.3',
       assetName: 'Super-darwin-arm64-0.1.3-package.dmg',
     });
-    expect(authorization).toBe('Bearer test-token');
+    expect(requestedUrl).toBe(SUPER_UPDATE_MANIFEST_URL);
+    expect(authorization).toBeNull();
     expect(JSON.stringify(result)).not.toContain('/tmp');
   });
 
@@ -204,7 +207,7 @@ describe('Super app update release contract', () => {
       fetchImpl: async () => new Response(JSON.stringify(releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-setup.zip',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-setup.zip',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
           size: 123,
           digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         }],
@@ -259,11 +262,11 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-portable.zip',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-portable.zip',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip',
           size: portableBytes.byteLength,
         }, {
           name: 'Super-win-x86-64-0.1.3-portable.zip.sha256',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-portable.zip.sha256',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip.sha256',
           size: checksum.length,
         }],
       });
@@ -277,7 +280,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'portable' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/releases/latest')) return new Response(JSON.stringify(payload));
+          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           return new Response(portableBytes);
         },
@@ -309,11 +312,11 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-portable.zip',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-portable.zip',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip',
           size: portableBytes.byteLength,
         }, {
           name: 'Super-win-x86-64-0.1.3-portable.zip.sha256',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-portable.zip.sha256',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip.sha256',
           size: checksum.length,
         }],
       });
@@ -327,7 +330,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'portable' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/releases/latest')) return new Response(JSON.stringify(payload));
+          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           return new Response(portableBytes);
         },
@@ -358,11 +361,11 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-portable.zip',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-portable.zip',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip',
           size: portableBytes.byteLength,
         }, {
           name: 'Super-win-x86-64-0.1.3-portable.zip.sha256',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-portable.zip.sha256',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip.sha256',
           size: checksum.length,
         }],
       });
@@ -376,7 +379,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'portable' },
         fetchImpl: async (url, init) => {
-          if (url.endsWith('/releases/latest')) return new Response(JSON.stringify(payload));
+          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           const signal = init?.signal;
           const stream = new ReadableStream<Uint8Array>({
@@ -426,7 +429,7 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-darwin-arm64-0.1.3-package.dmg',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-darwin-arm64-0.1.3-package.dmg',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-darwin-arm64-0.1.3-package.dmg',
           size: installerBytes.byteLength,
           digest: `sha256:${checksum}`,
         }],
@@ -441,7 +444,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'installed' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/releases/latest')) return new Response(JSON.stringify(payload));
+          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
           return new Response(installerBytes as unknown as BodyInit);
         },
         openPath: async () => 'The installer could not be opened.',
@@ -465,7 +468,7 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-setup.zip',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-setup.zip',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
           size: archiveBytes.byteLength,
           digest: `sha256:${checksum}`,
         }],
@@ -480,7 +483,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'installed' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/releases/latest')) return new Response(JSON.stringify(payload));
+          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
           return new Response(archiveBytes as unknown as BodyInit);
         },
       });
@@ -508,11 +511,11 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-setup.zip',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-setup.zip',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
           size: archiveBytes.byteLength,
         }, {
           name: 'Super-win-x86-64-0.1.3-setup.zip.sha256',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
           size: checksum.length,
         }],
       });
@@ -526,7 +529,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'installed' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/releases/latest')) return new Response(JSON.stringify(payload));
+          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           return new Response(archiveBytes as unknown as BodyInit);
         },
@@ -567,11 +570,11 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-setup.zip',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-setup.zip',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
           size: archiveBytes.byteLength,
         }, {
           name: 'Super-win-x86-64-0.1.3-setup.zip.sha256',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
           size: checksum.length,
         }],
       });
@@ -585,7 +588,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'installed' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/releases/latest')) return new Response(JSON.stringify(payload));
+          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           return new Response(archiveBytes as unknown as BodyInit);
         },
@@ -635,11 +638,11 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-setup.zip',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-setup.zip',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
           size: archiveBytes.byteLength,
         }, {
           name: 'Super-win-x86-64-0.1.3-setup.zip.sha256',
-          browser_download_url: 'https://github.com/aimtowin/Super/releases/download/v0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
+          browser_download_url: 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
           size: checksum.length,
         }],
       });
@@ -653,7 +656,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'installed' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/releases/latest')) return new Response(JSON.stringify(payload));
+          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           return new Response(archiveBytes as unknown as BodyInit);
         },

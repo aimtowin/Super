@@ -28,6 +28,7 @@
     "premake": "node scripts/media-binaries.mjs ensure && node scripts/verify-ufbx-wasm.mjs",
     "make": "electron-forge make",
     "make:inno": "node scripts/inno-build.mjs",
+    "release:publish-ecs": "node scripts/release/publish-ecs-update.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.extension.json",
     "test": "node scripts/run-vitest-with-electron.mjs run --exclude tests/worker/search-performance.test.ts",

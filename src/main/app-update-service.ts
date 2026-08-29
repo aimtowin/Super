@@ -26,12 +26,10 @@ import type {
   AppUpdateProgress,
 } from '../shared/app-update';
 
-export const SUPER_GITHUB_REPOSITORY = 'aimtowin/Super';
-export const SUPER_GITHUB_RELEASES_URL =
-  `https://github.com/${SUPER_GITHUB_REPOSITORY}/releases/latest`;
-
-const GITHUB_RELEASE_API_URL =
-  `https://api.github.com/repos/${SUPER_GITHUB_REPOSITORY}/releases/latest`;
+export const SUPER_UPDATE_PUBLIC_ORIGIN = 'https://liuyangyang.me';
+export const SUPER_UPDATE_MANIFEST_URL =
+  `${SUPER_UPDATE_PUBLIC_ORIGIN}/api/super/updates/latest`;
+const SUPER_UPDATE_DOWNLOAD_PREFIX = '/downloads/super/';
 const MAX_RELEASE_NOTES_LENGTH = 12_000;
 const MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 const SAFE_ASSET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/u;
@@ -125,11 +123,13 @@ function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === 'object' && input !== null;
 }
 
-function isSafeGitHubAssetUrl(input: unknown): input is string {
+function isSafeSuperUpdateUrl(input: unknown): input is string {
   if (typeof input !== 'string' || input.length > 2_048) return false;
   try {
     const url = new URL(input);
-    return url.protocol === 'https:' && url.hostname === 'github.com';
+    return url.protocol === 'https:'
+      && url.origin === SUPER_UPDATE_PUBLIC_ORIGIN
+      && url.pathname.startsWith(SUPER_UPDATE_DOWNLOAD_PREFIX);
   } catch {
     return false;
   }
@@ -153,7 +153,7 @@ function parseReleaseAsset(input: unknown): GitHubReleaseAsset | undefined {
   if (
     typeof name !== 'string'
     || !SAFE_ASSET_NAME.test(name)
-    || !isSafeGitHubAssetUrl(browserDownloadUrl)
+    || !isSafeSuperUpdateUrl(browserDownloadUrl)
     || typeof size !== 'number'
     || !Number.isSafeInteger(size)
     || size < 0
@@ -167,7 +167,7 @@ function parseReleaseAsset(input: unknown): GitHubReleaseAsset | undefined {
     : { name, browserDownloadUrl, size, digest };
 }
 
-/** Parse the small, stable subset of GitHub's latest-release response we use. */
+/** Parse the small, stable subset of the ECS update feed consumed by Super. */
 export function parseGitHubRelease(input: unknown): GitHubRelease | undefined {
   if (!isRecord(input)) return undefined;
   const tagName = input.tag_name;
@@ -176,7 +176,7 @@ export function parseGitHubRelease(input: unknown): GitHubRelease | undefined {
   if (
     typeof tagName !== 'string'
     || tagName.length === 0
-    || !isSafeGitHubAssetUrl(releaseUrl)
+    || !isSafeSuperUpdateUrl(releaseUrl)
     || !Array.isArray(assetsInput)
     || input.draft === true
     || input.prerelease === true
@@ -338,19 +338,14 @@ function parseVersionForComparison(value: string): ParsedSemver | undefined {
   return parseSemver(stripVersionPrefix(value));
 }
 
-function githubRequestHeaders(
+function superUpdateRequestHeaders(
   options: AppUpdateServiceOptions,
   accept: string,
 ): Record<string, string> {
-  const headers: Record<string, string> = {
+  return {
     Accept: accept,
     'User-Agent': `Super/${options.currentVersion}`,
   };
-  const token = options.environment?.SUPER_UPDATE_GITHUB_TOKEN?.trim();
-  if (token !== undefined && token.length > 0) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-  return headers;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -486,7 +481,7 @@ async function removeUpdateArtifact(filePath: string | undefined): Promise<void>
 }
 
 function validateDownloadUrl(input: string): void {
-  if (!isSafeGitHubAssetUrl(input)) throw new Error('The update asset URL is not a GitHub HTTPS URL.');
+  if (!isSafeSuperUpdateUrl(input)) throw new Error('The update asset URL is not a trusted Super HTTPS URL.');
 }
 
 export class AppUpdateService {
@@ -550,14 +545,11 @@ export class AppUpdateService {
     if (currentVersion === undefined) return resultError('invalid-release');
 
     try {
-      const response = await this.#fetch(GITHUB_RELEASE_API_URL, {
-        headers: {
-          ...githubRequestHeaders(this.#options, 'application/vnd.github+json'),
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
+      const response = await this.#fetch(SUPER_UPDATE_MANIFEST_URL, {
+        headers: superUpdateRequestHeaders(this.#options, 'application/json'),
       });
       if (!response.ok) {
-        this.#options.logger?.info('app-update.check', 'GitHub latest release request failed.', {
+        this.#options.logger?.info('app-update.check', 'Super ECS update manifest request failed.', {
           status: response.status,
         });
         return resultError('network');
@@ -631,7 +623,7 @@ export class AppUpdateService {
           downloadedBytes: 0,
         });
         const checksumResponse = await this.#fetch(checksumUrl, {
-          headers: githubRequestHeaders(this.#options, 'application/octet-stream'),
+          headers: superUpdateRequestHeaders(this.#options, 'application/octet-stream'),
           redirect: 'follow',
           signal,
         });
@@ -666,7 +658,7 @@ export class AppUpdateService {
         asset.name,
       );
       const response = await this.#fetch(asset.browserDownloadUrl, {
-        headers: githubRequestHeaders(this.#options, 'application/octet-stream'),
+        headers: superUpdateRequestHeaders(this.#options, 'application/octet-stream'),
         redirect: 'follow',
         signal,
       });
