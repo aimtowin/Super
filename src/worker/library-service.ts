@@ -73,6 +73,7 @@ import {
 } from './image-dimensions';
 import {
   collectLinkedDirectoryPrefixes,
+  buildLinkedDirectoryIndex,
   directChildLinkedDirectories,
   encodeLinkedVirtualFolderId,
   linkedAssetIsDirectChild,
@@ -373,6 +374,8 @@ const MEDIA_JOB_KINDS = [
 type MediaJobKind = (typeof MEDIA_JOB_KINDS)[number];
 type SecondaryMediaJobKind = Exclude<MediaJobKind, 'generate_thumbnail' | 'generate_video_poster'>;
 type MediaJobStatus = 'queued' | 'running' | 'paused' | 'succeeded' | 'failed' | 'cancelled';
+/** A user explicitly stopped the whole automatic media backlog. */
+const USER_CANCELLED_MEDIA_JOB_ERROR_CODE = 'USER_CANCELLED';
 
 function safeMediaJobErrorDetail(errorCode: string): string {
   switch (errorCode) {
@@ -12706,8 +12709,13 @@ export class LibraryService {
       resolved.linkedFolderId,
       input.showIgnored === true,
     );
-    const assetPrefixes = collectLinkedDirectoryPrefixes(paths);
-    const diskPrefixes = resolved.status === 'available' && !this.linkedRootIsGone(resolved.absoluteRootPath)
+    // A linked source can contain tens of thousands of files. Never derive
+    // every folder card by repeatedly filtering that complete path array; it
+    // turns a thumbnail-ready refresh into O(files × folders) synchronous
+    // work and starves asset.search in the single Worker.
+    const diskPrefixes = paths.length <= 2_000
+      && resolved.status === 'available'
+      && !this.linkedRootIsGone(resolved.absoluteRootPath)
       ? this.collectLinkedDirectoryPrefixesFromDisk(
         openLibrary,
         resolved.linkedFolderId,
@@ -12718,19 +12726,13 @@ export class LibraryService {
         }),
       )
       : [];
-    const prefixes = [...new Set([...assetPrefixes, ...diskPrefixes])].sort();
-    const children = directChildLinkedDirectories(prefixes, resolved.relativePath);
+    const directoryIndex = buildLinkedDirectoryIndex(paths, diskPrefixes);
+    const children = directoryIndex.childrenOf(resolved.relativePath);
     if (children.length === 0) return [];
 
-    return children.map((relativePath) => {
+    return children.map((child) => {
+      const relativePath = child.relativePath;
       const folderId = encodeLinkedVirtualFolderId(resolved.linkedFolderId, relativePath);
-      const descendantPaths = paths.filter((filePath) =>
-        linkedAssetIsUnderDirectory(filePath, relativePath),
-      );
-      const directAssetCount = descendantPaths.filter((filePath) =>
-        linkedAssetIsDirectChild(filePath, relativePath),
-      ).length;
-      const childFolderCount = directChildLinkedDirectories(prefixes, relativePath).length;
       return {
         folderId,
         parentFolderId: input.parentFolderId,
@@ -12738,9 +12740,9 @@ export class LibraryService {
         name: linkedDirectoryName(relativePath),
         relativePath,
         status: resolved.status,
-        directAssetCount,
-        recursiveAssetCount: descendantPaths.length,
-        childFolderCount,
+        directAssetCount: child.directAssetCount,
+        recursiveAssetCount: child.assetCount,
+        childFolderCount: child.childFolderCount,
         coverArtifactIds: this.linkedDirectoryCoverArtifactIds(
           openLibrary,
           resolved.linkedFolderId,
@@ -13324,8 +13326,12 @@ export class LibraryService {
       .filter((row) => showIgnored || !this.explicitFolderIgnored(openLibrary, 'linked', row.folder_id, ''))
       .flatMap((row) => {
         const paths = this.listLinkedAssetRelativePaths(openLibrary, row.folder_id, false);
-        const assetPrefixes = collectLinkedDirectoryPrefixes(paths);
-        const diskPrefixes = row.status === 'available' && !this.linkedRootIsGone(row.absolute_root_path)
+        // Full disk traversal is only needed to surface empty directories.
+        // For large linked sources the indexed hierarchy is authoritative and
+        // avoids walking every source file on every sidebar refresh.
+        const diskPrefixes = paths.length <= 2_000
+          && row.status === 'available'
+          && !this.linkedRootIsGone(row.absolute_root_path)
           ? this.collectLinkedDirectoryPrefixesFromDisk(
             openLibrary,
             row.folder_id,
@@ -13333,7 +13339,7 @@ export class LibraryService {
             this.getLinkedFolderRules({ libraryId, folderId: row.folder_id }),
           )
           : [];
-        const prefixes = [...new Set([...assetPrefixes, ...diskPrefixes])].sort();
+        const directoryIndex = buildLinkedDirectoryIndex(paths, diskPrefixes);
         const root: LinkedFolderSummary = {
           folderId: row.folder_id,
           displayName: row.display_name,
@@ -13344,17 +13350,21 @@ export class LibraryService {
           relativePath: '',
           parentFolderId: null,
         };
-        const children = prefixes
-          .filter((prefix) => showIgnored || !this.explicitFolderIgnored(openLibrary, 'linked', row.folder_id, prefix))
-          .map((relativePath) => {
+        const children = directoryIndex.directories
+          .filter((directory) => showIgnored || !this.explicitFolderIgnored(
+            openLibrary,
+            'linked',
+            row.folder_id,
+            directory.relativePath,
+          ))
+          .map((directory) => {
+            const relativePath = directory.relativePath;
             const parentPath = parentLinkedRelativePath(relativePath);
             return {
               folderId: encodeLinkedVirtualFolderId(row.folder_id, relativePath),
               displayName: linkedDirectoryName(relativePath),
               status: row.status,
-              assetCount: paths.filter((filePath) =>
-                linkedAssetIsUnderDirectory(filePath, relativePath),
-              ).length,
+              assetCount: directory.assetCount,
               absoluteRootPath: row.absolute_root_path,
               linkedFolderId: row.folder_id,
               relativePath,
@@ -18008,7 +18018,35 @@ export class LibraryService {
     };
   }
 
-  cancelMediaJobs(libraryId: string, jobIds?: string[]): { cancelledCount: number } {
+  cancelMediaJobs(
+    libraryId: string,
+    jobIds?: string[],
+    options: { suppressAutomaticReschedule?: boolean } = {},
+  ): { cancelledCount: number } {
+    if (options.suppressAutomaticReschedule) {
+      const openLibrary = this.requireOpenLibrary(libraryId);
+      const selectedIds = jobIds && jobIds.length > 0 ? [...new Set(jobIds)] : undefined;
+      const idClause = selectedIds
+        ? `AND job_id IN (${selectedIds.map(() => '?').join(',')})`
+        : '';
+      const result = openLibrary.connection.prepare(
+        `UPDATE jobs
+            SET status = 'cancelled', progress = 0.0,
+                error_code = ?, error_detail = NULL, updated_at = ?
+          WHERE library_id = ?
+            AND kind IN (${MEDIA_JOB_KINDS.map(() => '?').join(',')})
+            AND status IN ('queued', 'paused', 'running')
+            ${idClause}`,
+      ).run(
+        USER_CANCELLED_MEDIA_JOB_ERROR_CODE,
+        new Date().toISOString(),
+        openLibrary.summary.libraryId,
+        ...MEDIA_JOB_KINDS,
+        ...(selectedIds ?? []),
+      );
+      this.abortActiveMediaJobs(libraryId, selectedIds);
+      return { cancelledCount: result.changes };
+    }
     const count = this.updateMediaJobStatus(
       libraryId,
       ['queued', 'paused', 'running'],
@@ -20354,6 +20392,11 @@ export class LibraryService {
         AND status IN ('queued', 'running', 'paused') LIMIT 1`,
     ).get(assetId, revisionId);
     if (active) return;
+    const manuallyCancelled = openLibrary.connection.prepare(
+      `SELECT job_id FROM jobs WHERE library_id = ? AND asset_id = ? AND revision_id = ?
+        AND kind = 'extract_metadata' AND status = 'cancelled' AND error_code = ? LIMIT 1`,
+    ).get(openLibrary.summary.libraryId, assetId, revisionId, USER_CANCELLED_MEDIA_JOB_ERROR_CODE);
+    if (manuallyCancelled) return;
     const now = new Date().toISOString();
     openLibrary.connection.prepare(
       `INSERT INTO jobs
@@ -20410,6 +20453,11 @@ export class LibraryService {
         AND kind = 'extract_palette' AND status IN ('queued', 'running', 'paused') LIMIT 1`,
     ).get(assetId, revisionId);
     if (active) return false;
+    const manuallyCancelled = openLibrary.connection.prepare(
+      `SELECT job_id FROM jobs WHERE library_id = ? AND asset_id = ? AND revision_id = ?
+        AND kind = 'extract_palette' AND status = 'cancelled' AND error_code = ? LIMIT 1`,
+    ).get(openLibrary.summary.libraryId, assetId, revisionId, USER_CANCELLED_MEDIA_JOB_ERROR_CODE);
+    if (manuallyCancelled) return false;
     const now = new Date().toISOString();
     const result = openLibrary.connection.prepare(
       `INSERT INTO jobs
@@ -23254,16 +23302,26 @@ export class LibraryService {
           )
           AND NOT EXISTS (
             SELECT 1 FROM jobs job
-             WHERE job.asset_id = a.asset_id
-               AND job.revision_id = a.current_revision_id
-               AND job.kind = 'extract_palette'
-               AND job.status IN ('queued', 'running', 'paused')
+            WHERE job.asset_id = a.asset_id
+              AND job.revision_id = a.current_revision_id
+              AND job.kind = 'extract_palette'
+              AND job.status IN ('queued', 'running', 'paused')
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM jobs cancelled_job
+             WHERE cancelled_job.library_id = ?
+               AND cancelled_job.asset_id = a.asset_id
+               AND cancelled_job.revision_id = a.current_revision_id
+               AND cancelled_job.kind = 'extract_palette'
+               AND cancelled_job.status = 'cancelled'
+               AND cancelled_job.error_code = '${USER_CANCELLED_MEDIA_JOB_ERROR_CODE}'
           )
         ORDER BY a.relative_file_path
         LIMIT ?`,
     ).all(
       ...selectedIds,
       ...paletteExtensions.map((extension) => `%.${extension.slice(1)}`),
+      openLibrary.summary.libraryId,
       limit,
     ) as Array<{
       asset_id: string;
@@ -24068,6 +24126,15 @@ export class LibraryService {
                 AND j.status IN ('queued', 'running', 'paused')
             )
             AND NOT EXISTS (
+              SELECT 1 FROM jobs cancelled_job
+               WHERE cancelled_job.library_id = ?
+                 AND cancelled_job.asset_id = a.asset_id
+                 AND cancelled_job.revision_id = a.current_revision_id
+                 AND cancelled_job.kind = 'generate_thumbnail'
+                 AND cancelled_job.status = 'cancelled'
+                 AND cancelled_job.error_code = '${USER_CANCELLED_MEDIA_JOB_ERROR_CODE}'
+            )
+            AND NOT EXISTS (
               SELECT 1 FROM explicit_ignored_paths ip
                WHERE ip.location_kind = a.location_kind
                  AND ip.linked_folder_id = COALESCE(a.linked_folder_id, '')
@@ -24094,6 +24161,7 @@ export class LibraryService {
       .all(
         ...selectedIds,
         ...supportedExtensions.map((extension) => `%.${extension}`),
+        libraryId,
         ...(limit === undefined ? [] : [limit]),
       ) as Array<{ asset_id: string; current_revision_id: string }>;
     if (selectedIds.length > 0) {

@@ -90,6 +90,11 @@ const UNBOUNDED_WORKER_COMMANDS = new Set([
   'asset.import-billfish',
   'asset.refresh',
   'asset.delete-linked',
+  // A cancellation is a safety control, not a best-effort background read.
+  // On a very large library it can sit behind one native decoder operation;
+  // dropping the request after 15 seconds made the UI report failure even
+  // though the Worker applied it moments later.
+  'media.cancel-jobs',
   'automation.file-import-plan',
   'automation.file-operation-plan',
   // WebDAV sync transfers every changed asset in both directions plus the

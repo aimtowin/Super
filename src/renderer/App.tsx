@@ -103,7 +103,7 @@ import {
 } from "./asset-local-refresh";
 import { FolderCard } from "./FolderCard";
 import {
-  isFolderRecursiveEnabled,
+  folderRecursivePreference,
   loadFolderRecursivePreferences,
   saveFolderRecursivePreferences,
   withFolderRecursiveEnabled,
@@ -4046,11 +4046,30 @@ function AppInner() {
     setActivePluginSidebarViewId(null);
     setAssetScope(scope);
     if (scope !== "all" && scope !== "root") {
-      const enabled = isFolderRecursiveEnabled(
+      const configured = folderRecursivePreference(
         folderRecursivePrefs,
         library.libraryId,
         scope,
       );
+      // A linked root is normally a mounted source tree, not a small working
+      // folder. Showing only direct files makes roots such as Flow Library
+      // appear empty when every asset is under a category directory. Use a
+      // recursive first view, then remember either user choice on the same
+      // existing toolbar toggle.
+      const isLinkedRoot = linkedFolders.some(
+        (folder) => folder.folderId === scope && folder.relativePath === "",
+      );
+      const enabled = configured ?? isLinkedRoot;
+      if (configured === undefined && isLinkedRoot) {
+        const nextPrefs = withFolderRecursiveEnabled(
+          folderRecursivePrefs,
+          library.libraryId,
+          scope,
+          true,
+        );
+        setFolderRecursivePrefs(nextPrefs);
+        saveFolderRecursivePreferences(nextPrefs);
+      }
       folderRecursiveRef.current = enabled;
       setFolderRecursive(enabled);
     } else {
@@ -8914,6 +8933,7 @@ function AppInner() {
     jobIds?: string[],
   ) {
     if (!api || !library) return;
+    setMediaJobsLoading(true);
     try {
       const result =
         action === "pause"
@@ -8939,6 +8959,8 @@ function AppInner() {
       await loadMediaJobs(true);
     } catch {
       setError(t("toast.mediaJobsOpNoResponse"));
+    } finally {
+      setMediaJobsLoading(false);
     }
   }
 

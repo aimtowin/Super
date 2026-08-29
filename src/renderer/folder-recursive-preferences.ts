@@ -4,14 +4,15 @@ import { z } from 'zod';
 // Per-folder "include subfolders" preference (REQ-FOLDER-009)
 //
 // Which managed/linked folders recurse into descendants is remembered across
-// restarts, keyed by library id + folder id. Only enabled folders are stored
-// (absence means direct-children only).
+// restarts, keyed by library id + folder id. Values preserve an explicit
+// opt-out too: linked roots can default to recursive on first open without
+// re-enabling themselves after the user turns the switch off.
 // ---------------------------------------------------------------------------
 
 export interface FolderRecursivePreferences {
-  readonly version: 1;
+  readonly version: 2;
   readonly byLibrary: Readonly<
-    Record<string, Readonly<Record<string, true>>>
+    Record<string, Readonly<Record<string, boolean>>>
   >;
 }
 
@@ -24,13 +25,18 @@ export interface FolderRecursivePreferencesStorage {
 export const FOLDER_RECURSIVE_PREF_KEY = 'superApi.folder-recursive.v1';
 
 export const DEFAULT_FOLDER_RECURSIVE_PREFERENCES: FolderRecursivePreferences = {
-  version: 1,
+  version: 2,
   byLibrary: {},
 };
 
-const folderRecursivePreferencesSchema = z.object({
+const folderRecursivePreferencesV1Schema = z.object({
   version: z.literal(1),
   byLibrary: z.record(z.string(), z.record(z.string(), z.literal(true))),
+});
+
+const folderRecursivePreferencesV2Schema = z.object({
+  version: z.literal(2),
+  byLibrary: z.record(z.string(), z.record(z.string(), z.boolean())),
 });
 
 function resolveStorage(
@@ -59,8 +65,23 @@ export function loadFolderRecursivePreferences(
   } catch {
     return DEFAULT_FOLDER_RECURSIVE_PREFERENCES;
   }
-  const result = folderRecursivePreferencesSchema.safeParse(parsed);
-  return result.success ? result.data : DEFAULT_FOLDER_RECURSIVE_PREFERENCES;
+  const v2 = folderRecursivePreferencesV2Schema.safeParse(parsed);
+  if (v2.success) return v2.data;
+  const v1 = folderRecursivePreferencesV1Schema.safeParse(parsed);
+  if (!v1.success) return DEFAULT_FOLDER_RECURSIVE_PREFERENCES;
+  return {
+    version: 2,
+    byLibrary: v1.data.byLibrary,
+  };
+}
+
+/** Undefined means this folder has never been configured by the user. */
+export function folderRecursivePreference(
+  prefs: FolderRecursivePreferences,
+  libraryId: string,
+  folderId: string,
+): boolean | undefined {
+  return prefs.byLibrary[libraryId]?.[folderId];
 }
 
 export function isFolderRecursiveEnabled(
@@ -68,12 +89,11 @@ export function isFolderRecursiveEnabled(
   libraryId: string,
   folderId: string,
 ): boolean {
-  return prefs.byLibrary[libraryId]?.[folderId] === true;
+  return folderRecursivePreference(prefs, libraryId, folderId) === true;
 }
 
 /**
- * Returns a new preferences object with `folderId` enabled or cleared.
- * Disabled folders are omitted so the stored map stays sparse.
+ * Returns a new preferences object with the user's explicit setting.
  */
 export function withFolderRecursiveEnabled(
   prefs: FolderRecursivePreferences,
@@ -82,18 +102,14 @@ export function withFolderRecursiveEnabled(
   enabled: boolean,
 ): FolderRecursivePreferences {
   const libraryMap = { ...(prefs.byLibrary[libraryId] ?? {}) };
-  if (enabled) {
-    libraryMap[folderId] = true;
-  } else {
-    delete libraryMap[folderId];
-  }
+  libraryMap[folderId] = enabled;
   const byLibrary = { ...prefs.byLibrary };
   if (Object.keys(libraryMap).length === 0) {
     delete byLibrary[libraryId];
   } else {
     byLibrary[libraryId] = libraryMap;
   }
-  return { version: 1, byLibrary };
+  return { version: 2, byLibrary };
 }
 
 export function saveFolderRecursivePreferences(
@@ -102,7 +118,7 @@ export function saveFolderRecursivePreferences(
 ): void {
   const s = resolveStorage(storage);
   const cleaned: FolderRecursivePreferences = {
-    version: 1,
+    version: 2,
     byLibrary: prefs.byLibrary,
   };
   s.setItem(FOLDER_RECURSIVE_PREF_KEY, JSON.stringify(cleaned));

@@ -1015,8 +1015,14 @@ describe('processThumbnailQueue', () => {
 
     expect(service.pauseMediaJobs(created.libraryId, [jobId])).toEqual({ pausedCount: 1 });
     expect(service.resumeMediaJobs(created.libraryId, [jobId])).toEqual({ resumedCount: 1 });
-    expect(service.cancelMediaJobs(created.libraryId, [jobId])).toEqual({ cancelledCount: 1 });
+    expect(service.cancelMediaJobs(created.libraryId, undefined, {
+      suppressAutomaticReschedule: true,
+    })).toEqual({ cancelledCount: 1 });
     expect(service.listMediaJobs(created.libraryId).cancelled).toBe(1);
+    expect(service.listMediaJobs(created.libraryId).jobs[0]).toMatchObject({
+      errorCode: 'USER_CANCELLED',
+    });
+    expect(service.enqueueThumbnailJobs(created.libraryId)).toBe(0);
 
     const db = new TestDatabase(path.join(created.libraryPath, '.super', 'library.db'));
     db.prepare(

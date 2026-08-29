@@ -35,7 +35,7 @@ describe('folder-recursive-preferences (REQ-FOLDER-009)', () => {
     ).toBe(false);
   });
 
-  it('persists only enabled folders sparsely', () => {
+  it('persists both enabled and explicitly disabled folders', () => {
     const storage = memoryStorage();
     let prefs = withFolderRecursiveEnabled(
       DEFAULT_FOLDER_RECURSIVE_PREFERENCES,
@@ -50,7 +50,20 @@ describe('folder-recursive-preferences (REQ-FOLDER-009)', () => {
     const loaded = loadFolderRecursivePreferences(storage);
     expect(isFolderRecursiveEnabled(loaded, 'lib-a', 'folder-a')).toBe(true);
     expect(isFolderRecursiveEnabled(loaded, 'lib-a', 'folder-b')).toBe(false);
-    expect(loaded.byLibrary['lib-a']).toEqual({ 'folder-a': true });
+    expect(loaded.byLibrary['lib-a']).toEqual({ 'folder-a': true, 'folder-b': false });
+  });
+
+  it('migrates the previous enabled-only preference format', () => {
+    const storage = memoryStorage({
+      'superApi.folder-recursive.v1': JSON.stringify({
+        version: 1,
+        byLibrary: { 'lib-a': { 'folder-a': true } },
+      }),
+    });
+    expect(loadFolderRecursivePreferences(storage)).toEqual({
+      version: 2,
+      byLibrary: { 'lib-a': { 'folder-a': true } },
+    });
   });
 
   it('rejects corrupt storage', () => {

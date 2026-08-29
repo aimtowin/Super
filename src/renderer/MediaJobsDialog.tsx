@@ -62,6 +62,7 @@ export function MediaJobsDialog({
   onViewAppLog,
 }: MediaJobsDialogProps) {
   const t = useT();
+  const mediaControlsPending = mediaJobsLoading;
   if (!open) return null;
 
   return (
@@ -99,7 +100,7 @@ export function MediaJobsDialog({
             <div className="dialog-actions dialog-actions-start is-spaced">
               <button
                 className="secondary-button"
-                disabled={mediaJobs.queued + mediaJobs.running === 0}
+                disabled={mediaControlsPending || mediaJobs.queued + mediaJobs.running === 0}
                 onClick={() => void onControlMediaJobs("pause")}
                 type="button"
               >
@@ -107,7 +108,7 @@ export function MediaJobsDialog({
               </button>
               <button
                 className="secondary-button"
-                disabled={mediaJobs.paused === 0}
+                disabled={mediaControlsPending || mediaJobs.paused === 0}
                 onClick={() => void onControlMediaJobs("resume")}
                 type="button"
               >
@@ -116,7 +117,7 @@ export function MediaJobsDialog({
               <button
                 className="secondary-button"
                 disabled={
-                  mediaJobs.queued +
+                  mediaControlsPending || mediaJobs.queued +
                     mediaJobs.running +
                     mediaJobs.paused ===
                   0
@@ -128,7 +129,7 @@ export function MediaJobsDialog({
               </button>
               <button
                 className="secondary-button"
-                disabled={mediaJobs.failed === 0}
+                disabled={mediaControlsPending || mediaJobs.failed === 0}
                 onClick={() =>
                   void onControlMediaJobs(
                     "retry",

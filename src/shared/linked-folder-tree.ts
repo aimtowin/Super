@@ -83,6 +83,98 @@ export function collectLinkedDirectoryPrefixes(
   return [...prefixes].sort();
 }
 
+/**
+ * Aggregate a linked directory tree in one pass over its indexed asset paths.
+ *
+ * The sidebar and folder canvas both need descendant/direct counts. Repeatedly
+ * filtering the complete path list for every directory turns a large linked
+ * source into O(files × directories) work and can block the library Worker.
+ * This index keeps the same information in O(total path segments).
+ */
+export interface LinkedDirectoryAggregate {
+  readonly relativePath: string;
+  /** Indexed assets in this directory and every descendant. */
+  readonly assetCount: number;
+  /** Indexed assets directly inside this directory. */
+  readonly directAssetCount: number;
+  /** Number of direct child directories. */
+  readonly childFolderCount: number;
+}
+
+export interface LinkedDirectoryIndex {
+  readonly directories: readonly LinkedDirectoryAggregate[];
+  childrenOf(parentRelativePath: string): readonly LinkedDirectoryAggregate[];
+}
+
+export function buildLinkedDirectoryIndex(
+  relativeFilePaths: readonly string[],
+  extraDirectoryPaths: readonly string[] = [],
+): LinkedDirectoryIndex {
+  type MutableAggregate = {
+    relativePath: string;
+    assetCount: number;
+    directAssetCount: number;
+    children: Set<string>;
+  };
+  const byPath = new Map<string, MutableAggregate>();
+  const childrenByParent = new Map<string, Set<string>>();
+  const ensure = (relativePath: string): MutableAggregate => {
+    const existing = byPath.get(relativePath);
+    if (existing) return existing;
+    const created: MutableAggregate = {
+      relativePath,
+      assetCount: 0,
+      directAssetCount: 0,
+      children: new Set<string>(),
+    };
+    byPath.set(relativePath, created);
+    const parent = parentLinkedRelativePath(relativePath) ?? "";
+    const siblings = childrenByParent.get(parent) ?? new Set<string>();
+    siblings.add(relativePath);
+    childrenByParent.set(parent, siblings);
+    if (parent !== "") ensure(parent).children.add(relativePath);
+    return created;
+  };
+
+  for (const rawPath of relativeFilePaths) {
+    const parts = rawPath.split("/").filter(Boolean);
+    // A file directly inside the linked root has no virtual directory.
+    if (parts.length < 2) continue;
+    let directory = "";
+    for (let index = 0; index < parts.length - 1; index += 1) {
+      directory = directory === "" ? parts[index]! : `${directory}/${parts[index]!}`;
+      const aggregate = ensure(directory);
+      aggregate.assetCount += 1;
+      if (index === parts.length - 2) aggregate.directAssetCount += 1;
+    }
+  }
+
+  for (const directory of extraDirectoryPaths) {
+    if (directory) ensure(directory);
+  }
+
+  const toAggregate = (entry: MutableAggregate): LinkedDirectoryAggregate => ({
+    relativePath: entry.relativePath,
+    assetCount: entry.assetCount,
+    directAssetCount: entry.directAssetCount,
+    childFolderCount: entry.children.size,
+  });
+  const sorted = [...byPath.values()]
+    .map(toAggregate)
+    .sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+  const immutableByPath = new Map(sorted.map((entry) => [entry.relativePath, entry] as const));
+
+  return {
+    directories: sorted,
+    childrenOf(parentRelativePath: string): readonly LinkedDirectoryAggregate[] {
+      return [...(childrenByParent.get(parentRelativePath) ?? [])]
+        .map((relativePath) => immutableByPath.get(relativePath))
+        .filter((entry): entry is LinkedDirectoryAggregate => entry !== undefined)
+        .sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+    },
+  };
+}
+
 export function directChildLinkedDirectories(
   prefixes: readonly string[],
   parentRelativePath: string,

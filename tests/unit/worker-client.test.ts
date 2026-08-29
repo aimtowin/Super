@@ -30,6 +30,10 @@ describe('requestTimeoutForCommand', () => {
     expect(requestTimeoutForCommand('asset.list')).toBe(15_000);
   });
 
+  it('waits for an explicit media cancellation behind a large decode wave', () => {
+    expect(requestTimeoutForCommand('media.cancel-jobs')).toBeNull();
+  });
+
   it('gives large-library reads room to finish after queued work', () => {
     expect(requestTimeoutForCommand('asset.search')).toBe(60_000);
     expect(requestTimeoutForCommand('media.get-asset-drag-infos')).toBe(60_000);

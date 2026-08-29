@@ -621,6 +621,23 @@ function cancelMediaResourceRetry(libraryId: string): void {
   deferredMediaResourceRetries.delete(libraryId);
 }
 
+/**
+ * Stop the currently scheduled automatic media pumps after the user chooses
+ * “cancel unfinished”.  Updating job rows alone is insufficient: an already
+ * scheduled refill used to immediately enqueue the same backlog again.
+ */
+function stopAutomaticMediaQueues(libraryId: string): void {
+  cancelDeferredStartupThumbnailScene(libraryId);
+  cancelMediaResourceRetry(libraryId);
+  pendingVisibleThumbnailWaves.delete(libraryId);
+  rescheduledThumbnailQueues.delete(libraryId);
+  activeThumbnailQueueControllers.get(libraryId)?.abort();
+  activeSecondaryMediaQueueControllers.get(libraryId)?.abort();
+  urgentSecondaryMediaQueues.delete(libraryId);
+  urgentSecondaryMediaAssetIds.delete(libraryId);
+  secondaryMediaIdleUntil.delete(libraryId);
+}
+
 function scheduleThumbnailQueue(
   libraryId: string,
   options: {
@@ -1031,6 +1048,7 @@ const SECONDARY_MEDIA_JOB_KINDS = [
   'extract_palette',
 ] as const;
 const activeSecondaryMediaQueues = new Set<string>();
+const activeSecondaryMediaQueueControllers = new Map<string, AbortController>();
 const secondaryMediaIdleUntil = new Map<string, number>();
 const urgentSecondaryMediaQueues = new Set<string>();
 const urgentSecondaryMediaAssetIds = new Map<string, Set<string>>();
@@ -1069,10 +1087,24 @@ function scheduleSecondaryMediaQueue(
   }
   if (activeSecondaryMediaQueues.has(libraryId)) return;
   activeSecondaryMediaQueues.add(libraryId);
+  const queueController = new AbortController();
+  activeSecondaryMediaQueueControllers.set(libraryId, queueController);
+  const finish = (): void => {
+    if (activeSecondaryMediaQueueControllers.get(libraryId) === queueController) {
+      activeSecondaryMediaQueueControllers.delete(libraryId);
+    }
+    activeSecondaryMediaQueues.delete(libraryId);
+    urgentSecondaryMediaQueues.delete(libraryId);
+    urgentSecondaryMediaAssetIds.delete(libraryId);
+  };
   const runOne = async (): Promise<void> => {
+    if (queueController.signal.aborted) {
+      finish();
+      return;
+    }
     if (mediaResourceGuard.isCoolingDown()) {
       scheduleMediaResourceRetry(libraryId);
-      activeSecondaryMediaQueues.delete(libraryId);
+      finish();
       return;
     }
     const urgent = urgentSecondaryMediaQueues.has(libraryId);
@@ -1088,6 +1120,7 @@ function scheduleSecondaryMediaQueue(
       const processed = await libraryService.processThumbnailQueue(libraryId, {
         maxJobs: 1,
         jobKinds: SECONDARY_MEDIA_JOB_KINDS,
+        signal: queueController.signal,
         ...(urgentAssetIds && urgentAssetIds.size > 0
           ? { assetIds: [...urgentAssetIds] }
           : {}),
@@ -1102,19 +1135,17 @@ function scheduleSecondaryMediaQueue(
       });
       if (mediaResourceGuard.isCoolingDown()) {
         scheduleMediaResourceRetry(libraryId);
-        activeSecondaryMediaQueues.delete(libraryId);
+        finish();
         return;
       }
-      if (processed > 0) {
+      if (!queueController.signal.aborted && processed > 0) {
         setTimeout(() => void runOne(), 50);
         return;
       }
     } catch (error) {
       libraryService.reportDiagnostic('secondary-media-schedule.process', error, { libraryId });
     }
-    activeSecondaryMediaQueues.delete(libraryId);
-    urgentSecondaryMediaQueues.delete(libraryId);
-    urgentSecondaryMediaAssetIds.delete(libraryId);
+    finish();
   };
   setTimeout(() => void runOne(), options.urgent ? 0 : 1_000);
 }
@@ -3597,10 +3628,13 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
       };
     }
     case 'media.cancel-jobs': {
+      const cancelWholeQueue = !request.command.jobIds || request.command.jobIds.length === 0;
       const result = libraryService.cancelMediaJobs(
         request.command.libraryId,
         request.command.jobIds,
+        { suppressAutomaticReschedule: cancelWholeQueue },
       );
+      if (cancelWholeQueue) stopAutomaticMediaQueues(request.command.libraryId);
       return {
         ok: true,
         type: 'media.jobs.cancelled',
