@@ -12167,7 +12167,12 @@ export class LibraryService {
     });
   }
 
-  /** Rename a linked root or a physical virtual-child directory in place. */
+  /**
+   * Rename a linked-root label, or a physical virtual-child directory in
+   * place.  A linked root is an external directory: changing its sidebar
+   * name must not move that directory or collide with an unlinked sibling on
+   * the user's disk.
+   */
   renameLinkedFolderDirectory(input: {
     libraryId: string;
     linkedFolderId: string;
@@ -12187,6 +12192,23 @@ export class LibraryService {
       input.linkedFolderId,
       input.relativePath,
     );
+    if (target.relativePath === '') {
+      const now = new Date().toISOString();
+      const changed = openLibrary.connection
+        .prepare(
+          `UPDATE linked_folders
+              SET display_name = ?, updated_at = ?
+            WHERE folder_id = ? AND library_id = ?`,
+        )
+        .run(name, now, target.linkedFolderId, input.libraryId);
+      if (changed.changes !== 1) throw new LibraryServiceError('FOLDER_NOT_FOUND');
+      return this.linkedDirectoryMutationSummary({
+        linkedFolderId: target.linkedFolderId,
+        relativePath: '',
+        name,
+        status: target.status,
+      });
+    }
     const sourceName = path.basename(target.absolutePath);
     const parentPath = path.dirname(target.absolutePath);
     const destinationPath = this.assertLinkedDirectorySiblingAvailable(
@@ -12208,34 +12230,6 @@ export class LibraryService {
       renamePathWithRetry(target.absolutePath, destinationPath);
       renamed = true;
       const now = new Date().toISOString();
-      if (target.relativePath === '') {
-        let canonicalDestination: string;
-        try {
-          canonicalDestination = realpathSync(destinationPath);
-        } catch (error) {
-          throw new LibraryServiceError('FOLDER_NOT_FOUND', { cause: error });
-        }
-        openLibrary.connection.transaction(() => {
-          const changed = openLibrary.connection
-            .prepare(
-              `UPDATE linked_folders
-                  SET display_name = ?, absolute_root_path = ?, path_identity = ?, updated_at = ?
-                WHERE folder_id = ? AND library_id = ?`,
-            )
-            .run(name, canonicalDestination, canonicalDestination, now, target.linkedFolderId, input.libraryId);
-          if (changed.changes !== 1) throw new LibraryServiceError('FOLDER_NOT_FOUND');
-        })();
-        this.stopLinkedWatcher(input.libraryId, target.linkedFolderId);
-        this.reconcileLinkedWatchers(openLibrary);
-        this.noteClientFilesystemMutation();
-        return this.linkedDirectoryMutationSummary({
-          linkedFolderId: target.linkedFolderId,
-          relativePath: '',
-          name,
-          status: target.status,
-        });
-      }
-
       const oldPrefix = `${target.relativePath}/`;
       const newParent = parentLinkedRelativePath(target.relativePath) ?? '';
       const newRelativePath = newParent === ''

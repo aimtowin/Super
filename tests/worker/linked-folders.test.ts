@@ -362,6 +362,10 @@ describe('Linked folder import', () => {
         .map((asset) => asset.relativeFilePath),
     ).toEqual(['renamed/art.png']);
 
+    // A linked root is an external source. Its sidebar label may match a
+    // physical sibling directory without moving or colliding with either
+    // source directory.
+    mkdirSync(path.join(root, 'renamed-source'));
     const rootRenamed = service.renameLinkedFolderDirectory({
       libraryId: library.libraryId,
       linkedFolderId: linked.folderId,
@@ -370,7 +374,8 @@ describe('Linked folder import', () => {
     });
     expect(rootRenamed.folderId).toBe(linked.folderId);
     expect(rootRenamed.name).toBe('renamed-source');
-    expect(existsSync(path.join(root, 'renamed-source', 'renamed', 'art.png'))).toBe(true);
+    expect(existsSync(path.join(sourceRoot, 'renamed', 'art.png'))).toBe(true);
+    expect(existsSync(path.join(root, 'renamed-source'))).toBe(true);
     expect(service.listLinkedFolders(library.libraryId).find((folder) => folder.folderId === linked.folderId)?.displayName)
       .toBe('renamed-source');
 
