@@ -7,6 +7,7 @@
  * Optional environment:
  *   SUPER_UPDATE_SSH_USER      SSH user (default: root)
  *   SUPER_UPDATE_SSH_PORT      SSH port (default: 22)
+ *   SUPER_UPDATE_SSH_IDENTITY_FILE  explicit PEM/private-key path
  *   SUPER_UPDATE_REMOTE_DIR    ECS update volume (default: /www/wwwroot/resource/data/super-updates)
  *   SUPER_UPDATE_NOTES         bounded release notes shown in Super
  *
@@ -126,15 +127,27 @@ async function main() {
   if (!host) fail('SUPER_UPDATE_SSH_HOST is required unless --dry-run is used.');
   const user = process.env.SUPER_UPDATE_SSH_USER?.trim() || 'root';
   const port = parsePort(process.env.SUPER_UPDATE_SSH_PORT);
+  const identityFile = process.env.SUPER_UPDATE_SSH_IDENTITY_FILE?.trim();
+  if (identityFile && !await exists(identityFile)) fail('SUPER_UPDATE_SSH_IDENTITY_FILE does not exist.');
   const remoteDirectory = process.env.SUPER_UPDATE_REMOTE_DIR?.trim() || defaultRemoteDirectory;
   if (!remoteDirectoryPattern.test(remoteDirectory)) fail('SUPER_UPDATE_REMOTE_DIR must be an absolute safe POSIX path.');
   const destination = `${user}@${host}`;
   const stage = `${remoteDirectory}/.staging-${version}-${randomUUID()}`;
   const releaseDirectory = `${remoteDirectory}/releases/${version}`;
   const files = [zipPath, setupPath, zipChecksumPath, setupChecksumPath, localManifestPath];
+  const sshOptions = [
+    '-p', port,
+    '-o', 'BatchMode=yes',
+    ...(identityFile ? ['-i', identityFile, '-o', 'IdentitiesOnly=yes'] : []),
+  ];
+  const scpOptions = [
+    '-P', port,
+    '-o', 'BatchMode=yes',
+    ...(identityFile ? ['-i', identityFile, '-o', 'IdentitiesOnly=yes'] : []),
+  ];
 
-  await run('ssh', ['-p', port, '-o', 'BatchMode=yes', destination, `set -eu; mkdir -p ${quoteRemotePath(stage)}`]);
-  await run('scp', ['-P', port, '-o', 'BatchMode=yes', ...files, `${destination}:${stage}/`]);
+  await run('ssh', [...sshOptions, destination, `set -eu; mkdir -p ${quoteRemotePath(stage)}`]);
+  await run('scp', [...scpOptions, ...files, `${destination}:${stage}/`]);
   const moveCommand = [
     'set -eu',
     `mkdir -p ${quoteRemotePath(releaseDirectory)}`,
@@ -145,7 +158,7 @@ async function main() {
     `mv ${quoteRemotePath(`${stage}/super-update-manifest.json`)} ${quoteRemotePath(`${remoteDirectory}/latest.json`)}`,
     `rmdir ${quoteRemotePath(stage)}`,
   ].join('; ');
-  await run('ssh', ['-p', port, '-o', 'BatchMode=yes', destination, moveCommand]);
+  await run('ssh', [...sshOptions, destination, moveCommand]);
   console.log(`[publish-ecs-update] Published Super ${version} to ${destination}:${remoteDirectory}`);
 }
 
