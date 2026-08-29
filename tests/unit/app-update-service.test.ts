@@ -587,6 +587,7 @@ describe('Super app update release contract', () => {
         executablePath: path.join(root, 'Super.exe'),
         tempDirectory: root,
         downloadsDirectory: path.join(root, 'Downloads'),
+        preparedUpdateDirectory: path.join(root, 'updates'),
         environment: { SUPER_DISTRIBUTION: 'installed' },
         fetchImpl: async (url) => {
           if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
@@ -607,7 +608,7 @@ describe('Super app update release contract', () => {
         version: '0.1.3',
         distribution: 'installed',
       });
-      expect((await readdir(root)).some((entry) => entry.startsWith('super-installer-'))).toBe(true);
+      expect((await readdir(path.join(root, 'updates'))).some((entry) => entry.startsWith('super-update-'))).toBe(true);
 
       const launchedResult = await service.launchPreparedUpdate('silent');
       expect(launchedResult).toEqual({
@@ -619,7 +620,7 @@ describe('Super app update release contract', () => {
       });
       expect(launched).toHaveLength(1);
       expect(launched[0]?.mode).toBe('silent');
-      expect((await readdir(root)).filter((entry) => entry.startsWith('super-installer-')))
+      expect((await readdir(path.join(root, 'updates'))).filter((entry) => entry.startsWith('super-update-')))
         .toEqual([]);
     } finally {
       await rm(root, { recursive: true, force: true });

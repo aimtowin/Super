@@ -697,9 +697,13 @@ export class AppUpdateService {
       const installedCacheDirectory = update.target.distribution === 'installed'
         ? this.#options.preparedUpdateDirectory
         : undefined;
-      const updateDirectory = installedCacheDirectory === undefined
-        ? undefined
-        : await mkdtemp(path.join(installedCacheDirectory, 'super-update-'));
+      let updateDirectory: string | undefined;
+      if (installedCacheDirectory !== undefined) {
+        // AppData\Roaming\Super\updates is deliberately created lazily, so
+        // first-time update downloads must create the mkdtemp parent first.
+        await mkdir(installedCacheDirectory, { recursive: true });
+        updateDirectory = await mkdtemp(path.join(installedCacheDirectory, 'super-update-'));
+      }
       downloadPath = updateDirectory === undefined
         ? await nextAvailableDownloadPath(this.#options.downloadsDirectory, asset.name)
         : path.join(updateDirectory, asset.name);
