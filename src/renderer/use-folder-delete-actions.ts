@@ -198,12 +198,11 @@ export function useFolderDeleteActions({
         const result = await api.removeLinkedFolder({ libraryId, folderId });
         if (!result.ok) throw new LibraryOperationError(result.error);
         setNotice(
-          translateForLocale(locale, "toast.linkedFolderRemoved", {
+          translateForLocale(locale, "toast.linkedFolderRemovalQueued", {
             name,
-            count: result.value.removedAssetCount,
+            count: result.value.totalAssets,
           }),
         );
-        await afterFolderMutation([folderId]);
       } catch (caught) {
         setError(
           toMessage(
@@ -223,7 +222,6 @@ export function useFolderDeleteActions({
       setUiState,
       setNotice,
       setError,
-      afterFolderMutation,
     ],
   );
 

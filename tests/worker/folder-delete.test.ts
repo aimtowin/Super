@@ -41,6 +41,14 @@ function database(libraryPath: string) {
   return new TestDatabase(path.join(libraryPath, '.super', 'library.db'));
 }
 
+async function waitFor(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() >= deadline) throw new Error('Timed out waiting for background linked-folder removal.');
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 afterEach(() => {
   for (const service of services.splice(0)) service.closeAll();
   for (const value of roots.splice(0)) rmSync(value, { force: true, recursive: true });
@@ -343,6 +351,48 @@ describe('removeLinkedFolder (clarification #7 / Super-ekj)', () => {
     expect(result.removedAssetCount).toBeGreaterThan(0);
     expect(existsSync(externalFile)).toBe(true);
     expect(service.listLinkedFolders(library.libraryId)).toEqual([]);
+  });
+
+  it('removes large linked indexes in persisted batches and resumes a paused task after reopening', async () => {
+    const temp = root();
+    const external = path.join(temp, 'external-large-root');
+    mkdirSync(external);
+    for (let index = 0; index < 300; index += 1) {
+      writeFileSync(path.join(external, `asset-${index}.png`), 'linked-bytes');
+    }
+
+    const service = newService();
+    const library = service.createLibrary({ displayName: 'LinkedRemoveResumable', selectedParentPath: temp });
+    const linked = service.importFolderAsLinked({
+      libraryId: library.libraryId,
+      sourceRootPath: external,
+      displayName: '大链接库',
+    });
+    const queued = service.startLinkedFolderRemoval({
+      libraryId: library.libraryId,
+      folderId: linked.folderId,
+    });
+    expect(queued.totalAssets).toBe(300);
+    expect(service.pauseLinkedFolderRemovalJobs(library.libraryId, [queued.jobId])).toEqual({ pausedCount: 1 });
+    expect(service.listLinkedFolderRemovalJobs(library.libraryId).jobs[0]).toMatchObject({
+      jobId: queued.jobId,
+      status: 'paused',
+      totalAssets: 300,
+    });
+
+    service.closeLibrary(library.libraryId);
+    service.openLibrary(library.libraryPath);
+    expect(service.listLinkedFolderRemovalJobs(library.libraryId).jobs[0]?.status).toBe('paused');
+    expect(service.resumeLinkedFolderRemovalJobs(library.libraryId, [queued.jobId])).toEqual({ resumedCount: 1 });
+    await waitFor(() => service.listLinkedFolderRemovalJobs(library.libraryId).jobs[0]?.status === 'succeeded');
+
+    expect(service.listLinkedFolders(library.libraryId)).toEqual([]);
+    expect(existsSync(path.join(external, 'asset-0.png'))).toBe(true);
+    expect(service.listLinkedFolderRemovalJobs(library.libraryId).jobs[0]).toMatchObject({
+      status: 'succeeded',
+      totalAssets: 300,
+      removedAssets: 300,
+    });
   });
 });
 

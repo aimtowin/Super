@@ -2369,6 +2369,20 @@ async function commandFor(
         libraryId: request.libraryId,
         folderId: request.folderId,
       };
+    case "linked-folder-removal.list.request":
+      return { type: "linked-folder-removal.list", libraryId: request.libraryId };
+    case "linked-folder-removal.pause.request":
+      return {
+        type: "linked-folder-removal.pause",
+        libraryId: request.libraryId,
+        ...(request.jobIds ? { jobIds: request.jobIds } : {}),
+      };
+    case "linked-folder-removal.resume.request":
+      return {
+        type: "linked-folder-removal.resume",
+        libraryId: request.libraryId,
+        ...(request.jobIds ? { jobIds: request.jobIds } : {}),
+      };
     case "linked-folder.delete-subtree.request":
       return {
         type: "linked-folder.delete-subtree",
@@ -6674,17 +6688,36 @@ async function startApplication(): Promise<void> {
         result = await client.request({ type: 'plugin.jobs.retry', libraryId, jobId: input.jobId, ...requestOwner, retryInput: input.retryInput });
         break;
     }
-    if (!result.ok || !('job' in result)) {
+    if (!result.ok || (
+      result.type !== 'plugin.jobs.cancelled' &&
+      result.type !== 'plugin.jobs.paused' &&
+      result.type !== 'plugin.jobs.resumed' &&
+      result.type !== 'plugin.jobs.retried'
+    )) {
       throw Object.assign(new Error(result.ok ? 'Plugin job control returned an unexpected result.' : result.error.reason), {
         code: result.ok ? 'JOB_CONTROL_FAILED' : result.error.code,
       });
     }
-    if ((input.action === 'cancel' || input.action === 'pause') && result.job !== null) {
+    const controlledJob = result.type === 'plugin.jobs.paused'
+      ? (() => {
+        // The pause acknowledgement intentionally carries only a count. Read
+        // back the durable record so the runtime receives the same contract as
+        // cancel/resume/retry.
+        return undefined;
+      })()
+      : result.job;
+    const pausedJob = result.type === 'plugin.jobs.paused'
+      ? (await client.request({ type: 'plugin.jobs.list', libraryId }))
+      : undefined;
+    const resolvedJob = pausedJob && pausedJob.ok && pausedJob.type === 'plugin.jobs.listed'
+      ? pausedJob.jobs.find((candidate) => candidate.jobId === input.jobId) ?? null
+      : controlledJob ?? null;
+    if ((input.action === 'cancel' || input.action === 'pause') && resolvedJob !== null) {
       if (record.mode === 'restricted') pluginRuntimeSupervisor?.signalJob(record.instanceId, input.jobId, input.action, input.reason);
       else pluginTrustedRuntimeSupervisor?.signalJob(record.instanceId, input.jobId, input.action, input.reason);
     }
     if (input.action === 'resume' || input.action === 'retry') pluginJobScheduler?.tick(libraryId);
-    return { job: result.job };
+    return { job: resolvedJob };
   };
   const onPluginInstanceActivated = (input: { libraryId: string }): void => {
     pluginJobScheduler?.tick(input.libraryId);

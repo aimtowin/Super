@@ -34,9 +34,11 @@ describe("MediaJobsDialog asset labels", () => {
       },
       aiJobs: null,
       pluginJobs: null,
+      linkedFolderRemovalJobs: null,
       onClose: () => undefined,
       onControlMediaJobs: () => undefined,
       onControlAiJobs: () => undefined,
+      onControlLinkedFolderRemoval: () => undefined,
     });
     const html = renderToStaticMarkup(
       createElement(

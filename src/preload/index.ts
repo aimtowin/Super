@@ -665,16 +665,10 @@ const library: SuperLibraryApi = Object.freeze({
   }) {
     const result = await request({ type: 'linked-folder.remove.request', ...input });
     if (!result.ok) return failure(result);
-    if (result.type !== 'linked-folder.removed') {
+    if (result.type !== 'linked-folder.removal-queued') {
       throw new Error('Unexpected remove-linked-folder response.');
     }
-    return {
-      ok: true as const,
-      value: {
-        folderId: result.folderId,
-        removedAssetCount: result.removedAssetCount,
-      },
-    };
+    return { ok: true as const, value: result.job };
   },
 
   async deleteLinkedFolderSubtree(input: {
@@ -2081,6 +2075,33 @@ const library: SuperLibraryApi = Object.freeze({
     return { ok: true, value: { queued, running, succeeded, failed, paused, cancelled, jobs } };
   },
 
+  async listLinkedFolderRemovalJobs({ libraryId }: { libraryId: string }) {
+    const result = await request({ type: 'linked-folder-removal.list.request', libraryId });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'linked-folder.removal-jobs') {
+      throw new Error('Unexpected linked-folder-removal list response.');
+    }
+    return { ok: true as const, value: { jobs: result.jobs } };
+  },
+
+  async pauseLinkedFolderRemovalJobs({ libraryId, jobIds }: { libraryId: string; jobIds?: string[] }) {
+    const result = await request({ type: 'linked-folder-removal.pause.request', libraryId, jobIds });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'linked-folder.removal-jobs-paused') {
+      throw new Error('Unexpected linked-folder-removal pause response.');
+    }
+    return { ok: true as const, value: { pausedCount: result.pausedCount } };
+  },
+
+  async resumeLinkedFolderRemovalJobs({ libraryId, jobIds }: { libraryId: string; jobIds?: string[] }) {
+    const result = await request({ type: 'linked-folder-removal.resume.request', libraryId, jobIds });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'linked-folder.removal-jobs-resumed') {
+      throw new Error('Unexpected linked-folder-removal resume response.');
+    }
+    return { ok: true as const, value: { resumedCount: result.resumedCount } };
+  },
+
   async listPluginJobs({ libraryId }: { libraryId: string }): Promise<LibraryApiResult<PluginJobStatus>> {
     const result = await request({ type: 'plugin.list-jobs.request', libraryId });
     if (!result.ok) return failure(result);
@@ -2608,6 +2629,7 @@ const appUpdate: SuperAppUpdateApi = Object.freeze({
       await ipcRenderer.invoke(APP_UPDATE_INSTALL_CHANNEL),
     );
   },
+
   async installPreparedUpdate() {
     return parseAppUpdateInstallResult(
       await ipcRenderer.invoke(APP_UPDATE_RESTART_CHANNEL),

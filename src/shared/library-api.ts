@@ -169,6 +169,23 @@ export interface MediaJobStatus {
   jobs: MediaJob[];
 }
 
+export interface LinkedFolderRemovalJob {
+  jobId: string;
+  folderId: string;
+  folderName: string;
+  totalAssets: number;
+  removedAssets: number;
+  status: 'queued' | 'running' | 'paused' | 'failed' | 'succeeded';
+  errorCode: string | null;
+  errorDetail: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LinkedFolderRemovalJobStatus {
+  jobs: LinkedFolderRemovalJob[];
+}
+
 export interface AiJobStatus {
   queued: number;
   running: number;
@@ -322,7 +339,14 @@ export interface SuperLibraryApi {
   removeLinkedFolder(input: {
     libraryId: string;
     folderId: string;
-  }): Promise<LibraryApiResult<{ folderId: string; removedAssetCount: number }>>;
+  }): Promise<LibraryApiResult<{
+    jobId: string;
+    folderId: string;
+    folderName: string;
+    totalAssets: number;
+    removedAssets: number;
+    status: 'queued' | 'running' | 'paused' | 'failed' | 'succeeded';
+  }>>;
   deleteLinkedFolderSubtree(input: {
     libraryId: string;
     linkedFolderId: string;
@@ -689,6 +713,9 @@ export interface SuperLibraryApi {
   copyFolderPath(input: { libraryId: string; folderId: string }): Promise<LibraryApiResult<void>>;
   retryArtifact(input: { libraryId: string; assetId: string; kind: 'thumbnail' | 'webm_proxy' | 'audio_proxy' }): Promise<LibraryApiResult<{ assetId: string; kind: string }>>;
   listMediaJobs(input: { libraryId: string }): Promise<LibraryApiResult<MediaJobStatus>>;
+  listLinkedFolderRemovalJobs(input: { libraryId: string }): Promise<LibraryApiResult<LinkedFolderRemovalJobStatus>>;
+  pauseLinkedFolderRemovalJobs(input: { libraryId: string; jobIds?: string[] }): Promise<LibraryApiResult<{ pausedCount: number }>>;
+  resumeLinkedFolderRemovalJobs(input: { libraryId: string; jobIds?: string[] }): Promise<LibraryApiResult<{ resumedCount: number }>>;
   pauseMediaJobs(input: { libraryId: string; jobIds?: string[] }): Promise<LibraryApiResult<{ pausedCount: number }>>;
   resumeMediaJobs(input: { libraryId: string; jobIds?: string[] }): Promise<LibraryApiResult<{ resumedCount: number }>>;
   cancelMediaJobs(input: { libraryId: string; jobIds?: string[] }): Promise<LibraryApiResult<{ cancelledCount: number }>>;

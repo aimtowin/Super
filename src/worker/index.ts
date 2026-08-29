@@ -2119,21 +2119,20 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
       };
     }
     case 'linked-folder.remove': {
-      const result = libraryService.removeLinkedFolder(request.command);
+      const job = libraryService.startLinkedFolderRemoval(request.command);
       recordPermanentDeleteBarrier({
         libraryId: request.command.libraryId,
         commandId: request.command.type,
         labelKey: 'history.linked-folder.remove',
         reason: 'linked-folder-index-remove',
-        affectedCount: Math.max(1, result.removedAssetCount),
+        affectedCount: Math.max(1, job.totalAssets),
         affectedEntities: [request.command.folderId],
         historyContext: request.historyContext,
       });
       return {
         ok: true,
-        type: 'linked-folder.removed',
-        folderId: request.command.folderId,
-        ...result,
+        type: 'linked-folder.removal-queued',
+        job,
       };
     }
     case 'linked-folder.delete-subtree': {
@@ -3601,6 +3600,24 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
         libraryId: request.command.libraryId,
         ...status,
       };
+    }
+    case 'linked-folder-removal.list': {
+      const status = libraryService.listLinkedFolderRemovalJobs(request.command.libraryId);
+      return { ok: true, type: 'linked-folder.removal-jobs', ...status };
+    }
+    case 'linked-folder-removal.pause': {
+      const result = libraryService.pauseLinkedFolderRemovalJobs(
+        request.command.libraryId,
+        request.command.jobIds,
+      );
+      return { ok: true, type: 'linked-folder.removal-jobs-paused', ...result };
+    }
+    case 'linked-folder-removal.resume': {
+      const result = libraryService.resumeLinkedFolderRemovalJobs(
+        request.command.libraryId,
+        request.command.jobIds,
+      );
+      return { ok: true, type: 'linked-folder.removal-jobs-resumed', ...result };
     }
     case 'media.pause-jobs': {
       const result = libraryService.pauseMediaJobs(

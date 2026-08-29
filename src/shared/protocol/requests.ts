@@ -321,6 +321,20 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     folderId: identifierSchema,
   }),
   z.strictObject({
+    type: z.literal('linked-folder-removal.list.request'),
+    libraryId: identifierSchema,
+  }),
+  z.strictObject({
+    type: z.literal('linked-folder-removal.pause.request'),
+    libraryId: identifierSchema,
+    jobIds: z.array(identifierSchema).max(50).optional(),
+  }),
+  z.strictObject({
+    type: z.literal('linked-folder-removal.resume.request'),
+    libraryId: identifierSchema,
+    jobIds: z.array(identifierSchema).max(50).optional(),
+  }),
+  z.strictObject({
     type: z.literal('linked-folder.delete-subtree.request'),
     libraryId: identifierSchema,
     linkedFolderId: identifierSchema,
@@ -1425,6 +1439,20 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
     type: z.literal('linked-folder.remove'),
     libraryId: identifierSchema,
     folderId: identifierSchema,
+  }),
+  z.strictObject({
+    type: z.literal('linked-folder-removal.list'),
+    libraryId: identifierSchema,
+  }),
+  z.strictObject({
+    type: z.literal('linked-folder-removal.pause'),
+    libraryId: identifierSchema,
+    jobIds: z.array(identifierSchema).max(50).optional(),
+  }),
+  z.strictObject({
+    type: z.literal('linked-folder-removal.resume'),
+    libraryId: identifierSchema,
+    jobIds: z.array(identifierSchema).max(50).optional(),
   }),
   z.strictObject({
     type: z.literal('linked-folder.delete-subtree'),

@@ -344,6 +344,7 @@ import type {
   MediaJobStatus,
   AiJobStatus,
   PluginJobStatus,
+  LinkedFolderRemovalJobStatus,
 } from "../shared/library-api";
 import type { SuperShellApi } from "../shared/external-url";
 import type { SuperAutomationScriptApi } from '../shared/automation-script-api';
@@ -1707,6 +1708,7 @@ function AppInner() {
   const [mediaJobs, setMediaJobs] = useState<MediaJobStatus | null>(null);
   const [aiJobs, setAiJobs] = useState<AiJobStatus | null>(null);
   const [pluginJobs, setPluginJobs] = useState<PluginJobStatus | null>(null);
+  const [linkedFolderRemovalJobs, setLinkedFolderRemovalJobs] = useState<LinkedFolderRemovalJobStatus | null>(null);
   const [hiddenPluginJobActivityId, setHiddenPluginJobActivityId] = useState<string | null>(null);
   const [mediaJobsLoading, setMediaJobsLoading] = useState(false);
   const pluginJobsActive = hasActivePluginJobs(pluginJobs);
@@ -1720,8 +1722,11 @@ function AppInner() {
     const mediaActive =
       (mediaJobs?.queued ?? 0) + (mediaJobs?.running ?? 0) > 0;
     const aiActive = (aiJobs?.queued ?? 0) + (aiJobs?.running ?? 0) > 0;
-    return mediaActive || aiActive || pluginJobsActive;
-  }, [aiAnalyzing, aiJobs, mediaJobs, pluginJobsActive]);
+    const linkedRemovalActive = linkedFolderRemovalJobs?.jobs.some(
+      (job) => job.status === "queued" || job.status === "running",
+    ) ?? false;
+    return mediaActive || aiActive || pluginJobsActive || linkedRemovalActive;
+  }, [aiAnalyzing, aiJobs, linkedFolderRemovalJobs, mediaJobs, pluginJobsActive]);
   const openMediaJobs = useCallback(() => setMediaJobsOpen(true), []);
   const hidePluginJobActivity = useCallback((jobId: string) => {
     setHiddenPluginJobActivityId(jobId);
@@ -8877,14 +8882,16 @@ function AppInner() {
     let active = true;
     const poll = async () => {
       try {
-        const [mediaResult, aiResult, pluginResult] = await Promise.all([
+        const [mediaResult, aiResult, pluginResult, linkedRemovalResult] = await Promise.all([
           api.listMediaJobs({ libraryId: library.libraryId }),
           api.getAiJobStatus({ libraryId: library.libraryId }),
           api.listPluginJobs({ libraryId: library.libraryId }),
+          api.listLinkedFolderRemovalJobs({ libraryId: library.libraryId }),
         ]);
         if (active && mediaResult.ok) setMediaJobs(mediaResult.value);
         if (active && aiResult.ok) setAiJobs(aiResult.value);
         if (active && pluginResult.ok) setPluginJobs(pluginResult.value);
+        if (active && linkedRemovalResult.ok) setLinkedFolderRemovalJobs(linkedRemovalResult.value);
       } catch {
         // Keep the last known task state during a transient Worker restart.
       } finally {
@@ -8908,14 +8915,16 @@ function AppInner() {
     let active = true;
     const poll = async () => {
       try {
-        const [mediaResult, aiResult, pluginResult] = await Promise.all([
+        const [mediaResult, aiResult, pluginResult, linkedRemovalResult] = await Promise.all([
           api.listMediaJobs({ libraryId: library.libraryId }),
           api.getAiJobStatus({ libraryId: library.libraryId }),
           api.listPluginJobs({ libraryId: library.libraryId }),
+          api.listLinkedFolderRemovalJobs({ libraryId: library.libraryId }),
         ]);
         if (active && mediaResult.ok) setMediaJobs(mediaResult.value);
         if (active && aiResult.ok) setAiJobs(aiResult.value);
         if (active && pluginResult.ok) setPluginJobs(pluginResult.value);
+        if (active && linkedRemovalResult.ok) setLinkedFolderRemovalJobs(linkedRemovalResult.value);
       } catch {
         // Keep the last known task state during a transient Worker restart.
       }
@@ -8957,6 +8966,29 @@ function AppInner() {
         return;
       }
       await loadMediaJobs(true);
+    } catch {
+      setError(t("toast.mediaJobsOpNoResponse"));
+    } finally {
+      setMediaJobsLoading(false);
+    }
+  }
+
+  async function controlLinkedFolderRemoval(
+    action: "pause" | "resume",
+    jobIds?: string[],
+  ) {
+    if (!api || !library) return;
+    setMediaJobsLoading(true);
+    try {
+      const result = action === "pause"
+        ? await api.pauseLinkedFolderRemovalJobs({ libraryId: library.libraryId, jobIds })
+        : await api.resumeLinkedFolderRemovalJobs({ libraryId: library.libraryId, jobIds });
+      if (!result.ok) {
+        setError(toMessage(result.error, t("toast.mediaJobsOpFailed"), locale));
+        return;
+      }
+      const jobs = await api.listLinkedFolderRemovalJobs({ libraryId: library.libraryId });
+      if (jobs.ok) setLinkedFolderRemovalJobs(jobs.value);
     } catch {
       setError(t("toast.mediaJobsOpNoResponse"));
     } finally {
@@ -11685,9 +11717,13 @@ function AppInner() {
         mediaJobsLoading={mediaJobsLoading}
         aiJobs={aiJobs}
         pluginJobs={pluginJobs}
+        linkedFolderRemovalJobs={linkedFolderRemovalJobs}
         onClose={() => setMediaJobsOpen(false)}
         onControlMediaJobs={(action, jobIds) => void controlMediaJobs(action, jobIds)}
         onControlAiJobs={(action, jobIds) => void controlAiJobs(action, jobIds)}
+        onControlLinkedFolderRemoval={(action, jobIds) =>
+          void controlLinkedFolderRemoval(action, jobIds)
+        }
         onRevealAppLog={() => {
           const shellBridge = (window as RendererWindow).super?.shell;
           if (!shellBridge?.revealAppLog) {

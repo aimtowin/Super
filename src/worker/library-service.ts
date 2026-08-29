@@ -374,6 +374,8 @@ const MEDIA_JOB_KINDS = [
 type MediaJobKind = (typeof MEDIA_JOB_KINDS)[number];
 type SecondaryMediaJobKind = Exclude<MediaJobKind, 'generate_thumbnail' | 'generate_video_poster'>;
 type MediaJobStatus = 'queued' | 'running' | 'paused' | 'succeeded' | 'failed' | 'cancelled';
+type LinkedFolderRemovalJobStatus = 'queued' | 'running' | 'paused' | 'failed' | 'succeeded';
+const LINKED_FOLDER_REMOVAL_BATCH_SIZE = 128;
 /** A user explicitly stopped the whole automatic media backlog. */
 const USER_CANCELLED_MEDIA_JOB_ERROR_CODE = 'USER_CANCELLED';
 
@@ -2729,6 +2731,38 @@ const AUTO_ANALYSIS_SUPPRESSION_SCHEMA_CHECKSUM = createHash('sha256')
   .update(AUTO_ANALYSIS_SUPPRESSION_SCHEMA_SQL)
   .digest('hex');
 
+/**
+ * Durable, resumable removal of a linked-folder index.  The source directory
+ * is deliberately not referenced by a foreign key: a completed job must stay
+ * visible after its linked_folders row has been removed.
+ */
+const LINKED_FOLDER_REMOVAL_JOBS_SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS linked_folder_removal_jobs (
+    job_id TEXT PRIMARY KEY,
+    library_id TEXT NOT NULL REFERENCES library(library_id) ON DELETE CASCADE,
+    linked_folder_id TEXT NOT NULL,
+    folder_name TEXT NOT NULL,
+    total_assets INTEGER NOT NULL CHECK(total_assets >= 0),
+    removed_assets INTEGER NOT NULL DEFAULT 0 CHECK(removed_assets >= 0),
+    status TEXT NOT NULL CHECK(status IN ('queued', 'running', 'paused', 'failed', 'succeeded')),
+    error_code TEXT,
+    error_detail TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS linked_folder_removal_jobs_active_folder
+    ON linked_folder_removal_jobs(library_id, linked_folder_id)
+    WHERE status IN ('queued', 'running', 'paused', 'failed');
+  CREATE INDEX IF NOT EXISTS linked_folder_removal_jobs_library_status
+    ON linked_folder_removal_jobs(library_id, status, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS assets_linked_folder_active_removal
+    ON assets(linked_folder_id, asset_id)
+    WHERE location_kind = 'linked' AND deleted_at IS NULL;
+`;
+const LINKED_FOLDER_REMOVAL_JOBS_SCHEMA_CHECKSUM = createHash('sha256')
+  .update(LINKED_FOLDER_REMOVAL_JOBS_SCHEMA_SQL)
+  .digest('hex');
+
 // Keep individual recipes bounded so a DB-only mutation cannot turn the
 // library database into an unbounded snapshot store. Large-content/history
 // operations remain a separate phase with explicit byte retention policy.
@@ -2864,6 +2898,11 @@ export const MIGRATIONS = [
     version: 43,
     sql: RAW_VIEWER_ARTIFACT_SCHEMA_SQL,
     checksum: RAW_VIEWER_ARTIFACT_SCHEMA_CHECKSUM,
+  },
+  {
+    version: 44,
+    sql: LINKED_FOLDER_REMOVAL_JOBS_SCHEMA_SQL,
+    checksum: LINKED_FOLDER_REMOVAL_JOBS_SCHEMA_CHECKSUM,
   },
 ] as const;
 export const SUPPORTED_SCHEMA_VERSION = MIGRATIONS.at(-1)!.version;
@@ -5540,6 +5579,8 @@ export class LibraryService {
     assetId: string;
     settled: Promise<void>;
   }>();
+  /** One yielding, persisted index-removal pump per linked-folder job. */
+  private readonly activeLinkedFolderRemovalPumps = new Map<string, Promise<void>>();
   /**
    * A missing component can be repaired while a library remains open. Once a
    * repair wave has been queued, do not requeue the same component on every
@@ -11887,6 +11928,317 @@ export class LibraryService {
 
     this.stopLinkedWatcher(input.libraryId, input.folderId);
     return { removedAssetCount: assetRows.length };
+  }
+
+  /**
+   * Starts a durable linked-index removal. Unlike removeLinkedFolder(), this
+   * method returns immediately and the worker removes a bounded batch at a
+   * time, yielding between batches so list/search/cancel requests stay live.
+   * It never changes the external source directory.
+   */
+  startLinkedFolderRemoval(input: {
+    libraryId: string;
+    folderId: string;
+  }): {
+    jobId: string;
+    folderId: string;
+    folderName: string;
+    totalAssets: number;
+    removedAssets: number;
+    status: LinkedFolderRemovalJobStatus;
+  } {
+    const openLibrary = this.requireOpenLibrary(input.libraryId);
+    this.assertLibraryWritable(openLibrary);
+    const linked = openLibrary.connection.prepare(
+      `SELECT folder_id, display_name
+         FROM linked_folders
+        WHERE folder_id = ? AND library_id = ?`,
+    ).get(input.folderId, input.libraryId) as { folder_id: string; display_name: string } | undefined;
+    if (!linked) throw new LibraryServiceError('FOLDER_NOT_FOUND');
+
+    const active = openLibrary.connection.prepare(
+      `SELECT job_id, total_assets, removed_assets, status
+         FROM linked_folder_removal_jobs
+        WHERE library_id = ? AND linked_folder_id = ?
+          AND status IN ('queued', 'running', 'paused', 'failed')
+        ORDER BY created_at DESC LIMIT 1`,
+    ).get(input.libraryId, input.folderId) as {
+      job_id: string;
+      total_assets: number;
+      removed_assets: number;
+      status: LinkedFolderRemovalJobStatus;
+    } | undefined;
+
+    let jobId: string;
+    if (active) {
+      jobId = active.job_id;
+      openLibrary.connection.prepare(
+        `UPDATE linked_folder_removal_jobs
+            SET status = 'queued', error_code = NULL, error_detail = NULL, updated_at = ?
+          WHERE job_id = ?`,
+      ).run(new Date().toISOString(), jobId);
+    } else {
+      const totalAssets = (openLibrary.connection.prepare(
+        `SELECT COUNT(*) AS count FROM assets
+          WHERE linked_folder_id = ? AND location_kind = 'linked' AND deleted_at IS NULL`,
+      ).get(input.folderId) as { count: number }).count;
+      jobId = randomUUID();
+      const now = new Date().toISOString();
+      openLibrary.connection.prepare(
+        `INSERT INTO linked_folder_removal_jobs
+           (job_id, library_id, linked_folder_id, folder_name, total_assets, removed_assets,
+            status, error_code, error_detail, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 0, 'queued', NULL, NULL, ?, ?)`,
+      ).run(jobId, input.libraryId, input.folderId, linked.display_name, totalAssets, now, now);
+    }
+
+    // A watcher could otherwise put freshly observed source files back into the
+    // index while this task is intentionally taking the linked root away.
+    this.stopLinkedWatcher(input.libraryId, input.folderId);
+    this.scheduleLinkedFolderRemoval(input.libraryId, jobId);
+    return this.getLinkedFolderRemovalJob(openLibrary, jobId);
+  }
+
+  listLinkedFolderRemovalJobs(libraryId: string): {
+    jobs: Array<{
+      jobId: string;
+      folderId: string;
+      folderName: string;
+      totalAssets: number;
+      removedAssets: number;
+      status: LinkedFolderRemovalJobStatus;
+      errorCode: string | null;
+      errorDetail: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  } {
+    const openLibrary = this.requireOpenLibrary(libraryId);
+    const rows = openLibrary.connection.prepare(
+      `SELECT job_id, linked_folder_id, folder_name, total_assets, removed_assets, status,
+              error_code, error_detail, created_at, updated_at
+         FROM linked_folder_removal_jobs
+        WHERE library_id = ?
+        ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 ELSE 4 END,
+                 updated_at DESC
+        LIMIT 50`,
+    ).all(libraryId) as Array<{
+      job_id: string;
+      linked_folder_id: string;
+      folder_name: string;
+      total_assets: number;
+      removed_assets: number;
+      status: LinkedFolderRemovalJobStatus;
+      error_code: string | null;
+      error_detail: string | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+    return {
+      jobs: rows.map((row) => ({
+        jobId: row.job_id,
+        folderId: row.linked_folder_id,
+        folderName: row.folder_name,
+        totalAssets: row.total_assets,
+        removedAssets: row.removed_assets,
+        status: row.status,
+        errorCode: row.error_code,
+        errorDetail: row.error_detail,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      })),
+    };
+  }
+
+  pauseLinkedFolderRemovalJobs(libraryId: string, jobIds?: string[]): { pausedCount: number } {
+    const openLibrary = this.requireOpenLibrary(libraryId);
+    const selected = jobIds?.filter((jobId) => jobId.trim() !== '') ?? [];
+    if (jobIds && selected.length === 0) return { pausedCount: 0 };
+    const where = selected.length > 0
+      ? `library_id = ? AND job_id IN (${selected.map(() => '?').join(',')})`
+      : 'library_id = ?';
+    const result = openLibrary.connection.prepare(
+      `UPDATE linked_folder_removal_jobs
+          SET status = 'paused', updated_at = ?
+        WHERE ${where} AND status IN ('queued', 'running')`,
+    ).run(new Date().toISOString(), libraryId, ...selected);
+    return { pausedCount: result.changes };
+  }
+
+  resumeLinkedFolderRemovalJobs(libraryId: string, jobIds?: string[]): { resumedCount: number } {
+    const openLibrary = this.requireOpenLibrary(libraryId);
+    const selected = jobIds?.filter((jobId) => jobId.trim() !== '') ?? [];
+    if (jobIds && selected.length === 0) return { resumedCount: 0 };
+    const where = selected.length > 0
+      ? `library_id = ? AND job_id IN (${selected.map(() => '?').join(',')})`
+      : 'library_id = ?';
+    const rows = openLibrary.connection.prepare(
+      `SELECT job_id, linked_folder_id FROM linked_folder_removal_jobs
+        WHERE ${where} AND status IN ('paused', 'failed')`,
+    ).all(libraryId, ...selected) as Array<{ job_id: string; linked_folder_id: string }>;
+    if (rows.length === 0) return { resumedCount: 0 };
+    openLibrary.connection.prepare(
+      `UPDATE linked_folder_removal_jobs
+          SET status = 'queued', error_code = NULL, error_detail = NULL, updated_at = ?
+        WHERE job_id IN (${rows.map(() => '?').join(',')})`,
+    ).run(new Date().toISOString(), ...rows.map((row) => row.job_id));
+    for (const row of rows) {
+      this.stopLinkedWatcher(libraryId, row.linked_folder_id);
+      this.scheduleLinkedFolderRemoval(libraryId, row.job_id);
+    }
+    return { resumedCount: rows.length };
+  }
+
+  /** Requeue an interrupted task whenever its library is opened again. */
+  private resumePendingLinkedFolderRemovalJobs(libraryId: string): void {
+    const openLibrary = this.openById.get(libraryId);
+    if (!openLibrary) return;
+    openLibrary.connection.prepare(
+      `UPDATE linked_folder_removal_jobs
+          SET status = 'queued', updated_at = ?
+        WHERE library_id = ? AND status = 'running'`,
+    ).run(new Date().toISOString(), libraryId);
+    const rows = openLibrary.connection.prepare(
+      `SELECT job_id, linked_folder_id FROM linked_folder_removal_jobs
+        WHERE library_id = ? AND status = 'queued'`,
+    ).all(libraryId) as Array<{ job_id: string; linked_folder_id: string }>;
+    for (const row of rows) {
+      this.stopLinkedWatcher(libraryId, row.linked_folder_id);
+      this.scheduleLinkedFolderRemoval(libraryId, row.job_id);
+    }
+  }
+
+  private getLinkedFolderRemovalJob(openLibrary: OpenLibrary, jobId: string): {
+    jobId: string;
+    folderId: string;
+    folderName: string;
+    totalAssets: number;
+    removedAssets: number;
+    status: LinkedFolderRemovalJobStatus;
+  } {
+    const row = openLibrary.connection.prepare(
+      `SELECT job_id, linked_folder_id, folder_name, total_assets, removed_assets, status
+         FROM linked_folder_removal_jobs WHERE job_id = ?`,
+    ).get(jobId) as {
+      job_id: string;
+      linked_folder_id: string;
+      folder_name: string;
+      total_assets: number;
+      removed_assets: number;
+      status: LinkedFolderRemovalJobStatus;
+    } | undefined;
+    if (!row) throw new LibraryServiceError('FOLDER_NOT_FOUND');
+    return {
+      jobId: row.job_id,
+      folderId: row.linked_folder_id,
+      folderName: row.folder_name,
+      totalAssets: row.total_assets,
+      removedAssets: row.removed_assets,
+      status: row.status,
+    };
+  }
+
+  private scheduleLinkedFolderRemoval(libraryId: string, jobId: string): void {
+    if (this.activeLinkedFolderRemovalPumps.has(jobId)) return;
+    const pump = this.runLinkedFolderRemoval(libraryId, jobId)
+      .catch((error) => {
+        this.diagnose('linked-folder-removal.pump', error, { libraryId, jobId });
+      })
+      .finally(() => {
+        this.activeLinkedFolderRemovalPumps.delete(jobId);
+      });
+    this.activeLinkedFolderRemovalPumps.set(jobId, pump);
+  }
+
+  private async runLinkedFolderRemoval(libraryId: string, jobId: string): Promise<void> {
+    // A library may be closed and reopened while this task is yielding. Never
+    // touch the newly opened connection from the old pump; the finalizer below
+    // hands a queued task to the new pump. The SQLite transaction below stays
+    // bounded, so it releases the database writer before every event-loop turn.
+    const leasedConnection = this.openById.get(libraryId)?.connection;
+    if (!leasedConnection) return;
+    try {
+      for (;;) {
+        const openLibrary = this.openById.get(libraryId);
+        if (!openLibrary || openLibrary.connection !== leasedConnection) return;
+        const job = openLibrary.connection.prepare(
+          `SELECT linked_folder_id, status FROM linked_folder_removal_jobs
+            WHERE job_id = ? AND library_id = ?`,
+        ).get(jobId, libraryId) as { linked_folder_id: string; status: LinkedFolderRemovalJobStatus } | undefined;
+        if (!job || !['queued', 'running'].includes(job.status)) return;
+        if (job.status === 'queued') {
+          openLibrary.connection.prepare(
+            `UPDATE linked_folder_removal_jobs SET status = 'running', updated_at = ?
+              WHERE job_id = ? AND status = 'queued'`,
+          ).run(new Date().toISOString(), jobId);
+        }
+
+        const outcome = openLibrary.connection.transaction(() => {
+            const current = openLibrary.connection.prepare(
+              `SELECT linked_folder_id, status FROM linked_folder_removal_jobs
+                WHERE job_id = ?`,
+            ).get(jobId) as { linked_folder_id: string; status: LinkedFolderRemovalJobStatus } | undefined;
+            if (!current || current.status !== 'running') return { done: true, folderId: current?.linked_folder_id };
+            const assetIds = openLibrary.connection.prepare(
+              `SELECT asset_id FROM assets
+                WHERE linked_folder_id = ? AND location_kind = 'linked' AND deleted_at IS NULL
+                ORDER BY asset_id LIMIT ?`,
+            ).all(current.linked_folder_id, LINKED_FOLDER_REMOVAL_BATCH_SIZE) as Array<{ asset_id: string }>;
+            if (assetIds.length === 0) {
+              openLibrary.connection.prepare(
+                'DELETE FROM explicit_ignored_paths WHERE linked_folder_id = ?',
+              ).run(current.linked_folder_id);
+              openLibrary.connection.prepare(
+                'DELETE FROM linked_folders WHERE folder_id = ?',
+              ).run(current.linked_folder_id);
+              openLibrary.connection.prepare(
+                `UPDATE linked_folder_removal_jobs
+                    SET status = 'succeeded', updated_at = ?, error_code = NULL, error_detail = NULL
+                  WHERE job_id = ?`,
+              ).run(new Date().toISOString(), jobId);
+              return { done: true, folderId: current.linked_folder_id };
+            }
+            openLibrary.connection.prepare(
+              `DELETE FROM assets WHERE asset_id IN (${assetIds.map(() => '?').join(',')})`,
+            ).run(...assetIds.map((row) => row.asset_id));
+            openLibrary.connection.prepare(
+              `UPDATE linked_folder_removal_jobs
+                  SET removed_assets = MIN(total_assets, removed_assets + ?), updated_at = ?
+                WHERE job_id = ?`,
+            ).run(assetIds.length, new Date().toISOString(), jobId);
+            return { done: false, folderId: current.linked_folder_id };
+        })();
+        if (outcome.done && outcome.folderId) this.stopLinkedWatcher(libraryId, outcome.folderId);
+        // This checkpoint is the important fairness boundary: no linked-folder
+        // removal can monopolize the UtilityProcess or SQLite writer lease.
+        await transferCheckpoint();
+      }
+    } catch (error) {
+      const openLibrary = this.openById.get(libraryId);
+      if (openLibrary && openLibrary.connection === leasedConnection) {
+        try {
+          openLibrary.connection.prepare(
+            `UPDATE linked_folder_removal_jobs
+                SET status = 'failed', error_code = 'LINKED_FOLDER_REMOVAL_FAILED',
+                    error_detail = ?, updated_at = ?
+              WHERE job_id = ? AND status IN ('queued', 'running')`,
+          ).run(publicReasonFromError(error), new Date().toISOString(), jobId);
+        } catch (updateError) {
+          this.diagnose('linked-folder-removal.fail', updateError, { libraryId, jobId });
+        }
+      }
+    } finally {
+      // A deliberate close stores `queued`; once the old pump has released its
+      // stale connection, a fresh open can safely claim and continue it.
+      const reopened = this.openById.get(libraryId);
+      if (reopened && reopened.connection !== leasedConnection) {
+        const pending = reopened.connection.prepare(
+          `SELECT 1 AS present FROM linked_folder_removal_jobs
+            WHERE job_id = ? AND status = 'queued'`,
+        ).get(jobId) as { present: number } | undefined;
+        if (pending) setImmediate(() => this.scheduleLinkedFolderRemoval(libraryId, jobId));
+      }
+    }
   }
 
   /**
@@ -36699,6 +37051,9 @@ export class LibraryService {
     this.startAssetWatcher(openLibrary);
     markAdoptStage('asset-watcher');
     this.reconcileLinkedWatchers(openLibrary);
+    // Resume only after watcher reconciliation so every unfinished removal can
+    // immediately detach its own watcher before the next source event arrives.
+    this.resumePendingLinkedFolderRemovalJobs(summary.libraryId);
     markAdoptStage('watchers');
     // Super-tumv (LIB-018, progressive open): the disk-heavy reconciliation
     // steps moved out of the synchronous open path and run in the background
@@ -38710,6 +39065,13 @@ export class LibraryService {
     // paused, and running AI work as cancelled before the connection closes so
     // reopening the library cannot silently resume uploads the user stopped.
     this.cancelJobs(libraryId);
+    // A close is an interruption, not a user cancellation: persist active
+    // linked-index removals as queued so the next open continues safely.
+    openLibrary.connection.prepare(
+      `UPDATE linked_folder_removal_jobs
+          SET status = 'queued', updated_at = ?
+        WHERE library_id = ? AND status = 'running'`,
+    ).run(new Date().toISOString(), libraryId);
     this.abortActiveMediaJobs(libraryId);
     this.stopAssetWatcher(libraryId);
     this.stopLinkedWatchers(libraryId);
