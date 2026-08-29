@@ -5941,9 +5941,10 @@ async function startApplication(): Promise<void> {
     logger,
   });
   pendingAppUpdateStore = new PendingAppUpdateStore(path.join(app.getPath('userData'), 'updates'));
-  if (process.argv.includes('--updated')) {
-    completedAppUpdateNotice = await pendingAppUpdateStore.consumeCompletion();
-  }
+  // Inno Setup may omit a custom Run parameter when elevation changes user
+  // context. The completion record is version-gated, so it is safe to use as
+  // the durable handoff instead of depending only on `--updated`.
+  completedAppUpdateNotice = await pendingAppUpdateStore.consumeCompletion(app.getVersion());
   const deferredUpdate = await pendingAppUpdateStore.loadPending();
   try {
     const removedCount = await pendingAppUpdateStore.pruneStaleArtifacts(deferredUpdate?.cleanupPath);

@@ -113,9 +113,22 @@ export class PendingAppUpdateStore {
     await writeJsonAtomically(this.#completedPath, notice);
   }
 
-  async consumeCompletion(): Promise<AppUpdateNotice | undefined> {
+  /**
+   * Consume a completion notice only after the installed app reports the
+   * matching version. This makes the marker safe even when a Windows setup
+   * launch drops its optional `--updated` argument or a user reopens Super
+   * before setup has replaced the executable.
+  */
+  async consumeCompletion(expectedVersion?: string): Promise<AppUpdateNotice | undefined> {
     const parsed = updateNoticeSchema.safeParse(await readJson(this.#completedPath));
+    if (!parsed.success) {
+      await rm(this.#completedPath, { force: true });
+      return undefined;
+    }
+    if (expectedVersion !== undefined && parsed.data.version !== expectedVersion) {
+      return undefined;
+    }
     await rm(this.#completedPath, { force: true });
-    return parsed.success ? parsed.data : undefined;
+    return parsed.data;
   }
 }

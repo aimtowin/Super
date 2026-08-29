@@ -23,7 +23,8 @@ describe('PendingAppUpdateStore', () => {
       });
       await expect(store.loadPending()).resolves.toMatchObject({ version: '0.0.5', installerPath: installer });
       await store.saveCompletion({ version: '0.0.5', releaseNotes: 'Test release' });
-      await expect(store.consumeCompletion()).resolves.toEqual({ version: '0.0.5', releaseNotes: 'Test release' });
+      await expect(store.consumeCompletion('0.0.4')).resolves.toBeUndefined();
+      await expect(store.consumeCompletion('0.0.5')).resolves.toEqual({ version: '0.0.5', releaseNotes: 'Test release' });
       await expect(store.consumeCompletion()).resolves.toBeUndefined();
     } finally {
       await rm(root, { recursive: true, force: true });
