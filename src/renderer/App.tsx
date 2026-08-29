@@ -1327,6 +1327,7 @@ function AppInner() {
   const {
     loadMetadata,
     loadAiContentForAsset,
+    aiContentLoadedAssetId,
     saveMetadata,
     applyLoadedMetadata,
   } = useInspectorAssetMetadata({
@@ -10836,6 +10837,7 @@ function AppInner() {
         aiContent={
           aiContent?.assetId === selectedAsset?.assetId ? aiContent : null
         }
+        aiContentLoaded={aiContentLoadedAssetId === selectedAsset?.assetId}
         aiAnalyzing={aiAnalyzing}
         descriptionIsAi={descriptionIsAi}
         showAiBadges={aiUiPrefs.showAiBadges}
@@ -10864,6 +10866,7 @@ function AppInner() {
         onAssignTagToAsset={(tagId) => void handleInspectorAssignTag(tagId)}
         onCreateAndAssignTag={(tagName) => void handleInspectorCreateAndAssignTag(tagName)}
         onOpenSourceUrl={handleOpenSourceUrl}
+        onAnalyze={(assetId) => { void handleAnalyzeClick(assetId); }}
         onRelink={(assetId) => { void relinkMissingAsset(assetId); }}
         onPaletteColorCopy={(color, copied) => {
           if (copied) {

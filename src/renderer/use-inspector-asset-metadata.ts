@@ -10,6 +10,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
@@ -67,6 +68,8 @@ export type MetadataSaveFields = {
 export type UseInspectorAssetMetadataResult = {
   loadMetadata: () => Promise<void>;
   loadAiContentForAsset: (assetId: string) => Promise<void>;
+  /** Asset id whose AI content request completed successfully. */
+  aiContentLoadedAssetId: string | null;
   saveMetadata: (fields: MetadataSaveFields) => Promise<void>;
   applyLoadedMetadata: (
     targetAssetId: string,
@@ -101,6 +104,7 @@ export function useInspectorAssetMetadata({
   const t = useT();
   const { locale } = useLocale();
   const metadataSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const [aiContentLoadedAssetId, setAiContentLoadedAssetId] = useState<string | null>(null);
 
   const applyLoadedMetadata = useCallback(
     (targetAssetId: string, metadata: AssetMetadataResult) => {
@@ -170,6 +174,7 @@ export function useInspectorAssetMetadata({
     async (assetId: string) => {
       if (!api || !library || !assetId) {
         setAiContent(null);
+        setAiContentLoadedAssetId(null);
         return;
       }
       try {
@@ -180,8 +185,10 @@ export function useInspectorAssetMetadata({
         if (selectedAssetIdRef.current !== assetId) return;
         if (!result.ok) {
           setAiContent(null);
+          setAiContentLoadedAssetId(null);
           return;
         }
+        setAiContentLoadedAssetId(assetId);
         const { description, tags, rating, modelVersion } = result.value;
         const hasContent =
           Boolean(description?.trim()) ||
@@ -217,7 +224,10 @@ export function useInspectorAssetMetadata({
           setDescriptionIsAi(resolved.fromAi);
         }
       } catch {
-        if (selectedAssetIdRef.current === assetId) setAiContent(null);
+        if (selectedAssetIdRef.current === assetId) {
+          setAiContent(null);
+          setAiContentLoadedAssetId(null);
+        }
       }
     },
     [
@@ -227,6 +237,7 @@ export function useInspectorAssetMetadata({
       selectedAssetIdRef,
       selectedAssetIdsRef,
       setAiContent,
+      setAiContentLoadedAssetId,
       setDescriptionIsAi,
       setEditDescription,
     ],
@@ -235,6 +246,12 @@ export function useInspectorAssetMetadata({
   useEffect(() => {
     let cancelled = false;
     if (selectedAssetId) {
+      // Defer reset with the two metadata fetches below. This preserves the
+      // Inspector's no-cascading-render rule and prevents a previous asset's
+      // successful response from making the next selection look analysed.
+      queueMicrotask(() => {
+        if (!cancelled) setAiContentLoadedAssetId(null);
+      });
       void Promise.resolve().then(async () => {
         if (!api || !library) return;
         setVersionConflict(false);
@@ -263,6 +280,7 @@ export function useInspectorAssetMetadata({
         setAssetMetadata(null);
         setVersionConflict(false);
         setAiContent(null);
+        setAiContentLoadedAssetId(null);
         setDescriptionIsAi(false);
       });
     }
@@ -356,6 +374,7 @@ export function useInspectorAssetMetadata({
   return {
     loadMetadata,
     loadAiContentForAsset,
+    aiContentLoadedAssetId,
     saveMetadata,
     applyLoadedMetadata,
   };

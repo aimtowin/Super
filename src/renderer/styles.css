@@ -10981,6 +10981,34 @@ select.ai-config-input.ai-config-languages {
   margin-right: 6px;
 }
 
+/* AI action for legacy images without generated content.  It lives in the
+   description label so the action is discoverable without adding a new panel
+   row or competing with the generated-content provenance badge. */
+.inspector-ai-analyze-button {
+  margin-left: 7px;
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--divider));
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 14px;
+}
+
+.inspector-ai-analyze-button:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.inspector-ai-analyze-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .inspector-rating.is-ai .rating-star[data-active] {
   color: var(--accent);
 }

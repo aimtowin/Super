@@ -685,6 +685,7 @@ export const zhCN = {
     libraryPath: "资源库路径",
     aiGenerated: "AI 生成内容",
     aiBadge: "AI",
+    aiAnalyzeUnanalyzed: "智能分析归类",
     descriptionAi: "描述 · AI",
     editAiDescription: "编辑 AI 描述（转为人工）",
     tagsAi: "标签 · AI",

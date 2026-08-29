@@ -14,6 +14,7 @@ import { iconActionAttrs } from "./icon-action-attrs";
 import { formatDuration } from "./App";
 import { resolveInspectorPreviewSrc } from "./inspector-preview";
 import { resolveAutoGrowHeight } from "./inspector-description-autogrow";
+import { shouldShowInspectorAiAnalysis } from "./inspector-ai-analysis";
 import {
   fitInspectorStackFrame,
   isEditableScalar,
@@ -141,6 +142,8 @@ export interface InspectorPanelProps {
   displayedPalette: string[];
   automaticPaletteRatios: Map<string, number>;
   aiContent: AiContent | null;
+  /** True only after AI content for the selected asset was successfully read. */
+  aiContentLoaded?: boolean;
   /** True while an AI analyze request is in flight for the library. */
   aiAnalyzing?: boolean;
   /** Description field currently shows AI-layer text (human layer empty). */
@@ -171,6 +174,8 @@ export interface InspectorPanelProps {
   onOpenSourceUrl?: () => void;
   /** One-click entry into the existing relink pipeline for missing sources. */
   onRelink?: (assetId: string) => void;
+  /** Queue a single image for the existing AI analysis pipeline. */
+  onAnalyze?: (assetId: string) => void;
   pluginApi?: SuperPluginManagerApi;
   libraryId?: string;
   pluginContributionRefreshKey?: string | null;
@@ -560,6 +565,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
     displayedPalette,
     automaticPaletteRatios,
     aiContent,
+    aiContentLoaded = false,
     aiAnalyzing = false,
     descriptionIsAi = false,
     showAiBadges = true,
@@ -579,6 +585,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
     onPaletteColorCopy,
     onOpenSourceUrl,
     onRelink,
+    onAnalyze,
     pluginApi,
     libraryId,
     pluginContributionRefreshKey = null,
@@ -596,6 +603,13 @@ export function InspectorPanel(props: InspectorPanelProps) {
     selectedAssets.length,
     selectedAsset ? 1 : 0,
   );
+  const canRequestAiAnalysis = shouldShowInspectorAiAnalysis({
+    selectedAsset,
+    selectionCount,
+    aiContentLoaded,
+    hasAiContent: aiContent !== null,
+    canAnalyze: Boolean(api && library && onAnalyze),
+  });
 
   useEffect(() => {
     const currentLibraryId = libraryId ?? library?.libraryId;
@@ -1441,6 +1455,17 @@ export function InspectorPanel(props: InspectorPanelProps) {
                     </span>
                   )}
                   {t("inspector.description")}
+                  {canRequestAiAnalysis && selectedAsset && (
+                    <button
+                      className="inspector-ai-analyze-button"
+                      disabled={aiAnalyzing}
+                      onClick={() => onAnalyze?.(selectedAsset.assetId)}
+                      type="button"
+                      {...iconActionAttrs(t("inspector.aiAnalyzeUnanalyzed"))}
+                    >
+                      AI
+                    </button>
+                  )}
                 </label>
                 {descriptionMixed ? (
                   <div

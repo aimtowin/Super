@@ -697,6 +697,7 @@ export const en = {
     libraryPath: "Library path",
     aiGenerated: "AI-generated content",
     aiBadge: "AI",
+    aiAnalyzeUnanalyzed: "Analyze and classify with AI",
     descriptionAi: "Description · AI",
     editAiDescription: "Edit AI description (promote to human)",
     tagsAi: "Tags · AI",
