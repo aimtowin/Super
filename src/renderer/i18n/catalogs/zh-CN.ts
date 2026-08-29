@@ -969,7 +969,11 @@ export const zhCN = {
       updateUpToDate: "已是最新版本（{version}）。",
       updateAvailable: "发现新版本 {version}",
       updateDownloading: "正在下载更新…",
-      updateError: "无法检查更新，请检查网络或更新服务配置。"
+      updateError: "无法检查更新，请检查网络或更新服务配置。",
+      updateReadyTitle: "更新已准备好",
+      updateReadyMessage: "版本 {version} 已下载并验证。完成当前工作后，点击按钮重启更新。",
+      updateRestart: "完成更新并重启",
+      updateRestarting: "正在重启…"
     },
     openSource: {
       title: "开源组件与许可",

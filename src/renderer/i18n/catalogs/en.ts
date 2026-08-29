@@ -982,7 +982,11 @@ export const en = {
       updateUpToDate: "You're up to date ({version}).",
       updateAvailable: "Version {version} is available",
       updateDownloading: "Downloading update…",
-      updateError: "Could not check for updates. Check your network or update-service configuration."
+      updateError: "Could not check for updates. Check your network or update-service configuration.",
+      updateReadyTitle: "Update ready",
+      updateReadyMessage: "Version {version} has been downloaded and verified. Finish your work, then restart to update.",
+      updateRestart: "Restart to update",
+      updateRestarting: "Restarting…"
     },
     openSource: {
       title: "Open-source components & licenses",

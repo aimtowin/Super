@@ -8428,6 +8428,57 @@ select.ai-config-input.ai-config-languages {
   pointer-events: none;
 }
 
+/* A verified update waits for explicit user approval; unlike transient
+   workspace notices this prompt remains in the lower-left corner. */
+.app-update-ready-prompt {
+  position: fixed;
+  z-index: var(--ui-layer-notice);
+  bottom: 20px;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: min(430px, calc(100vw - 40px));
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--divider));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--raised) 94%, var(--accent-soft));
+  box-shadow: 0 14px 36px rgb(0 0 0 / 28%);
+}
+
+.app-update-ready-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.app-update-ready-copy strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.app-update-ready-copy span {
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.app-update-ready-action {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 620px) {
+  .app-update-ready-prompt {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .app-update-ready-action {
+    width: 100%;
+  }
+}
+
 .workspace-notice-item {
   position: relative;
   /* Do not let a width:100% grid child force the shrink-to-fit stack to its

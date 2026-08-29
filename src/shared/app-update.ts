@@ -87,6 +87,11 @@ export const appUpdateInstallResultSchema = z.discriminatedUnion('status', [
 
 export type AppUpdateInstallResult = z.infer<typeof appUpdateInstallResultSchema>;
 
+export const appUpdatePreparedSchema = z.strictObject({
+  version: z.string().min(1).max(64),
+});
+export type AppUpdatePrepared = z.infer<typeof appUpdatePreparedSchema>;
+
 export const appUpdateProgressSchema = z.object({
   phase: z.enum(['downloading', 'verifying', 'extracting', 'launching']),
   downloadedBytes: z.number().int().nonnegative(),
@@ -114,9 +119,16 @@ export function parseAppUpdateInstallResult(input: unknown): AppUpdateInstallRes
     : { ok: false, status: 'error', code: 'service-unavailable' };
 }
 
+export function parseAppUpdatePrepared(input: unknown): AppUpdatePrepared | null {
+  const parsed = appUpdatePreparedSchema.safeParse(input);
+  return parsed.success ? parsed.data : null;
+}
+
 export interface SuperAppUpdateApi {
   checkForUpdates(): Promise<AppUpdateCheckResult>;
   downloadAndInstall(): Promise<AppUpdateInstallResult>;
+  installPreparedUpdate(): Promise<AppUpdateInstallResult>;
   cancelDownload(): void;
   onDownloadProgress(listener: (progress: AppUpdateProgress) => void): () => void;
+  onPreparedUpdate(listener: (update: AppUpdatePrepared) => void): () => void;
 }

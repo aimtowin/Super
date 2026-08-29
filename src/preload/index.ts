@@ -35,8 +35,10 @@ import {
   OPEN_EXTERNAL_URL_CHANNEL,
   APP_UPDATE_CHECK_CHANNEL,
   APP_UPDATE_INSTALL_CHANNEL,
+  APP_UPDATE_RESTART_CHANNEL,
   APP_UPDATE_CANCEL_CHANNEL,
   APP_UPDATE_PROGRESS_CHANNEL,
+  APP_UPDATE_READY_CHANNEL,
   REVEAL_APP_LOG_CHANNEL,
   READ_APP_LOG_CHANNEL,
   SHOW_EDIT_CONTEXT_MENU_CHANNEL,
@@ -122,6 +124,8 @@ import {
 import {
   parseAppUpdateCheckResult,
   parseAppUpdateInstallResult,
+  parseAppUpdatePrepared,
+  type AppUpdatePrepared,
   parseAppUpdateProgress,
   type AppUpdateProgress,
   type SuperAppUpdateApi,
@@ -2601,6 +2605,11 @@ const appUpdate: SuperAppUpdateApi = Object.freeze({
       await ipcRenderer.invoke(APP_UPDATE_INSTALL_CHANNEL),
     );
   },
+  async installPreparedUpdate() {
+    return parseAppUpdateInstallResult(
+      await ipcRenderer.invoke(APP_UPDATE_RESTART_CHANNEL),
+    );
+  },
   cancelDownload() {
     ipcRenderer.send(APP_UPDATE_CANCEL_CHANNEL);
   },
@@ -2612,6 +2621,16 @@ const appUpdate: SuperAppUpdateApi = Object.freeze({
     ipcRenderer.on(APP_UPDATE_PROGRESS_CHANNEL, handler);
     return () => {
       ipcRenderer.removeListener(APP_UPDATE_PROGRESS_CHANNEL, handler);
+    };
+  },
+  onPreparedUpdate(listener: (update: AppUpdatePrepared) => void) {
+    const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+      const update = parseAppUpdatePrepared(payload);
+      if (update !== null) listener(update);
+    };
+    ipcRenderer.on(APP_UPDATE_READY_CHANNEL, handler);
+    return () => {
+      ipcRenderer.removeListener(APP_UPDATE_READY_CHANNEL, handler);
     };
   },
 });

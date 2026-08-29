@@ -1136,6 +1136,8 @@ function AppInner() {
   const [appUpdateProgress, setAppUpdateProgress] = useState<AppUpdateProgress | null>(null);
   const [appUpdateChecking, setAppUpdateChecking] = useState(false);
   const [appUpdateDownloading, setAppUpdateDownloading] = useState(false);
+  const [preparedAppUpdateVersion, setPreparedAppUpdateVersion] = useState<string | null>(null);
+  const [appUpdateRestarting, setAppUpdateRestarting] = useState(false);
   // Retained solely for the shared Escape-stack contract. The proprietary
   // Super UI no longer mounts an open-source licenses dialog.
   const [openSourceLicensesOpen, setOpenSourceLicensesOpen] = useState(false);
@@ -1161,6 +1163,14 @@ function AppInner() {
   useEffect(() => {
     if (appUpdateApi === undefined) return;
     return appUpdateApi.onDownloadProgress((progress) => setAppUpdateProgress(progress));
+  }, [appUpdateApi]);
+
+  useEffect(() => {
+    if (appUpdateApi === undefined) return;
+    return appUpdateApi.onPreparedUpdate(({ version }) => {
+      setAppUpdateProgress(null);
+      setPreparedAppUpdateVersion(version);
+    });
   }, [appUpdateApi]);
 
   const checkForAppUpdates = useCallback(async () => {
@@ -1189,6 +1199,16 @@ function AppInner() {
   const cancelAppUpdateDownload = useCallback(() => {
     appUpdateApi?.cancelDownload();
   }, [appUpdateApi]);
+
+  const completePreparedAppUpdate = useCallback(async () => {
+    if (appUpdateApi === undefined || appUpdateRestarting) return;
+    setAppUpdateRestarting(true);
+    const result = await appUpdateApi.installPreparedUpdate();
+    if (!result.ok) {
+      setAppUpdateResult(result);
+      setAppUpdateRestarting(false);
+    }
+  }, [appUpdateApi, appUpdateRestarting]);
 
   const openAbout = useCallback(() => {
     setAboutOpen(true);
@@ -9794,6 +9814,35 @@ function AppInner() {
                     );
                   })}
                 </div>,
+                document.body,
+              )
+            : null}
+          {preparedAppUpdateVersion !== null
+            ? createPortal(
+                <section
+                  aria-live="polite"
+                  className="app-update-ready-prompt"
+                  role="status"
+                >
+                  <div className="app-update-ready-copy">
+                    <strong>{t('dialog.about.updateReadyTitle')}</strong>
+                    <span>
+                      {t('dialog.about.updateReadyMessage', {
+                        version: preparedAppUpdateVersion,
+                      })}
+                    </span>
+                  </div>
+                  <button
+                    className="primary-button app-update-ready-action"
+                    disabled={appUpdateRestarting}
+                    onClick={() => void completePreparedAppUpdate()}
+                    type="button"
+                  >
+                    {appUpdateRestarting
+                      ? t('dialog.about.updateRestarting')
+                      : t('dialog.about.updateRestart')}
+                  </button>
+                </section>,
                 document.body,
               )
             : null}

@@ -5,6 +5,7 @@ import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 
 import AdmZip from 'adm-zip';
+import { parseAppUpdatePrepared } from '../../src/shared/app-update';
 
 import {
   createAppUpdateService,
@@ -36,6 +37,13 @@ function releasePayload(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Super app update release contract', () => {
+  it('accepts only a bounded prepared-update notification payload', () => {
+    expect(parseAppUpdatePrepared({ version: '0.1.3' })).toEqual({ version: '0.1.3' });
+    expect(parseAppUpdatePrepared({ version: '' })).toBeNull();
+    expect(parseAppUpdatePrepared({ version: '0.1.3', installerPath: 'C:\\temp\\setup.exe' }))
+      .toBeNull();
+  });
+
   it('distinguishes development, Inno-installed, and portable launches', () => {
     expect(detectAppDistribution({
       isPackaged: false,

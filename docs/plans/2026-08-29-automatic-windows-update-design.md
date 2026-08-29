@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Automatically check, download, verify, and install a newer Windows release when Super Lib closes, without requiring removal of the old installation.
+**Goal:** Automatically check, download, and verify a newer Windows release, then install it only after the user explicitly chooses to restart Super Lib.
 
-**Architecture:** Keep GitHub Releases and the existing SHA-256 verification contract. Split the update service into prepare and launch phases: startup prepares a verified installer in a temporary directory, while the coordinated shutdown path launches Inno Setup only after application services have stopped. Inno Setup uses the existing stable AppId to update the original installation directory.
+**Architecture:** Keep GitHub Releases and the existing SHA-256 verification contract. Split the update service into prepare and launch phases: startup prepares a verified installer in a temporary directory and the renderer displays a persistent lower-left restart prompt. Only that explicit action launches Inno Setup; ordinary shutdown discards the staged installer. Inno Setup uses the existing stable AppId to update the original installation directory.
 
 **Tech Stack:** Electron 43, TypeScript, Vitest, Inno Setup, GitHub Releases.
 
@@ -31,9 +31,9 @@
 
 **Step 1:** Schedule one update check after the initial window is created; only automatically stage supported installed Windows releases.
 
-**Step 2:** During the existing coordinated shutdown, launch a staged installer with silent, no-reboot, close-applications arguments, then finish shutdown.
+**Step 2:** Notify the renderer when an update is ready; on ordinary shutdown discard a staged installer without launching it.
 
-**Step 3:** Keep explicit About-dialog updates working; manual installation still quits after launching the installer.
+**Step 3:** Add a persistent lower-left "restart to update" action that launches the staged installer and then exits the app.
 
 ### Task 3: Make the installer restart Super Lib after a silent update
 

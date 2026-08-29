@@ -107,8 +107,10 @@ import {
   OPEN_EXTERNAL_URL_CHANNEL,
   APP_UPDATE_CHECK_CHANNEL,
   APP_UPDATE_INSTALL_CHANNEL,
+  APP_UPDATE_RESTART_CHANNEL,
   APP_UPDATE_CANCEL_CHANNEL,
   APP_UPDATE_PROGRESS_CHANNEL,
+  APP_UPDATE_READY_CHANNEL,
   REVEAL_APP_LOG_CHANNEL,
   READ_APP_LOG_CHANNEL,
   SHOW_EDIT_CONTEXT_MENU_CHANNEL,
@@ -5857,7 +5859,10 @@ function scheduleAutomaticWindowsUpdate(): void {
           return;
         }
         automaticUpdatePrepared = true;
-        logger?.info('app-update.auto', 'Verified update staged for installation on exit.', {
+        logger?.info('app-update.auto', 'Verified update staged and waiting for user approval.', {
+          version: prepared.version,
+        });
+        mainWindow?.webContents.send(APP_UPDATE_READY_CHANNEL, {
           version: prepared.version,
         });
       } else if (!prepared.ok) {
@@ -7639,7 +7644,30 @@ async function startApplication(): Promise<void> {
       if (appUpdateService === undefined) {
         return { ok: false, status: 'error', code: 'service-unavailable' };
       }
-      const result = await appUpdateService.downloadAndInstall();
+      const result = automaticUpdatePrepared
+        ? await appUpdateService.launchPreparedUpdate('interactive')
+        : await appUpdateService.downloadAndInstall();
+      if (result.ok && result.action === 'installer-opened') {
+        automaticUpdatePrepared = false;
+        setImmediate(() => app.quit());
+      }
+      return result;
+    },
+  );
+
+  ipcMain.handle(
+    APP_UPDATE_RESTART_CHANNEL,
+    async (event): Promise<AppUpdateInstallResult> => {
+      if (!mainWindow || event.sender !== mainWindow.webContents) {
+        logger?.info('ipc.app-update', 'Rejected prepared update install request.', {
+          code: 'unauthorized-sender',
+        });
+        return { ok: false, status: 'error', code: 'unauthorized-sender' };
+      }
+      if (!automaticUpdatePrepared || appUpdateService === undefined) {
+        return { ok: false, status: 'error', code: 'not-available' };
+      }
+      const result = await appUpdateService.launchPreparedUpdate('silent');
       if (result.ok && result.action === 'installer-opened') {
         automaticUpdatePrepared = false;
         setImmediate(() => app.quit());
@@ -8024,12 +8052,7 @@ if (!hasSingleInstanceLock) {
       .then(async () => {
         if (!automaticUpdatePrepared) return;
         automaticUpdatePrepared = false;
-        const result = await appUpdateService?.launchPreparedUpdate('silent');
-        if (result?.ok !== true) {
-          logger?.info('app-update.auto', 'Prepared update could not be launched during shutdown.', {
-            code: result && !result.ok ? result.code : 'service-unavailable',
-          });
-        }
+        await appUpdateService?.discardPreparedUpdate();
       })
       .catch((error: unknown) => {
         logger?.error('app-update.auto', error);
