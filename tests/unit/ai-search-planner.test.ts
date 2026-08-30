@@ -33,7 +33,7 @@ describe('AI natural-language search planner', () => {
 
     const plan = await planAiSearch({
       apiFormat: 'openai_chat', model: 'gpt-4o-mini', apiKey: 'secret',
-      naturalQuery: '科幻城市，不要草图，最新的优先', fetchFn,
+      naturalQuery: '找 png 或 jpg、宽度至少 1920 的科幻城市，不要草图，最新的优先', fetchFn,
     });
 
     expect(plan).toEqual({
@@ -110,10 +110,37 @@ describe('AI natural-language search planner', () => {
       naturalQuery: '动漫图片', fetchFn,
     })).resolves.toEqual({
       keywords: ['动漫'], synonyms: [], exclusions: [],
-      filters: [
-        { field: 'format', values: ['png'], exclude: false },
-        { field: 'availability', values: ['available'], exclude: false },
-      ],
+      filters: [{ field: 'format', values: ['png'], exclude: false }],
+    });
+  });
+
+  it('removes compatible-model defaults that the user did not ask to filter by', async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      choices: [{ message: { content: JSON.stringify({
+        keywords: ['游戏'],
+        filters: { format: ['video', 'image', 'document'], rating: ['4', '5'] },
+      }) } }],
+    }));
+
+    await expect(planAiSearch({
+      apiFormat: 'openai_chat', model: 'compatible-model', apiKey: 'secret',
+      naturalQuery: '游戏', fetchFn,
+    })).resolves.toEqual({ keywords: ['游戏'], synonyms: [], exclusions: [], filters: [] });
+  });
+
+  it('keeps only the explicitly requested media class from compatible-model defaults', async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      choices: [{ message: { content: JSON.stringify({
+        keywords: ['动漫'], filters: { format: ['video', 'image', 'document'] },
+      }) } }],
+    }));
+
+    await expect(planAiSearch({
+      apiFormat: 'openai_chat', model: 'compatible-model', apiKey: 'secret',
+      naturalQuery: '动漫图片', fetchFn,
+    })).resolves.toEqual({
+      keywords: ['动漫'], synonyms: [], exclusions: [],
+      filters: [{ field: 'format', values: ['image'], exclude: false }],
     });
   });
 

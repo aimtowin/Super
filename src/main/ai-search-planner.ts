@@ -174,7 +174,7 @@ const GEMINI_AI_SEARCH_PLAN_SCHEMA = {
 const SYSTEM_PROMPT = `You translate a user's natural-language request into a Super digital-asset search plan.
 Return only one valid JSON object, with no Markdown fences or surrounding text. Always include keywords, synonyms, exclusions, filters, and sort; use [] or null when a section is unused. Never output SQL, code, filesystem paths, IDs, or new operators.
 Use concise literal keywords. Put related alternative terms in synonyms and unwanted concepts in exclusions.
-Allowed categorical filters: format, tag, rating (0-5 strings), favorite/source_url (empty values means presence), availability (available or missing).
+Allowed categorical filters: format, tag, rating (0-5 strings), favorite/source_url (empty values means presence), availability (available or missing). Never invent a filter: use a filter only when the user explicitly requests that constraint. Otherwise search with keywords, synonyms, and exclusions only.
 Allowed numeric filters: width/height in pixels, aspect_ratio as a positive ratio, duration_ms in milliseconds. Numeric filters use ranges; categorical filters use values. Unused arrays must be empty.
 Only add a sort when the user explicitly asks for ordering. The ordinary parameterized Super search engine will execute the plan.`;
 
@@ -271,7 +271,10 @@ async function requestSearchPlan(input: {
   );
   if (!response.ok) throw await httpFailure(response);
   const body = await readJson(response);
-  return normalizePlan(extractProviderOutput(input.input.apiFormat, body));
+  return constrainPlanToRequestedFilters(
+    normalizePlan(extractProviderOutput(input.input.apiFormat, body)),
+    input.input.naturalQuery,
+  );
 }
 
 function providerRequest(
@@ -633,6 +636,61 @@ function coerceCompatibleFilters(
       };
     });
   });
+}
+
+/**
+ * Compatible models sometimes add presentation defaults such as "image",
+ * "available", or rating 4–5 even when the user did not ask for them. These
+ * look harmless but can silently remove every indexed asset. Keep structured
+ * filters only when the request explicitly asks for that filter dimension.
+ */
+function constrainPlanToRequestedFilters(plan: AiSearchPlan, naturalQuery: string): AiSearchPlan {
+  const query = naturalQuery.trim().toLowerCase();
+  const asks = (pattern: RegExp) => pattern.test(query);
+  const asksForImage = asks(/\bimage(?:s)?\b|\bpicture(?:s)?\b|\bphoto(?:s)?\b|图片|图像|照片/u);
+  const asksForVideo = asks(/\bvideo(?:s)?\b|\bmovie(?:s)?\b|视频|影片/u);
+  const asksForDocument = asks(/\bdocument(?:s)?\b|\bpdf\b|文档|文件/u);
+  const asksForFormat = asksForImage || asksForVideo || asksForDocument
+    || asks(/\bformat\b|格式|扩展名|\b(?:png|jpe?g|webp|gif|mp4|mov|webm|pdf)\b/u);
+  const asksForRating = asks(/\brating\b|评分|星级|几星|分数/u);
+  const asksForTags = asks(/\btag(?:s)?\b|标签/u);
+  const asksForFavorite = asks(/\bfavou?rite(?:s)?\b|收藏|喜欢/u);
+  const asksForSourceUrl = asks(/\bsource\b|来源|网址|链接/u);
+  const asksForAvailability = asks(/\bavailable\b|\bmissing\b|可用|缺失|找不到|丢失/u);
+  const asksForNumeric = asks(/\b(?:width|height|duration|seconds?|minutes?)\b|宽度|高度|时长|分钟|秒/u);
+
+  const filters = plan.filters.flatMap((filter) => {
+    if (filter.field === 'format') {
+      if (!asksForFormat) return [];
+      const values = filter.values.filter((value) => formatValueMatchesRequest(
+        value, { asksForImage, asksForVideo, asksForDocument, query },
+      ));
+      return values.length > 0 ? [{ ...filter, values }] : [];
+    }
+    if (filter.field === 'tag') return asksForTags ? [filter] : [];
+    if (filter.field === 'rating') return asksForRating ? [filter] : [];
+    if (filter.field === 'favorite') return asksForFavorite ? [filter] : [];
+    if (filter.field === 'source_url') return asksForSourceUrl ? [filter] : [];
+    if (filter.field === 'availability') return asksForAvailability ? [filter] : [];
+    return asksForNumeric ? [filter] : [];
+  });
+  return { ...plan, filters };
+}
+
+function formatValueMatchesRequest(
+  value: string,
+  request: { asksForImage: boolean; asksForVideo: boolean; asksForDocument: boolean; query: string },
+): boolean {
+  const token = value.trim().replace(/^\./, '').toLowerCase();
+  // An explicitly named extension always wins over its broader media class.
+  if (request.query.includes(token)) return true;
+  const isImage = ['image', 'images', 'picture', 'pictures', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'].includes(token);
+  const isVideo = ['video', 'videos', 'movie', 'movies', 'mp4', 'mov', 'webm', 'mkv', 'avi', 'wmv', 'm4v'].includes(token);
+  const isDocument = ['document', 'documents', 'pdf', 'doc', 'docx'].includes(token);
+  if (isImage) return request.asksForImage;
+  if (isVideo) return request.asksForVideo;
+  if (isDocument) return request.asksForDocument;
+  return false;
 }
 
 function unique(values: string[]): string[] {
