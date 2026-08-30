@@ -9088,6 +9088,59 @@ function AppInner() {
     setNotice("已开始重新分析；新结果将在右侧栏等待你的确认。");
   }
 
+  async function analyzeUnanalyzedFolder(folderId: string, name: string) {
+    if (!api || !library || !aiHasKey) {
+      setError(t("command.reason.aiNotConfigured"));
+      return;
+    }
+    const scoped = await api.searchAssets({
+      libraryId: library.libraryId,
+      scope: { kind: "folder", folderId, recursive: true },
+      idsOnly: true,
+      scopeMode: true,
+    });
+    if (!scoped.ok) {
+      setError(toMessage(scoped.error, t("toast.aiAnalyzeFailed"), locale));
+      return;
+    }
+    const assetIds = scoped.value.assetIds ?? [];
+    if (assetIds.length === 0) {
+      setNotice(`${name} 中没有可分析的素材。`);
+      return;
+    }
+    const jobIds: string[] = [];
+    const skippedAssetIds: string[] = [];
+    for (let offset = 0; offset < assetIds.length; offset += 10_000) {
+      const result = await api.analyzeAssets({
+        libraryId: library.libraryId,
+        assetIds: assetIds.slice(offset, offset + 10_000),
+      });
+      if (!result.ok) {
+        setError(toMessage(result.error, t("toast.aiAnalyzeFailed"), locale));
+        return;
+      }
+      jobIds.push(...result.value.jobIds);
+      skippedAssetIds.push(...result.value.skippedAssetIds);
+    }
+    if (jobIds.length === 0) {
+      setNotice(`${name} 中的素材均已分析或不支持分析。`);
+      return;
+    }
+    aiBatchStatusRequestRef.current++;
+    aiBatchJobIdsRef.current = jobIds;
+    aiBatchSkippedCountRef.current = skippedAssetIds.length;
+    lastAiBatchJobIdsRef.current = jobIds;
+    analyzingAssetIdRef.current = null;
+    analyzingBatchSizeRef.current = jobIds.length + skippedAssetIds.length;
+    setAiBatchProgress(computeAiBatchProgressForJobs(jobIds, [], { skipped: skippedAssetIds.length }));
+    aiAnalyzingRef.current = true;
+    setAiAnalyzing(true);
+    setAiProgressBannerVisible(true);
+    setNotice(`已将 ${name} 的 ${jobIds.length} 项未分析素材加入 AI 队列。`);
+    void loadAiJobs(true);
+    void refreshAiBatchStatus();
+  }
+
   async function resolveAiReanalysis(assetId: string, accept: boolean) {
     if (!api || !library) return;
     const result = await api.resolveAiReanalysis({ libraryId: library.libraryId, assetId, accept });
@@ -12039,6 +12092,7 @@ function AppInner() {
         onAnalyze={(assetId, batchIds) => {
           void handleAnalyzeClick(assetId, batchIds);
         }}
+        onAnalyzeFolder={(folderId, name) => { void analyzeUnanalyzedFolder(folderId, name); }}
         onClearAiContent={(assetIds) => { void handleClearAiContent(assetIds); }}
         canAnalyze={
           aiAnalyzeConnectionReady(aiHasKey, aiConnectionState) && !aiAnalyzing

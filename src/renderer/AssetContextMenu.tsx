@@ -324,6 +324,8 @@ interface AssetContextMenuProps {
   onPermanentDelete: (assetIds: string[]) => void;
   onRelink: (assetId: string) => void;
   onAnalyze: (assetId: string, batchIds?: readonly string[]) => void;
+  /** Queues only unanalysed assets below this folder in bounded batches. */
+  onAnalyzeFolder: (folderId: string, name: string) => void;
   onClearAiContent: (assetIds: string[]) => void;
   canAnalyze: boolean;
   /** Super-rsbt: show link-off on AI analyze when connection is unavailable. */
@@ -369,6 +371,7 @@ interface AssetContextMenuProps {
 export function AssetContextMenu(props: AssetContextMenuProps) {
   const { locale, t } = useLocale();
   const {
+    busy = false,
     tags,
     collections,
     linkedFolders,
@@ -408,6 +411,7 @@ export function AssetContextMenu(props: AssetContextMenuProps) {
     onPermanentDelete,
     onRelink,
     onAnalyze,
+    onAnalyzeFolder,
     onClearAiContent,
     canAnalyze,
     aiDisconnected,
@@ -1083,6 +1087,12 @@ export function AssetContextMenu(props: AssetContextMenuProps) {
                     onAction={() => runSidebarCommand("folder.linked-rules")}
                   />
                 )}
+                <ContextMenuItem
+                  icon={<Icon name="smart" size={14} />}
+                  label="AI 分析未分析素材"
+                  disabled={!canAnalyze || busy}
+                  onAction={() => onAnalyzeFolder(desc.folderId, desc.name)}
+                />
                 {addLinkedFolderToCollectionItem && (
                   <ContextMenuItem
                     icon={<Icon name="collection" size={14} />}
