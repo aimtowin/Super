@@ -1,6 +1,8 @@
 /**
- * Pure helpers for text asset detection (Super-sh7 / Super-4l7).
+ * Pure helpers for text asset detection and broad format-filter expansion.
  */
+
+import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS } from "./media-formats";
 
 export const TEXT_EXTENSIONS = [
   ".txt",
@@ -50,6 +52,9 @@ export const TEXT_EXTENSIONS = [
 
 /** Format-filter token that expands to every TEXT_EXTENSIONS entry. */
 export const FORMAT_TEXT_TOKEN = "text";
+/** Broad media-class tokens accepted from AI search plans and format input. */
+export const FORMAT_IMAGE_TOKEN = "image";
+export const FORMAT_VIDEO_TOKEN = "video";
 
 export const TEXT_MIME_BY_EXTENSION: Record<string, string> = {
   ".txt": "text/plain",
@@ -142,11 +147,35 @@ export function expandFormatFilterTokens(tokens: readonly string[]): string[] {
       }
       continue;
     }
+    // AI providers commonly describe a broad media class ("image" or
+    // "video") rather than a filename extension. Treat these as explicit
+    // aliases for the formats Super owns, never as literal `.image`/`.video`
+    // extensions that would silently produce an empty result set.
+    const mediaClass = normalizeMediaClassToken(token);
+    if (mediaClass) {
+      for (const ext of mediaClass) {
+        const bare = ext.slice(1);
+        if (seen.has(bare)) continue;
+        seen.add(bare);
+        out.push(bare);
+      }
+      continue;
+    }
     if (seen.has(token)) continue;
     seen.add(token);
     out.push(token);
   }
   return out;
+}
+
+function normalizeMediaClassToken(token: string): readonly string[] | null {
+  if (["image", "images", "picture", "pictures", "图片", "图像"].includes(token)) {
+    return IMAGE_EXTENSIONS;
+  }
+  if (["video", "videos", "movie", "movies", "视频", "影片"].includes(token)) {
+    return VIDEO_EXTENSIONS;
+  }
+  return null;
 }
 
 /** True when the free-text format field carries the unified text token. */

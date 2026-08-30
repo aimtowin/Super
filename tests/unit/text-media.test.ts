@@ -3,7 +3,9 @@ import { expect, test } from "vitest";
 import {
   countTextLines,
   expandFormatFilterTokens,
+  FORMAT_IMAGE_TOKEN,
   FORMAT_TEXT_TOKEN,
+  FORMAT_VIDEO_TOKEN,
   isTextFileName,
   textCardPreviewSnippet,
   textMimeForExtension,
@@ -49,4 +51,14 @@ test("expandFormatFilterTokens expands the unified text token", () => {
   expect(expanded).toContain("png");
   expect(expanded).not.toContain("text");
   expect(expandFormatFilterTokens(["PNG", ".JPG"])).toEqual(["png", "jpg"]);
+});
+
+test("expandFormatFilterTokens expands broad image and video classes returned by AI search", () => {
+  const expanded = expandFormatFilterTokens([FORMAT_IMAGE_TOKEN, FORMAT_VIDEO_TOKEN]);
+  expect(expanded).toContain("png");
+  expect(expanded).toContain("jpg");
+  expect(expanded).toContain("mp4");
+  expect(expanded).toContain("webm");
+  expect(expanded).not.toContain("image");
+  expect(expanded).not.toContain("video");
 });
