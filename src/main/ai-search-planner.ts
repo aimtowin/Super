@@ -172,7 +172,7 @@ const GEMINI_AI_SEARCH_PLAN_SCHEMA = {
 } as const;
 
 const SYSTEM_PROMPT = `You translate a user's natural-language request into a Super digital-asset search plan.
-Return only the required structured object. Never output SQL, code, filesystem paths, IDs, or new operators.
+Return only one valid JSON object, with no Markdown fences or surrounding text. Always include keywords, synonyms, exclusions, filters, and sort; use [] or null when a section is unused. Never output SQL, code, filesystem paths, IDs, or new operators.
 Use concise literal keywords. Put related alternative terms in synonyms and unwanted concepts in exclusions.
 Allowed categorical filters: format, tag, rating (0-5 strings), favorite/source_url (empty values means presence), availability (available or missing).
 Allowed numeric filters: width/height in pixels, aspect_ratio as a positive ratio, duration_ms in milliseconds. Numeric filters use ranges; categorical filters use values. Unused arrays must be empty.
@@ -220,13 +220,28 @@ export async function planAiSearch(input: {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? 30_000);
   try {
-    const response = await fetchFn(
-      ...providerRequest({ ...input, apiFormat }, controller.signal),
-    );
-    if (!response.ok) throw await httpFailure(response);
-    const body = await readJson(response);
-    const output = extractProviderOutput(apiFormat, body);
-    return normalizePlan(output);
+    try {
+      return await requestSearchPlan({
+        input: { ...input, apiFormat },
+        signal: controller.signal,
+        fetchFn,
+        openAiOutputMode: 'json_schema',
+      });
+    } catch (error) {
+      // Some OpenAI-compatible model gateways advertise json_schema but do
+      // not enforce it. Retry once using the older json_object contract,
+      // which is materially better supported by those gateways. Both paths
+      // still go through the same strict local schema validation.
+      if (!(apiFormat === 'openai_chat' && error instanceof AiSearchPlannerError && error.reason === 'AI_INVALID_RESPONSE')) {
+        throw error;
+      }
+      return await requestSearchPlan({
+        input: { ...input, apiFormat },
+        signal: controller.signal,
+        fetchFn,
+        openAiOutputMode: 'json_object',
+      });
+    }
   } catch (error) {
     if (error instanceof AiSearchPlannerError) throw error;
     if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
@@ -236,6 +251,27 @@ export async function planAiSearch(input: {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function requestSearchPlan(input: {
+  input: {
+    apiFormat: AiApiFormat;
+    model: string;
+    apiKey: string;
+    naturalQuery: string;
+    baseUrl?: string;
+    languages?: readonly string[];
+  };
+  signal: AbortSignal;
+  fetchFn: Fetch;
+  openAiOutputMode: 'json_schema' | 'json_object';
+}): Promise<AiSearchPlan> {
+  const response = await input.fetchFn(
+    ...providerRequest(input.input, input.signal, input.openAiOutputMode),
+  );
+  if (!response.ok) throw await httpFailure(response);
+  const body = await readJson(response);
+  return normalizePlan(extractProviderOutput(input.input.apiFormat, body));
 }
 
 function providerRequest(
@@ -248,6 +284,7 @@ function providerRequest(
     languages?: readonly string[];
   },
   signal: AbortSignal,
+  openAiOutputMode: 'json_schema' | 'json_object' = 'json_schema',
 ): Parameters<Fetch> {
   const system = searchSystemPrompt(input.languages);
   if (input.apiFormat === 'openai_chat') {
@@ -258,10 +295,12 @@ function providerRequest(
         model: input.model,
         temperature: 0,
         messages: [{ role: 'system', content: system }, { role: 'user', content: input.naturalQuery }],
-        response_format: {
-          type: 'json_schema',
-          json_schema: { name: 'super_search_plan', strict: true, schema: AI_SEARCH_PLAN_JSON_SCHEMA },
-        },
+        response_format: openAiOutputMode === 'json_schema'
+          ? {
+            type: 'json_schema',
+            json_schema: { name: 'super_search_plan', strict: true, schema: AI_SEARCH_PLAN_JSON_SCHEMA },
+          }
+          : { type: 'json_object' },
       }),
     }];
   }

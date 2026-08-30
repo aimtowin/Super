@@ -78,6 +78,25 @@ describe('AI natural-language search planner', () => {
     });
   });
 
+  it('retries an OpenAI-compatible gateway with json_object when json_schema output is invalid', async () => {
+    const fetchFn = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({
+        choices: [{ message: { content: '{"keywords":[动漫]}' } }],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        choices: [{ message: { content: JSON.stringify({ keywords: ['动漫'] }) } }],
+      }));
+
+    await expect(planAiSearch({
+      apiFormat: 'openai_chat', model: 'compatible-model', apiKey: 'secret',
+      naturalQuery: '动漫', fetchFn,
+    })).resolves.toEqual({ keywords: ['动漫'], synonyms: [], exclusions: [], filters: [] });
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetchFn.mock.calls[1]![1]?.body))).toMatchObject({
+      response_format: { type: 'json_object' },
+    });
+  });
+
   it('uses a Gemini API-key header rather than putting credentials in the URL', async () => {
     const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
       candidates: [{ content: { parts: [{ text: JSON.stringify(rawPlan) }] } }],
