@@ -120,6 +120,12 @@ export interface AiContent {
   tags?: string[];
   rating?: number;
   modelVersion?: string;
+  reanalysis?: {
+    description: string | null;
+    tags: string[];
+    rating: number | null;
+    modelVersion: string;
+  };
 }
 
 export interface InspectorPanelProps {
@@ -176,6 +182,7 @@ export interface InspectorPanelProps {
   onRelink?: (assetId: string) => void;
   /** Queue a single image for the existing AI analysis pipeline. */
   onAnalyze?: (assetId: string) => void;
+  onResolveReanalysis?: (assetId: string, accept: boolean) => void;
   pluginApi?: SuperPluginManagerApi;
   libraryId?: string;
   pluginContributionRefreshKey?: string | null;
@@ -586,6 +593,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
     onOpenSourceUrl,
     onRelink,
     onAnalyze,
+    onResolveReanalysis,
     pluginApi,
     libraryId,
     pluginContributionRefreshKey = null,
@@ -1466,6 +1474,17 @@ export function InspectorPanel(props: InspectorPanelProps) {
                       AI
                     </button>
                   )}
+                  {!canRequestAiAnalysis && aiContent && selectedAsset && (
+                    <button
+                      className="inspector-ai-analyze-button"
+                      disabled={aiAnalyzing}
+                      onClick={() => onAnalyze?.(selectedAsset.assetId)}
+                      type="button"
+                      title="重新调用模型；结果需审核后才会替换当前分析"
+                    >
+                      重新分析
+                    </button>
+                  )}
                 </label>
                 {descriptionMixed ? (
                   <div
@@ -1495,6 +1514,20 @@ export function InspectorPanel(props: InspectorPanelProps) {
               </div>
                 );
               })()}
+
+              {aiContent?.reanalysis && selectedAsset && (
+                <div className="inspector-ai-reanalysis-review" role="status">
+                  <strong>AI 重新分析结果待审核</strong>
+                  <p>{aiContent.reanalysis.description || "模型未生成描述"}</p>
+                  {aiContent.reanalysis.tags.length > 0 && (
+                    <p>标签：{aiContent.reanalysis.tags.join("、")}</p>
+                  )}
+                  <div className="inspector-ai-reanalysis-actions">
+                    <button type="button" onClick={() => onResolveReanalysis?.(selectedAsset.assetId, true)}>采用新结果</button>
+                    <button type="button" onClick={() => onResolveReanalysis?.(selectedAsset.assetId, false)}>保留旧结果</button>
+                  </div>
+                </div>
+              )}
 
               {(() => {
                 const authorEditable =

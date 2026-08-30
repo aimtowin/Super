@@ -1373,6 +1373,12 @@ function AppInner() {
     tags?: string[];
     rating?: number;
     modelVersion?: string;
+    reanalysis?: {
+      description: string | null;
+      tags: string[];
+      rating: number | null;
+      modelVersion: string;
+    };
   } | null>(null);
   const aiContentRef = useRef(aiContent);
   aiContentRef.current = aiContent;
@@ -9063,6 +9069,36 @@ function AppInner() {
     }
   }
 
+  async function handleInspectorAnalyze(assetId: string) {
+    if (!api || !library) return;
+    const isReanalysis = aiContent?.assetId === assetId;
+    if (!isReanalysis) {
+      await handleAnalyzeClick(assetId);
+      return;
+    }
+    if (!aiHasKey) {
+      setError(t("command.reason.aiNotConfigured"));
+      return;
+    }
+    const result = await api.analyzeAsset({ libraryId: library.libraryId, assetId });
+    if (!result.ok) {
+      setError(toMessage(result.error, t("toast.aiAnalyzeFailed"), locale));
+      return;
+    }
+    setNotice("已开始重新分析；新结果将在右侧栏等待你的确认。");
+  }
+
+  async function resolveAiReanalysis(assetId: string, accept: boolean) {
+    if (!api || !library) return;
+    const result = await api.resolveAiReanalysis({ libraryId: library.libraryId, assetId, accept });
+    if (!result.ok) {
+      setError(toMessage(result.error, t("toast.aiAnalyzeFailed"), locale));
+      return;
+    }
+    await loadAiContentForAsset(assetId);
+    setNotice(accept ? "已采用新的 AI 分析结果" : "已保留原有 AI 分析结果");
+  }
+
   async function controlLinkedFolderRemoval(
     action: "pause" | "resume",
     jobIds?: string[],
@@ -11153,7 +11189,8 @@ function AppInner() {
         onAssignTagToAsset={(tagId) => void handleInspectorAssignTag(tagId)}
         onCreateAndAssignTag={(tagName) => void handleInspectorCreateAndAssignTag(tagName)}
         onOpenSourceUrl={handleOpenSourceUrl}
-        onAnalyze={(assetId) => { void handleAnalyzeClick(assetId); }}
+        onAnalyze={(assetId) => { void handleInspectorAnalyze(assetId); }}
+        onResolveReanalysis={(assetId, accept) => { void resolveAiReanalysis(assetId, accept); }}
         onRelink={(assetId) => { void relinkMissingAsset(assetId); }}
         onPaletteColorCopy={(color, copied) => {
           if (copied) {

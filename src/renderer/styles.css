@@ -11113,6 +11113,18 @@ select.ai-config-input.ai-config-languages {
   opacity: 0.5;
 }
 
+.inspector-ai-reanalysis-review {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--divider));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: 12px;
+}
+
+.inspector-ai-reanalysis-review p { margin: 5px 0; white-space: pre-wrap; }
+.inspector-ai-reanalysis-actions { display: flex; gap: 6px; margin-top: 7px; }
+
 .inspector-rating.is-ai .rating-star[data-active] {
   color: var(--accent);
 }

@@ -1755,6 +1755,13 @@ const library: SuperLibraryApi = Object.freeze({
     return { ok: true, value: result };
   },
 
+  async resolveAiReanalysis(input: { libraryId: string; assetId: string; accept: boolean }): Promise<LibraryApiResult<{ resolved: boolean; applied: boolean }>> {
+    const result = await request({ type: 'ai.reanalysis.resolve.request', ...input });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'ai.reanalysis.resolved') throw new Error('Unexpected AI reanalysis response.');
+    return { ok: true, value: { resolved: result.resolved, applied: result.applied } };
+  },
+
   async analyzeAsset(input: {
     libraryId: string;
     assetId: string;

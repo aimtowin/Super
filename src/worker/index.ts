@@ -3317,6 +3317,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
       if (!modelVersion) {
         modelVersion = libraryService.getAiTagModelVersion(libraryId, assetId);
       }
+      const proposal = libraryService.getAiReanalysisProposal(libraryId, assetId);
       return {
         ok: true,
         type: 'ai.content.got' as const,
@@ -3325,6 +3326,24 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
         tags,
         rating,
         modelVersion,
+        reanalysis: proposal
+          ? {
+              description: proposal.description,
+              tags: proposal.tags,
+              rating: proposal.rating,
+              modelVersion: proposal.modelVersion,
+            }
+          : null,
+      };
+    }
+    case 'ai.reanalysis.resolve': {
+      const { libraryId, assetId, accept } = request.command;
+      const result = libraryService.resolveAiReanalysisProposal({ libraryId, assetId, accept });
+      return {
+        ok: true,
+        type: 'ai.reanalysis.resolved' as const,
+        assetId,
+        ...result,
       };
     }
     case 'media.generate-thumbnail': {

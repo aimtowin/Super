@@ -652,7 +652,14 @@ export interface SuperLibraryApi {
     tags: string[];
     rating: number | null;
     modelVersion: string | null;
+    reanalysis?: {
+      description: string | null;
+      tags: string[];
+      rating: number | null;
+      modelVersion: string;
+    } | null;
   }>>;
+  resolveAiReanalysis(input: { libraryId: string; assetId: string; accept: boolean }): Promise<LibraryApiResult<{ resolved: boolean; applied: boolean }>>;
   analyzeAsset(input: {
     libraryId: string;
     assetId: string;

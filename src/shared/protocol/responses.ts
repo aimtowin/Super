@@ -1980,6 +1980,18 @@ const workerSuccessResultSchema = z.discriminatedUnion('type', [
     tags: z.array(nonBlankString),
     rating: z.number().int().min(1).max(5).nullable(),
     modelVersion: nonBlankString.nullable(),
+    reanalysis: z.strictObject({
+      description: z.string().nullable(), tags: z.array(nonBlankString),
+      rating: z.number().int().min(1).max(5).nullable(),
+      modelVersion: nonBlankString,
+    }).nullable().optional(),
+  }),
+  z.strictObject({
+    ok: z.literal(true),
+    type: z.literal('ai.reanalysis.resolved'),
+    assetId: nonBlankString,
+    resolved: z.boolean(),
+    applied: z.boolean(),
   }),
   ...assetOperationSuccessSchemas,
 ]);
@@ -2310,6 +2322,18 @@ const rendererSuccessResultSchema = z.discriminatedUnion('type', [
     tags: z.array(nonBlankString),
     rating: z.number().int().min(1).max(5).nullable(),
     modelVersion: nonBlankString.nullable(),
+    reanalysis: z.strictObject({
+      description: z.string().nullable(), tags: z.array(nonBlankString),
+      rating: z.number().int().min(1).max(5).nullable(),
+      modelVersion: nonBlankString,
+    }).nullable().optional(),
+  }),
+  z.strictObject({
+    ok: z.literal(true),
+    type: z.literal('ai.reanalysis.resolved'),
+    assetId: nonBlankString,
+    resolved: z.boolean(),
+    applied: z.boolean(),
   }),
   z.strictObject({
     ok: z.literal(true),

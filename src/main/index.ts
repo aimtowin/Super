@@ -3337,6 +3337,13 @@ async function commandFor(
         libraryId: request.libraryId,
         assetId: request.assetId,
       };
+    case "ai.reanalysis.resolve.request":
+      return {
+        type: "ai.reanalysis.resolve",
+        libraryId: request.libraryId,
+        assetId: request.assetId,
+        accept: request.accept,
+      };
     case "asset.thumbnail.request":
       return {
         type: "media.generate-thumbnail",
@@ -3797,8 +3804,8 @@ async function handleLibraryRequest(input: unknown): Promise<RendererResult> {
           libraryId: request.libraryId,
           assetIds: request.assetIds,
           resumePaused: true,
-          // 手动分析可覆盖已有 AI 结果（8-09 WIP 恢复：worker 已支持）
-          forceExisting: true,
+          // Batch analysis is strictly for unanalysed assets. Re-analysis is
+          // deliberately a single-resource workflow with an approval step.
         });
         if (enqueueResult.ok && enqueueResult.type === "ai.jobs.enqueued") {
           const jobIds = [

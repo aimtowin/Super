@@ -17876,6 +17876,33 @@ export class LibraryService {
     }
   }
 
+  /** Accept or discard a staged single-resource re-analysis candidate. */
+  resolveAiReanalysisProposal(input: {
+    libraryId: string;
+    assetId: string;
+    accept: boolean;
+  }): { resolved: boolean; applied: boolean } {
+    const proposal = this.getAiReanalysisProposal(input.libraryId, input.assetId);
+    if (!proposal) return { resolved: false, applied: false };
+    const openLibrary = this.requireOpenLibrary(input.libraryId);
+    if (input.accept) {
+      this.writeAiAnalysisResult({
+        libraryId: input.libraryId,
+        assetId: input.assetId,
+        description: proposal.description ?? undefined,
+        tags: proposal.tags,
+        rating: proposal.rating,
+        modelId: proposal.modelId,
+        modelVersion: proposal.modelVersion,
+        enabledFields: proposal.enabledFields,
+      });
+    }
+    openLibrary.connection.prepare(
+      'DELETE FROM ai_reanalysis_proposals WHERE asset_id = ?',
+    ).run(input.assetId);
+    return { resolved: true, applied: input.accept };
+  }
+
   /** Retrieve current AI content rows for an asset. */
   getAiContent(libraryId: string, assetId: string): Array<{
     fieldName: string;

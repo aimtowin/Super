@@ -987,6 +987,12 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     assetId: identifierSchema,
   }),
   z.strictObject({
+    type: z.literal('ai.reanalysis.resolve.request'),
+    libraryId: identifierSchema,
+    assetId: identifierSchema,
+    accept: z.boolean(),
+  }),
+  z.strictObject({
     type: z.literal('asset.analyze.request'),
     libraryId: identifierSchema,
     assetId: identifierSchema,
@@ -2183,6 +2189,12 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
     type: z.literal('ai.content.get'),
     libraryId: identifierSchema,
     assetId: identifierSchema,
+  }),
+  z.strictObject({
+    type: z.literal('ai.reanalysis.resolve'),
+    libraryId: identifierSchema,
+    assetId: identifierSchema,
+    accept: z.boolean(),
   }),
   z.strictObject({
     type: z.literal('media.generate-thumbnail'),

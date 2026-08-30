@@ -29,6 +29,12 @@ export type InspectorAiContent = {
   tags?: string[];
   rating?: number;
   modelVersion?: string;
+  reanalysis?: {
+    description: string | null;
+    tags: string[];
+    rating: number | null;
+    modelVersion: string;
+  };
 };
 
 export type UseInspectorAssetMetadataParams = {
@@ -189,11 +195,12 @@ export function useInspectorAssetMetadata({
           return;
         }
         setAiContentLoadedAssetId(assetId);
-        const { description, tags, rating, modelVersion } = result.value;
+        const { description, tags, rating, modelVersion, reanalysis } = result.value;
         const hasContent =
           Boolean(description?.trim()) ||
           tags.length > 0 ||
-          rating != null;
+          rating != null ||
+          reanalysis != null;
         if (!hasContent) {
           setAiContent(null);
           if (selectedAssetIdsRef.current.length < 2) {
@@ -211,6 +218,7 @@ export function useInspectorAssetMetadata({
           ...(tags.length > 0 ? { tags } : {}),
           ...(rating != null ? { rating } : {}),
           ...(modelVersion ? { modelVersion } : {}),
+          ...(reanalysis ? { reanalysis } : {}),
         };
         setAiContent(next);
         if (selectedAssetIdsRef.current.length < 2) {
