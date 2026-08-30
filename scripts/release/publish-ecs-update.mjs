@@ -19,7 +19,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createReadStream } from 'node:fs';
-import { access, readFile, stat, writeFile } from 'node:fs/promises';
+import { access, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,6 +27,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const defaultRemoteDirectory = '/www/wwwroot/resource/data/super-updates';
 const maxNotesLength = 12_000;
 const remoteDirectoryPattern = /^\/[A-Za-z0-9._/-]*$/u;
+const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/u;
 
 function fail(message) {
   throw new Error(`[publish-ecs-update] ${message}`);
@@ -83,6 +84,41 @@ function parseReleaseRetention(value) {
   return Number(value.trim());
 }
 
+async function loadDeltaArtifacts(version) {
+  const directory = path.join(repoRoot, 'out', 'make', 'delta');
+  let names;
+  try {
+    names = await readdir(directory);
+  } catch {
+    return [];
+  }
+  const deltas = [];
+  for (const name of names.filter((candidate) => candidate.endsWith('.json')).sort()) {
+    let candidate;
+    try {
+      candidate = JSON.parse(await readFile(path.join(directory, name), 'utf8'));
+    } catch {
+      fail(`Invalid delta metadata: ${name}`);
+    }
+    if (!candidate || candidate.toVersion !== version || typeof candidate.fromVersion !== 'string'
+      || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(candidate.fromVersion)
+      || candidate.fromVersion === version || typeof candidate.path !== 'string'
+      || typeof candidate.remoteName !== 'string' || !SAFE_FILE_NAME.test(candidate.remoteName)) {
+      continue;
+    }
+    const filePath = path.resolve(candidate.path);
+    if (!await exists(filePath)) fail(`Missing delta artifact: ${filePath}`);
+    const [metadata, digest] = await Promise.all([stat(filePath), sha256(filePath)]);
+    if (metadata.size <= 0 || (typeof candidate.sha256 === 'string' && candidate.sha256.toLowerCase() !== digest)) {
+      fail(`Invalid delta artifact: ${filePath}`);
+    }
+    deltas.push({ fromVersion: candidate.fromVersion, filePath, remoteName: candidate.remoteName, size: metadata.size, sha256: digest });
+  }
+  const versions = new Set(deltas.map((delta) => delta.fromVersion));
+  if (versions.size !== deltas.length) fail('Duplicate delta source versions.');
+  return deltas;
+}
+
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
   const version = await readReleaseVersion();
@@ -93,6 +129,7 @@ async function main() {
   const setupPath = path.join(outputDirectory, 'inno', setupName);
   const zipChecksumPath = `${zipPath}.sha256`;
   const setupChecksumPath = `${setupPath}.sha256`;
+  const fullZipName = `Super-win-x86-64-${version}-full-setup.zip`;
 
   for (const filePath of [zipPath, setupPath, zipChecksumPath, setupChecksumPath]) {
     if (!await exists(filePath)) fail(`Missing release artifact: ${filePath}`);
@@ -112,18 +149,29 @@ async function main() {
     fail('Release checksum sidecar does not match the local artifact. Run npm run release:checksums first.');
   }
 
+  const deltas = await loadDeltaArtifacts(version);
+
   const notes = (process.env.SUPER_UPDATE_NOTES ?? `Super ${version}`).trim();
   if (notes.length > maxNotesLength) fail(`SUPER_UPDATE_NOTES exceeds ${maxNotesLength} characters.`);
-  const releasePath = `releases/${version}/${zipName}`;
+  const releasePath = `releases/${version}/${fullZipName}`;
   const updateManifest = {
     version,
     notes,
-    assets: [{ name: zipName, path: releasePath, size: zipStats.size, sha256: zipHash }],
+    full: { name: zipName, path: releasePath, size: zipStats.size, sha256: zipHash },
+    deltas: deltas.map((delta) => ({
+      fromVersion: delta.fromVersion,
+      asset: {
+        name: zipName,
+        path: `releases/${version}/${delta.remoteName}`,
+        size: delta.size,
+        sha256: delta.sha256,
+      },
+    })),
   };
   const localManifestPath = path.join(outputDirectory, 'super-update-manifest.json');
   await writeFile(localManifestPath, `${JSON.stringify(updateManifest, null, 2)}\n`, 'utf8');
 
-  console.log(`[publish-ecs-update] Prepared ${zipName} (${zipStats.size} bytes).`);
+  console.log(`[publish-ecs-update] Prepared ${zipName} (${zipStats.size} bytes), ${deltas.length} matching delta package(s).`);
   if (dryRun) {
     console.log(`[publish-ecs-update] Dry run manifest: ${localManifestPath}`);
     return;
@@ -141,7 +189,7 @@ async function main() {
   const destination = `${user}@${host}`;
   const stage = `${remoteDirectory}/.staging-${version}-${randomUUID()}`;
   const releaseDirectory = `${remoteDirectory}/releases/${version}`;
-  const files = [zipPath, setupPath, zipChecksumPath, setupChecksumPath, localManifestPath];
+  const files = [zipPath, setupPath, zipChecksumPath, setupChecksumPath, localManifestPath, ...deltas.map((delta) => delta.filePath)];
   const sshOptions = [
     '-p', port,
     '-o', 'BatchMode=yes',
@@ -158,10 +206,11 @@ async function main() {
   const moveCommand = [
     'set -eu',
     `mkdir -p ${quoteRemotePath(releaseDirectory)}`,
-    `mv ${quoteRemotePath(`${stage}/${zipName}`)} ${quoteRemotePath(`${releaseDirectory}/${zipName}`)}`,
+    `mv ${quoteRemotePath(`${stage}/${zipName}`)} ${quoteRemotePath(`${releaseDirectory}/${fullZipName}`)}`,
     `mv ${quoteRemotePath(`${stage}/${setupName}`)} ${quoteRemotePath(`${releaseDirectory}/${setupName}`)}`,
     `mv ${quoteRemotePath(`${stage}/${zipName}.sha256`)} ${quoteRemotePath(`${releaseDirectory}/${zipName}.sha256`)}`,
     `mv ${quoteRemotePath(`${stage}/${setupName}.sha256`)} ${quoteRemotePath(`${releaseDirectory}/${setupName}.sha256`)}`,
+    ...deltas.map((delta) => `mv ${quoteRemotePath(`${stage}/${path.basename(delta.filePath)}`)} ${quoteRemotePath(`${releaseDirectory}/${delta.remoteName}`)}`),
     `mv ${quoteRemotePath(`${stage}/super-update-manifest.json`)} ${quoteRemotePath(`${remoteDirectory}/latest.json`)}`,
     `rmdir ${quoteRemotePath(stage)}`,
     // Release names are generated from package.json and restricted here before deletion.
