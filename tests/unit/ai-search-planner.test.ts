@@ -144,6 +144,19 @@ describe('AI natural-language search planner', () => {
     });
   });
 
+  it('drops empty compatible-model filters instead of rejecting an otherwise valid keyword plan', async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      choices: [{ message: { content: JSON.stringify({
+        keywords: ['游戏'], filters: { format: [], tag: [] },
+      }) } }],
+    }));
+
+    await expect(planAiSearch({
+      apiFormat: 'openai_chat', model: 'compatible-model', apiKey: 'secret',
+      naturalQuery: '游戏', fetchFn,
+    })).resolves.toEqual({ keywords: ['游戏'], synonyms: [], exclusions: [], filters: [] });
+  });
+
   it('uses a Gemini API-key header rather than putting credentials in the URL', async () => {
     const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
       candidates: [{ content: { parts: [{ text: JSON.stringify(rawPlan) }] } }],

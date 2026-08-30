@@ -567,7 +567,7 @@ function coercePlanShape(input: unknown): unknown {
       ranges: Array.isArray(filter.ranges) ? filter.ranges : [],
       exclude: filter.exclude === true,
     };
-  });
+  }).filter((filter) => !isEmptyCompatibleFilter(filter));
   const sort = source.sort && typeof source.sort === 'object' && !Array.isArray(source.sort)
     ? source.sort
     : null;
@@ -579,6 +579,25 @@ function coercePlanShape(input: unknown): unknown {
     filters,
     sort,
   };
+}
+
+/** Empty known filter clauses have no query meaning. Compatible models emit
+ * them frequently for unused dimensions; discard them before strict parsing
+ * instead of rejecting an otherwise useful keyword-only search plan. */
+function isEmptyCompatibleFilter(filter: Record<string, unknown>): boolean {
+  if (filter.kind === 'categorical'
+    && typeof filter.field === 'string'
+    && !['favorite', 'source_url'].includes(filter.field)
+    && Array.isArray(filter.values)
+    && filter.values.length === 0
+    && ['format', 'tag', 'rating', 'availability'].includes(filter.field)) {
+    return true;
+  }
+  return filter.kind === 'numeric'
+    && typeof filter.field === 'string'
+    && ['width', 'height', 'aspect_ratio', 'duration_ms'].includes(filter.field)
+    && Array.isArray(filter.ranges)
+    && filter.ranges.length === 0;
 }
 
 /**

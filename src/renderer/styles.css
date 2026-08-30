@@ -2499,6 +2499,11 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 
 .ai-smart-collection-dialog {
   width: min(620px, calc(100vw - 48px));
+  max-height: calc(100dvh - 32px);
+  /* .create-dialog's auto margins can consume the available flex space and
+     push this modal against an edge in a narrow or short window. The backdrop
+     already owns centering, so keep this surface free of auto margins. */
+  margin: 0;
 }
 
 .ai-smart-collection-disclaimer {
@@ -2534,6 +2539,22 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 
 .ai-smart-collection-composer textarea {
   resize: vertical;
+}
+
+@media (max-width: 520px), (max-height: 520px) {
+  .dialog-backdrop:has(.ai-smart-collection-dialog) {
+    padding: 16px;
+  }
+
+  .ai-smart-collection-dialog {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - 32px);
+  }
+
+  .ai-smart-collection-dialog > [data-dialog-content="true"] {
+    overflow-y: auto;
+  }
 }
 
 @media (max-width: 680px) {
