@@ -90,7 +90,6 @@ function NavRow({
   iconColor,
   title,
   disclosure,
-  trailing,
   navFolderId,
   navFolderKind,
   navCollectionId,
@@ -115,8 +114,6 @@ function NavRow({
   title?: string;
   /** CU-D2: optional disclosure control rendered beside the row. */
   disclosure?: ReactNode;
-  /** An independent compact control, e.g. folder-only AI analysis. */
-  trailing?: ReactNode;
   /** Super-vf8x: focus target for folder keyboard shortcuts. */
   navFolderId?: string;
   navFolderKind?: "managed" | "linked";
@@ -129,7 +126,7 @@ function NavRow({
     title && title !== label ? `${label} — ${title}` : label;
 
   return (
-    <div className={`nav-tree-row${trailing ? " has-trailing" : ""}`}>
+    <div className="nav-tree-row">
       {disclosure ?? <span className="nav-disclosure-spacer" aria-hidden="true" />}
       <button
         className={`nav-row${active ? " is-active" : ""}${dropActive ? " is-drop-target" : ""}`}
@@ -157,7 +154,6 @@ function NavRow({
           </span>
         )}
       </button>
-      {trailing}
     </div>
   );
 }
@@ -644,8 +640,6 @@ export interface NavigationSidebarProps {
   onAddSmartCollection: () => void;
   /** AI-assisted smart search keeps the manual rule builder available. */
   onOpenAiSmartSearch?: () => void;
-  /** Queue only unanalysed assets under a managed or linked directory. */
-  onAnalyzeFolder?: (folderId: string, name: string) => void;
 
   // --- Inline folder edit (REQ-FOLDER-007) ---
   inlineFolderEdit: InlineFolderEditState | null;
@@ -751,7 +745,6 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
     onAddFolder,
     onAddSmartCollection,
     onOpenAiSmartSearch,
-    onAnalyzeFolder,
     inlineFolderEdit,
     onInlineFolderEditChange,
     onInlineFolderEditCommit,
@@ -1021,16 +1014,6 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
             icon="folder"
             key={entry.folderId}
             label={entry.name}
-            trailing={
-              onAnalyzeFolder ? (
-                <IconActionButton
-                  className="nav-folder-ai-action"
-                  icon="smart"
-                  label="AI 分析未分析素材"
-                  onClick={() => onAnalyzeFolder(entry.folderId, entry.name)}
-                />
-              ) : undefined
-            }
             navFolderId={entry.folderId}
             navFolderKind="managed"
             onClick={() => void onChooseFolder(entry.folderId)}
@@ -1121,17 +1104,6 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
           navFolderId={entry.folderId}
           navFolderKind="linked"
           count={entry.assetCount}
-          trailing={
-            onAnalyzeFolder ? (
-              <IconActionButton
-                className="nav-folder-ai-action"
-                disabled={offline}
-                icon="smart"
-                label="AI 分析未分析素材"
-                onClick={() => onAnalyzeFolder(entry.folderId, entry.name)}
-              />
-            ) : undefined
-          }
           title={linkedFolderHoverDetail(
             entry.status,
             lf.absoluteRootPath,

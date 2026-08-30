@@ -1845,19 +1845,6 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   gap: 2px;
 }
 
-.nav-tree-row.has-trailing {
-  grid-template-columns: 16px minmax(0, 1fr) 20px;
-}
-
-.nav-folder-ai-action {
-  align-self: center;
-  color: var(--tertiary);
-}
-
-.nav-folder-ai-action:hover:not(:disabled),
-.nav-folder-ai-action:focus-visible {
-  color: var(--accent);
-}
 
 .nav-disclosure,
 .nav-disclosure-spacer {
@@ -2892,6 +2879,32 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 }
 .workspace-tools > * {
   flex: 0 0 auto;
+}
+
+.workspace-folder-ai-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding-right: 7px;
+  border-right: 1px solid var(--divider);
+}
+
+.workspace-auto-ai-toggle {
+  display: inline-flex;
+  height: var(--shell-control-height);
+  align-items: center;
+  gap: 5px;
+  color: var(--secondary);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.workspace-auto-ai-toggle input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
 }
 .canvas-controls {
   display: flex;

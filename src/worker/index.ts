@@ -2336,6 +2336,10 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
       scheduleThumbnailScene(request.command.libraryId, 'linked');
       return { ok: true, type: 'linked-folder.rules.updated', ...result };
     }
+    case 'folder.ai-auto-analysis.set': {
+      const result = libraryService.setFolderAutoAiAnalysis(request.command);
+      return { ok: true, type: 'folder.ai-auto-analysis.updated', ...result };
+    }
     case 'ignore.list':
       return {
         ok: true,

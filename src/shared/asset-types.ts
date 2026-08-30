@@ -32,6 +32,8 @@ export const managedFolderSummarySchema = z.strictObject({
   directAssetCount: z.number().int().nonnegative(),
   /** Immediate child managed folders. */
   childFolderCount: z.number().int().nonnegative(),
+  /** Folder-local opt-in for automatic AI analysis of future imports. */
+  autoAiAnalysis: z.boolean().optional(),
 });
 
 export type ManagedFolderSummary = z.infer<typeof managedFolderSummarySchema>;
@@ -94,6 +96,8 @@ export const linkedFolderSummarySchema = z.strictObject({
   /** Path relative to the linked root; empty string for the import root. */
   relativePath: z.string().max(4096).optional().default(''),
   parentFolderId: nonBlankString.nullable().optional(),
+  /** Linked virtual children inherit this setting from their linked root. */
+  autoAiAnalysis: z.boolean().optional(),
 });
 
 export type LinkedFolderSummary = z.infer<typeof linkedFolderSummarySchema>;

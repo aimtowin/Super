@@ -429,11 +429,42 @@ function parseEmbeddedJson(value: unknown): unknown {
   if (typeof value !== 'string' || value.length > 65_536) {
     throw new AiSearchPlannerError('AI_INVALID_RESPONSE', 'The provider did not return a bounded structured result.');
   }
+  const source = extractJsonObject(value);
   try {
-    return JSON.parse(value);
+    return JSON.parse(source);
   } catch (error) {
-    throw new AiSearchPlannerError('AI_INVALID_RESPONSE', 'The provider returned invalid search-plan JSON.', { cause: error });
+    // A few OpenAI-compatible gateways claim json_schema support but still
+    // occasionally omit a comma between adjacent fields.  Repair only that
+    // narrow, unambiguous pattern; arbitrary JSON recovery would risk turning
+    // an invalid model answer into a different search query.
+    try {
+      return JSON.parse(repairCommonJsonPunctuation(source));
+    } catch (repairError) {
+      throw new AiSearchPlannerError('AI_INVALID_RESPONSE', 'The provider returned invalid search-plan JSON.', {
+        cause: repairError instanceof Error ? repairError : error,
+      });
+    }
   }
+}
+
+function extractJsonObject(value: string): string {
+  const unfenced = value
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+  const first = unfenced.indexOf('{');
+  const last = unfenced.lastIndexOf('}');
+  return first >= 0 && last > first ? unfenced.slice(first, last + 1) : unfenced;
+}
+
+function repairCommonJsonPunctuation(value: string): string {
+  return value
+    // `] "nextField":` and `} "nextField":` are the common model error.
+    .replace(/([}\]])\s*(?="(?:[^"\\]|\\.)+"\s*:)/g, '$1,')
+    // The same omission can follow a primitive field value.
+    .replace(/((?:"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?|true|false|null))\s*(?="(?:[^"\\]|\\.)+"\s*:)/g, '$1,')
+    .replace(/,(\s*[}\]])/g, '$1');
 }
 
 function normalizePlan(input: unknown): AiSearchPlan {

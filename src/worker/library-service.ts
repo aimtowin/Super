@@ -2855,6 +2855,34 @@ const AI_ANALYSIS_STATE_SCHEMA_CHECKSUM = createHash('sha256')
   .update(AI_ANALYSIS_STATE_SCHEMA_SQL)
   .digest('hex');
 
+// Migration v47: automatic AI analysis is explicitly opt-in per source
+// folder.  Global AI credentials may be configured, but they must never make
+// every managed or linked directory start analysing on their own.
+const FOLDER_AUTO_AI_ANALYSIS_SCHEMA_SQL = `
+  ALTER TABLE managed_folders
+    ADD COLUMN auto_ai_analysis INTEGER NOT NULL DEFAULT 0
+    CHECK (auto_ai_analysis IN (0, 1));
+  ALTER TABLE linked_folders
+    ADD COLUMN auto_ai_analysis INTEGER NOT NULL DEFAULT 0
+    CHECK (auto_ai_analysis IN (0, 1));
+`;
+const FOLDER_AUTO_AI_ANALYSIS_SCHEMA_CHECKSUM = createHash('sha256')
+  .update(FOLDER_AUTO_AI_ANALYSIS_SCHEMA_SQL)
+  .digest('hex');
+
+function ensureFolderAutoAiAnalysisSchema(connection: DatabaseConnection): void {
+  if (!columnsFor(connection, 'managed_folders').has('auto_ai_analysis')) {
+    connection.exec(
+      'ALTER TABLE managed_folders ADD COLUMN auto_ai_analysis INTEGER NOT NULL DEFAULT 0 CHECK (auto_ai_analysis IN (0, 1));',
+    );
+  }
+  if (!columnsFor(connection, 'linked_folders').has('auto_ai_analysis')) {
+    connection.exec(
+      'ALTER TABLE linked_folders ADD COLUMN auto_ai_analysis INTEGER NOT NULL DEFAULT 0 CHECK (auto_ai_analysis IN (0, 1));',
+    );
+  }
+}
+
 // Keep individual recipes bounded so a DB-only mutation cannot turn the
 // library database into an unbounded snapshot store. Large-content/history
 // operations remain a separate phase with explicit byte retention policy.
@@ -3006,6 +3034,11 @@ export const MIGRATIONS = [
     sql: AI_ANALYSIS_STATE_SCHEMA_SQL,
     checksum: AI_ANALYSIS_STATE_SCHEMA_CHECKSUM,
   },
+  {
+    version: 47,
+    sql: FOLDER_AUTO_AI_ANALYSIS_SCHEMA_SQL,
+    checksum: FOLDER_AUTO_AI_ANALYSIS_SCHEMA_CHECKSUM,
+  },
 ] as const;
 export const SUPPORTED_SCHEMA_VERSION = MIGRATIONS.at(-1)!.version;
 
@@ -3096,6 +3129,7 @@ interface ManagedFolderRow {
   parent_folder_id: string | null;
   relative_path: string;
   path_identity: string;
+  auto_ai_analysis?: number;
 }
 
 interface AssetSummaryRow {
@@ -5488,6 +5522,8 @@ function migrateDatabaseUnserialized(connection: DatabaseConnection, allowFresh:
           ensureContentFingerprintColumn(connection);
         } else if (migration.version === 38) {
           ensureSyncSchema(connection);
+        } else if (migration.version === 47) {
+          ensureFolderAutoAiAnalysisSchema(connection);
         } else {
           connection.exec(migration.sql);
         }
@@ -13048,7 +13084,7 @@ export class LibraryService {
     const openLibrary = this.requireOpenLibrary(libraryId);
     const rows = (openLibrary.connection
       .prepare(
-        'SELECT folder_id, parent_folder_id, name, relative_path, path_identity FROM managed_folders ORDER BY relative_path',
+        'SELECT folder_id, parent_folder_id, name, relative_path, path_identity, auto_ai_analysis FROM managed_folders ORDER BY relative_path',
       )
       .all() as ManagedFolderRow[]).filter((row) =>
       showIgnored || !this.explicitFolderIgnored(openLibrary, 'managed', null, row.relative_path),
@@ -13702,6 +13738,7 @@ export class LibraryService {
       relativePath: row.relative_path,
       directAssetCount: resolved.directAssetCounts.get(row.folder_id) ?? 0,
       childFolderCount: resolved.childFolderCounts.get(row.folder_id) ?? 0,
+      autoAiAnalysis: row.auto_ai_analysis === 1,
     };
   }
 
@@ -13772,13 +13809,14 @@ export class LibraryService {
     const openLibrary = this.requireOpenLibrary(libraryId);
     const rows = openLibrary.connection
       .prepare(
-        'SELECT folder_id, display_name, status, absolute_root_path FROM linked_folders WHERE library_id = ? ORDER BY display_name',
+        'SELECT folder_id, display_name, status, absolute_root_path, auto_ai_analysis FROM linked_folders WHERE library_id = ? ORDER BY display_name',
       )
       .all(libraryId) as Array<{
         folder_id: string;
         display_name: string;
         status: 'available' | 'offline';
         absolute_root_path: string;
+        auto_ai_analysis: number;
       }>;
     return rows
       // An ignored linked root must remain reachable when the UI explicitly
@@ -13810,6 +13848,7 @@ export class LibraryService {
           linkedFolderId: row.folder_id,
           relativePath: '',
           parentFolderId: null,
+          autoAiAnalysis: row.auto_ai_analysis === 1,
         };
         const children = directoryIndex.directories
           .filter((directory) => showIgnored || !this.explicitFolderIgnored(
@@ -13833,10 +13872,34 @@ export class LibraryService {
                 parentPath === null || parentPath === ''
                   ? row.folder_id
                   : encodeLinkedVirtualFolderId(row.folder_id, parentPath),
+              autoAiAnalysis: row.auto_ai_analysis === 1,
             };
           });
         return [root, ...children];
       });
+  }
+
+  setFolderAutoAiAnalysis(input: {
+    libraryId: string;
+    folderId: string;
+    enabled: boolean;
+  }): { folderId: string; autoAiAnalysis: boolean } {
+    const openLibrary = this.requireOpenLibrary(input.libraryId);
+    const conn = openLibrary.connection;
+    const value = input.enabled ? 1 : 0;
+    const managed = conn.prepare(
+      'UPDATE managed_folders SET auto_ai_analysis = ? WHERE folder_id = ?',
+    ).run(value, input.folderId);
+    if (managed.changes === 1) {
+      return { folderId: input.folderId, autoAiAnalysis: input.enabled };
+    }
+    const linked = conn.prepare(
+      'UPDATE linked_folders SET auto_ai_analysis = ? WHERE folder_id = ? AND library_id = ?',
+    ).run(value, input.folderId, openLibrary.summary.libraryId);
+    if (linked.changes === 1) {
+      return { folderId: input.folderId, autoAiAnalysis: input.enabled };
+    }
+    throw new LibraryServiceError('FOLDER_NOT_FOUND');
   }
 
   getLinkedFolderRules(input: { libraryId: string; folderId: string }): LinkedFolderRule[] {
@@ -18121,6 +18184,8 @@ export class LibraryService {
     folderId?: string;
     resumePaused?: boolean;
     forceExisting?: boolean;
+    /** Automatic imports may only enter folders explicitly opted into by the user. */
+    autoEligibleOnly?: boolean;
   }): {
     enqueued: number;
     jobIds: string[];
@@ -18136,6 +18201,16 @@ export class LibraryService {
     const conn = openLibrary.connection;
     const now = new Date().toISOString();
     const libId = openLibrary.summary.libraryId;
+    const autoManagedFolderIds = input.autoEligibleOnly
+      ? new Set((conn.prepare(
+        'SELECT folder_id FROM managed_folders WHERE auto_ai_analysis = 1',
+      ).all() as Array<{ folder_id: string }>).map((row) => row.folder_id))
+      : null;
+    const autoLinkedFolderIds = input.autoEligibleOnly
+      ? new Set((conn.prepare(
+        'SELECT folder_id FROM linked_folders WHERE library_id = ? AND auto_ai_analysis = 1',
+      ).all(libId) as Array<{ folder_id: string }>).map((row) => row.folder_id))
+      : null;
 
     // Determine target asset IDs.
     let targetAssetIds: string[];
@@ -18214,12 +18289,13 @@ export class LibraryService {
       for (const assetId of targetAssetIds) {
         const row = conn
           .prepare(
-            `SELECT relative_file_path, location_kind, linked_folder_id FROM assets
+            `SELECT relative_file_path, location_kind, managed_folder_id, linked_folder_id FROM assets
              WHERE asset_id = ?`,
           )
           .get(assetId) as {
             relative_file_path: string;
             location_kind: string;
+            managed_folder_id: string | null;
             linked_folder_id: string | null;
           } | undefined;
         if (!row) {
@@ -18228,6 +18304,19 @@ export class LibraryService {
         }
 
         const assetName = path.basename(row.relative_file_path) || assetId;
+
+        // This is deliberately before all other work: a global AI setup is
+        // only a capability.  Each managed folder or linked root must opt in
+        // before watcher/import activity is allowed to create any AI job.
+        if (
+          input.autoEligibleOnly &&
+          !(
+            (row.managed_folder_id !== null && autoManagedFolderIds?.has(row.managed_folder_id)) ||
+            (row.linked_folder_id !== null && autoLinkedFolderIds?.has(row.linked_folder_id))
+          )
+        ) {
+          continue;
+        }
 
         // Ignored assets must never appear in the task queue. Keep this gate
         // before format/dedup checks so explicit AI requests cannot briefly

@@ -902,6 +902,12 @@ const assetOperationSuccessSchemas = [
   }),
   z.strictObject({
     ok: z.literal(true),
+    type: z.literal('folder.ai-auto-analysis.updated'),
+    folderId: nonBlankString,
+    autoAiAnalysis: z.boolean(),
+  }),
+  z.strictObject({
+    ok: z.literal(true),
     type: z.literal('ignore.list'),
     paths: z.array(ignoredPathSchema),
   }),

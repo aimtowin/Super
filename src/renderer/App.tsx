@@ -1815,6 +1815,25 @@ function AppInner() {
   const selectedFolder = folders.find(
     (folder) => folder.folderId === selectedFolderId,
   );
+  const selectedLinkedFolder = linkedFolders.find(
+    (folder) => folder.folderId === selectedFolderId,
+  );
+  // Linked directory children are virtual index entries. Their automatic AI
+  // setting is intentionally owned by the linked root, so every child shows
+  // and changes the same persisted opt-in state.
+  const activeFolderAiTarget = selectedFolder
+    ? {
+        folderId: selectedFolder.folderId,
+        name: selectedFolder.name,
+        autoAiAnalysis: selectedFolder.autoAiAnalysis,
+      }
+    : selectedLinkedFolder
+      ? {
+          folderId: selectedLinkedFolder.linkedFolderId ?? selectedLinkedFolder.folderId,
+          name: selectedLinkedFolder.displayName,
+          autoAiAnalysis: selectedLinkedFolder.autoAiAnalysis,
+        }
+      : null;
   const selectedAssetFromList = showTrash
     ? trashedAssets.find((a) => a.assetId === selectedAssetId)
     : assets.find((asset) => asset.assetId === selectedAssetId);
@@ -5765,7 +5784,13 @@ function AppInner() {
     try {
       const planned = await api.planAiSearch({ naturalQuery });
       if (!planned.ok) {
-        setError(toMessage(planned.error, t("toast.aiAnalyzeFailed"), locale));
+        setError(
+          toMessage(
+            planned.error,
+            "AI 素材查找失败：模型没有返回完整的检索条件。请重试，或在 AI 设置中选择支持 JSON 输出的模型。",
+            locale,
+          ),
+        );
         return;
       }
       const queryDefinition = aiSearchPlanToDefinition(planned.value.plan, {
@@ -5787,7 +5812,13 @@ function AppInner() {
         collection.value,
       ]);
     } catch (caught) {
-      setError(toMessage(caught, t("toast.aiAnalyzeFailed"), locale));
+      setError(
+        toMessage(
+          caught,
+          "AI 素材查找失败：请检查模型连接和 JSON 输出支持后重试。",
+          locale,
+        ),
+      );
     } finally {
       setAiSmartSearchPlanning(false);
     }
@@ -9263,6 +9294,30 @@ function AppInner() {
     void refreshAiBatchStatus();
   }
 
+  async function setFolderAutoAiAnalysis(enabled: boolean) {
+    if (!api || !library || !activeFolderAiTarget) return;
+    const result = await api.setFolderAutoAiAnalysis({
+      libraryId: library.libraryId,
+      folderId: activeFolderAiTarget.folderId,
+      enabled,
+    });
+    if (!result.ok) {
+      setError(toMessage(result.error, "无法更新文件夹的自动 AI 分析设置。", locale));
+      return;
+    }
+    const updateFolder = <T extends { folderId: string; autoAiAnalysis?: boolean; linkedFolderId?: string }>(folder: T): T =>
+      folder.folderId === result.value.folderId || folder.linkedFolderId === result.value.folderId
+        ? { ...folder, autoAiAnalysis: result.value.autoAiAnalysis }
+        : folder;
+    setFolders((current) => current.map(updateFolder));
+    setLinkedFolders((current) => current.map(updateFolder));
+    setNotice(
+      enabled
+        ? `${activeFolderAiTarget.name} 已开启自动 AI 分析。`
+        : `${activeFolderAiTarget.name} 已关闭自动 AI 分析。`,
+    );
+  }
+
   async function resolveAiReanalysis(assetId: string, accept: boolean) {
     if (!api || !library) return;
     const result = await api.resolveAiReanalysis({ libraryId: library.libraryId, assetId, accept });
@@ -9811,9 +9866,6 @@ function AppInner() {
           setAiSmartTemporaryCollection(null);
           setAiSmartSearchOpen(true);
         }}
-        onAnalyzeFolder={(folderId, name) =>
-          void analyzeUnanalyzedFolder(folderId, name)
-        }
         inlineFolderEdit={inlineFolderEdit}
         onInlineFolderEditChange={changeInlineFolderEdit}
         onInlineFolderEditCommit={(onCreateSuccess) =>
@@ -9968,6 +10020,30 @@ function AppInner() {
                   <span className="tool-separator" />
                 </>
               )
+            )}
+            {!showTagManagement && !showPluginSidebarView && (
+              activeFolderAiTarget && !showTrash && !activeTagId && !activeCollectionId && !activeSmartCollectionId ? (
+                <div className="workspace-folder-ai-controls">
+                  <button
+                    className="compact-action"
+                    disabled={busy || !aiHasKey}
+                    onClick={() => void analyzeUnanalyzedFolder(assetScope, activeFolderAiTarget.name)}
+                    title={aiHasKey ? "分批分析当前文件夹中尚未分析的素材" : "请先在 AI 设置中连接模型"}
+                    type="button"
+                  >
+                    <Icon name="smart" size={14} />
+                    AI 分析未分析素材
+                  </button>
+                  <label className="workspace-auto-ai-toggle" title="仅对这个文件夹及其后续新增素材生效">
+                    <input
+                      checked={activeFolderAiTarget.autoAiAnalysis ?? false}
+                      onChange={(event) => void setFolderAutoAiAnalysis(event.currentTarget.checked)}
+                      type="checkbox"
+                    />
+                    自动 AI 分析
+                  </label>
+                </div>
+              ) : null
             )}
             {!showTagManagement && !showPluginSidebarView && (
               <CanvasToolbarControls

@@ -52,6 +52,19 @@ describe('AI natural-language search planner', () => {
     expect(String(init?.headers)).not.toContain('secret');
   });
 
+  it('recovers the bounded missing-comma JSON emitted by some OpenAI-compatible gateways', async () => {
+    const malformed = JSON.stringify(rawPlan)
+      .replace('],"synonyms"', ']\n"synonyms"');
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      choices: [{ message: { content: `\`\`\`json\n${malformed}\n\`\`\`` } }],
+    }));
+
+    await expect(planAiSearch({
+      apiFormat: 'openai_chat', model: 'compatible-model', apiKey: 'secret',
+      naturalQuery: '动漫', fetchFn,
+    })).resolves.toMatchObject({ keywords: ['science fiction', 'city'] });
+  });
+
   it('uses a Gemini API-key header rather than putting credentials in the URL', async () => {
     const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
       candidates: [{ content: { parts: [{ text: JSON.stringify(rawPlan) }] } }],

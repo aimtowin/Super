@@ -475,6 +475,7 @@ export interface SuperLibraryApi {
   }): Promise<LibraryApiResult<LinkedFolderSummary>>;
   getLinkedFolderRules(input: { libraryId: string; folderId: string }): Promise<LibraryApiResult<LinkedFolderRule[]>>;
   setLinkedFolderRules(input: { libraryId: string; folderId: string; rules: LinkedFolderRule[] }): Promise<LibraryApiResult<{ rules: LinkedFolderRule[]; hiddenCount: number; restoredCount: number }>>;
+  setFolderAutoAiAnalysis(input: { libraryId: string; folderId: string; enabled: boolean }): Promise<LibraryApiResult<{ folderId: string; autoAiAnalysis: boolean }>>;
   listIgnoredPaths(input: { libraryId: string }): Promise<LibraryApiResult<IgnoredPath[]>>;
   getGitignore(input: { libraryId: string }): Promise<LibraryApiResult<{ content: string }>>;
   setGitignore(input: { libraryId: string; content: string }): Promise<LibraryApiResult<{ content: string }>>;

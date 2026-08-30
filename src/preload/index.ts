@@ -980,6 +980,13 @@ const library: SuperLibraryApi = Object.freeze({
     return { ok: true as const, value: { rules: result.rules, hiddenCount: result.hiddenCount, restoredCount: result.restoredCount } };
   },
 
+  async setFolderAutoAiAnalysis({ libraryId, folderId, enabled }: { libraryId: string; folderId: string; enabled: boolean }) {
+    const result = await request({ type: 'folder.ai-auto-analysis.set.request', libraryId, folderId, enabled });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'folder.ai-auto-analysis.updated') throw new Error('Unexpected folder-ai-auto-analysis response.');
+    return { ok: true as const, value: { folderId: result.folderId, autoAiAnalysis: result.autoAiAnalysis } };
+  },
+
   async listIgnoredPaths({ libraryId }: { libraryId: string }) {
     const result = await request({ type: 'ignore.list.request', libraryId });
     if (!result.ok) return failure(result);

@@ -1790,6 +1790,7 @@ async function enqueueAutoAnalyzeAfterImport(
       libraryId,
       ...(importedAssetIds.length > 0 ? { assetIds: importedAssetIds } : {}),
       ...(folderId ? { folderId } : {}),
+      autoEligibleOnly: true,
     });
     if (result.ok && result.type === "ai.jobs.enqueued") {
       logger?.info(
@@ -2641,6 +2642,13 @@ async function commandFor(
         libraryId: request.libraryId,
         folderId: request.folderId,
         rules: request.rules,
+      };
+    case "folder.ai-auto-analysis.set.request":
+      return {
+        type: "folder.ai-auto-analysis.set",
+        libraryId: request.libraryId,
+        folderId: request.folderId,
+        enabled: request.enabled,
       };
     case "ignore.list.request":
       return { type: "ignore.list", libraryId: request.libraryId };

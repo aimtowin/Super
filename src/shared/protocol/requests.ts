@@ -524,6 +524,12 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     rules: z.array(linkedFolderRuleSchema).max(200),
   }),
   z.strictObject({
+    type: z.literal('folder.ai-auto-analysis.set.request'),
+    libraryId: identifierSchema,
+    folderId: identifierSchema,
+    enabled: z.boolean(),
+  }),
+  z.strictObject({
     type: z.literal('ignore.list.request'),
     libraryId: identifierSchema,
   }),
@@ -1614,6 +1620,12 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
     rules: z.array(linkedFolderRuleSchema).max(200),
   }),
   z.strictObject({
+    type: z.literal('folder.ai-auto-analysis.set'),
+    libraryId: identifierSchema,
+    folderId: identifierSchema,
+    enabled: z.boolean(),
+  }),
+  z.strictObject({
     type: z.literal('ignore.list'),
     libraryId: identifierSchema,
   }),
@@ -2513,6 +2525,8 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
     resumePaused: z.boolean().optional(),
     /** Manual analysis may intentionally replace an existing AI result. */
     forceExisting: z.boolean().optional(),
+    /** Background imports are restricted to folders the user opted into. */
+    autoEligibleOnly: z.boolean().optional(),
   }),
   z.strictObject({
     // 多选菜单「AI分析未分析项」：返回选中里没有任何 AI 生成数据的资产。
