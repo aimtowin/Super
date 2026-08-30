@@ -2191,6 +2191,7 @@ function AppInner() {
     sourceUrlFilter,
     availabilityFilter,
     excludeAvailabilityFilter,
+    analysisStatusFilter,
     widthRange,
     heightRange,
     aspectRatioRange,

@@ -65,6 +65,19 @@ describe('AI natural-language search planner', () => {
     })).resolves.toMatchObject({ keywords: ['science fiction', 'city'] });
   });
 
+  it('fills harmless omitted sections from a compatible model while retaining strict filter validation', async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      choices: [{ message: { content: '{"keywords":["动漫"\n"角色"]}' } }],
+    }));
+
+    await expect(planAiSearch({
+      apiFormat: 'openai_chat', model: 'compatible-model', apiKey: 'secret',
+      naturalQuery: '动漫角色', fetchFn,
+    })).resolves.toEqual({
+      keywords: ['动漫', '角色'], synonyms: [], exclusions: [], filters: [],
+    });
+  });
+
   it('uses a Gemini API-key header rather than putting credentials in the URL', async () => {
     const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
       candidates: [{ content: { parts: [{ text: JSON.stringify(rawPlan) }] } }],

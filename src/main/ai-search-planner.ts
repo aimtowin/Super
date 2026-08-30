@@ -460,6 +460,8 @@ function extractJsonObject(value: string): string {
 
 function repairCommonJsonPunctuation(value: string): string {
   return value
+    // `"one" "two"` is a common omission between two array values.
+    .replace(/("(?:[^"\\]|\\.)*")\s*(?="(?:[^"\\]|\\.)*")/g, '$1,')
     // `] "nextField":` and `} "nextField":` are the common model error.
     .replace(/([}\]])\s*(?="(?:[^"\\]|\\.)+"\s*:)/g, '$1,')
     // The same omission can follow a primitive field value.
@@ -470,7 +472,11 @@ function repairCommonJsonPunctuation(value: string): string {
 function normalizePlan(input: unknown): AiSearchPlan {
   let parsed: z.infer<typeof rawPlanSchema>;
   try {
-    parsed = rawPlanSchema.parse(input);
+    // OpenAI-compatible providers occasionally emit only the useful terms
+    // and omit empty optional sections.  These omissions are safe to fill
+    // locally; unknown fields and malformed filters still remain rejected by
+    // the strict schema below.
+    parsed = rawPlanSchema.parse(coercePlanShape(input));
   } catch (error) {
     throw new AiSearchPlannerError('AI_INVALID_RESPONSE', 'The provider returned an unsupported search plan.', { cause: error });
   }
@@ -502,6 +508,39 @@ function normalizePlan(input: unknown): AiSearchPlan {
   } catch (error) {
     throw new AiSearchPlannerError('AI_INVALID_RESPONSE', 'The provider returned an invalid search plan.', { cause: error });
   }
+}
+
+function coercePlanShape(input: unknown): unknown {
+  const source = asRecord(input);
+  const terms = (value: unknown): unknown[] =>
+    Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+  const rawFilters = Array.isArray(source.filters)
+    ? source.filters
+    : source.filters && typeof source.filters === 'object'
+      ? [source.filters]
+      : [];
+  const filters = rawFilters.map((value) => {
+    const filter = asRecord(value);
+    return {
+      ...filter,
+      kind: filter.kind,
+      field: filter.field,
+      values: terms(filter.values),
+      ranges: Array.isArray(filter.ranges) ? filter.ranges : [],
+      exclude: filter.exclude === true,
+    };
+  });
+  const sort = source.sort && typeof source.sort === 'object' && !Array.isArray(source.sort)
+    ? source.sort
+    : null;
+  return {
+    ...source,
+    keywords: terms(source.keywords),
+    synonyms: terms(source.synonyms),
+    exclusions: terms(source.exclusions),
+    filters,
+    sort,
+  };
 }
 
 function unique(values: string[]): string[] {

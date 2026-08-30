@@ -63,6 +63,7 @@ export type DimensionId =
   | "tags"
   | "shape"
   | "rating"
+  | "analysis"
   | "format"
   | "more";
 
@@ -74,7 +75,6 @@ type MoreFilterState = {
   sourceUrlFilter: "any" | "yes" | "no";
   availabilityFilter: "any" | "available" | "missing";
   excludeAvailabilityFilter: boolean;
-  analysisStatusFilter: "any" | "analyzed" | "unanalyzed";
   longEdgeRange: RangeState;
   widthRange: RangeState;
   heightRange: RangeState;
@@ -269,6 +269,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
   const tagsDimRef = useRef<HTMLDivElement>(null);
   const shapeDimRef = useRef<HTMLDivElement>(null);
   const ratingDimRef = useRef<HTMLDivElement>(null);
+  const analysisDimRef = useRef<HTMLDivElement>(null);
   const formatDimRef = useRef<HTMLDivElement>(null);
   const moreDimRef = useRef<HTMLDivElement>(null);
 
@@ -425,6 +426,9 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
   const formatToggleRef = useRef(
     new DimensionEnableToggle<{ formatFilter: string; exclude: boolean }>(),
   );
+  const analysisToggleRef = useRef(
+    new DimensionEnableToggle<{ analysisStatusFilter: "any" | "analyzed" | "unanalyzed" }>(),
+  );
   const moreToggleRef = useRef(new DimensionEnableToggle<MoreFilterState>());
 
   const chips = buildActiveFilterChips(snapshot, {
@@ -493,7 +497,6 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
     favoriteFilter !== "any" ||
     sourceUrlFilter !== "any" ||
     availabilityFilter !== "any" ||
-    analysisStatusFilter !== "any" ||
     longEdgeRange.min !== "" ||
     longEdgeRange.max !== "" ||
     widthRange.min !== "" ||
@@ -594,6 +597,16 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
     );
   };
 
+  const analysisActive = analysisStatusFilter !== "any";
+  const handleAnalysisDimensionClick = () => {
+    analysisToggleRef.current.toggle(
+      analysisActive,
+      { analysisStatusFilter },
+      { analysisStatusFilter: "any" },
+      (value) => setAnalysisStatusFilter(value.analysisStatusFilter),
+    );
+  };
+
   const handleMoreDimensionClick = () => {
     moreToggleRef.current.toggle(
       moreActive,
@@ -602,7 +615,6 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
         sourceUrlFilter,
         availabilityFilter,
         excludeAvailabilityFilter,
-        analysisStatusFilter,
         longEdgeRange,
         widthRange,
         heightRange,
@@ -613,7 +625,6 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
         sourceUrlFilter: "any",
         availabilityFilter: "any",
         excludeAvailabilityFilter: false,
-        analysisStatusFilter: "any",
         longEdgeRange: EMPTY_RANGE,
         widthRange: EMPTY_RANGE,
         heightRange: EMPTY_RANGE,
@@ -624,7 +635,6 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
         setSourceUrlFilter(value.sourceUrlFilter);
         setAvailabilityFilter(value.availabilityFilter);
         setExcludeAvailabilityFilter(value.excludeAvailabilityFilter);
-        setAnalysisStatusFilter(value.analysisStatusFilter);
         setLongEdgeRange(value.longEdgeRange);
         setWidthRange(value.widthRange);
         setHeightRange(value.heightRange);
@@ -826,6 +836,41 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                 {t("filter.exclude")}
               </label>
               <p className="dimension-filter-hint">{t("filter.shiftMultiSelectHint")}</p>
+            </PortaledPopover>
+          )}
+        </div>
+
+        <div className="dimension-filter-dim" data-dimension="analysis" ref={analysisDimRef}>
+          <DimensionButton
+            active={analysisActive}
+            disabled={controlsDisabled}
+            icon="smart"
+            label="AI 分析"
+            onClick={handleAnalysisDimensionClick}
+            open={openDimension === "analysis"}
+          />
+          {openDimension === "analysis" && (
+            <PortaledPopover
+              anchorRef={analysisDimRef}
+              className="dimension-filter-popover"
+              data-dimension="analysis"
+              role="dialog"
+            >
+              <label>
+                是否已 AI 分析
+                <select
+                  aria-label="是否已 AI 分析"
+                  className="text-field"
+                  disabled={controlsDisabled}
+                  onChange={(event) => setAnalysisStatusFilter(event.target.value as typeof analysisStatusFilter)}
+                  value={analysisStatusFilter}
+                >
+                  <option value="any">全部素材</option>
+                  <option value="analyzed">已 AI 分析</option>
+                  <option value="unanalyzed">未 AI 分析</option>
+                </select>
+              </label>
+              <p className="dimension-filter-hint">仅依据已确认写入的 AI 分析结果筛选。</p>
             </PortaledPopover>
           )}
         </div>
@@ -1036,20 +1081,6 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                   <option value="any">{t("common.all")}</option>
                   <option value="available">{t("filter.available")}</option>
                   <option value="missing">{t("filter.missing")}</option>
-                </select>
-              </label>
-              <label>
-                AI 分析状态
-                <select
-                  aria-label="AI 分析状态"
-                  className="text-field"
-                  disabled={controlsDisabled}
-                  onChange={(event) => setAnalysisStatusFilter(event.target.value as typeof analysisStatusFilter)}
-                  value={analysisStatusFilter}
-                >
-                  <option value="any">{t("common.all")}</option>
-                  <option value="analyzed">已分析</option>
-                  <option value="unanalyzed">未分析</option>
                 </select>
               </label>
               <label className="dimension-filter-check">

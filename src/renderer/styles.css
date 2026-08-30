@@ -8557,10 +8557,10 @@ select.ai-config-input.ai-config-languages {
   gap: 8px;
   /* Short one-line messages should hug their content instead of reserving a
      full 520px banner with an empty trailing half. Long messages still cap at
-     the same readable width and wrap/ellipsis through the item layout. */
+     the same readable width and wrap through the item layout. */
   width: fit-content;
   min-width: 0;
-  max-width: min(520px, calc(100vw - 32px));
+  max-width: min(760px, calc(100vw - 32px));
   max-height: calc(100vh - var(--shell-toolbar-height) - 40px);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -8682,7 +8682,7 @@ select.ai-config-input.ai-config-languages {
   box-sizing: border-box;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start;
   column-gap: 8px;
   /* Super-fvto: tighter trailing pad — X sat in a wide empty gutter. */
   padding: 7px 6px 7px 10px;
@@ -8705,9 +8705,10 @@ select.ai-config-input.ai-config-languages {
 
 .workspace-notice-item .ui-feedback__message {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
   line-height: 1.25;
 }
 
@@ -8743,9 +8744,10 @@ select.ai-config-input.ai-config-languages {
 
 .workspace-notice-item .workspace-notice-text {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
   line-height: 1.25;
 }
 
