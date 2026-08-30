@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { AiSearchPlan, SmartCollectionSummary } from "../shared/asset-types";
 import { Icon } from "./Icons";
@@ -34,12 +34,21 @@ export function AiSmartCollectionDialog({
     return `将从已分析素材中查找${terms ? `：${terms}` : "匹配条件"}${excluded}。`;
   }, [plan]);
 
-  useEffect(() => {
-    if (!open) return;
-    setRequest("");
-  }, [open]);
-
   if (!open) return null;
+
+  const showExample = !planning && !planSummary && !temporaryCollection;
+  const close = () => {
+    setRequest("");
+    onClose();
+  };
+  const discardTemporary = () => {
+    setRequest("");
+    onDiscardTemporary();
+  };
+  const keepTemporary = () => {
+    setRequest("");
+    onKeepTemporary();
+  };
 
   return (
     <div className="dialog-backdrop" role="presentation">
@@ -49,7 +58,7 @@ export function AiSmartCollectionDialog({
         headerActions={
           <button
             className="dialog-close"
-            onClick={onClose}
+            onClick={close}
             type="button"
             {...iconActionAttrs(t("common.close"))}
           >
@@ -61,19 +70,29 @@ export function AiSmartCollectionDialog({
         <p className="field-help ai-smart-collection-disclaimer">
           仅根据已分析素材的名称、标签和描述生成受限检索条件；不会访问或修改源文件。
         </p>
-        <div className="ai-smart-collection-chat" aria-live="polite">
-          <div className="ai-smart-collection-message is-assistant">
+        {showExample ? (
+          <div className="ai-smart-collection-example">
             例如：帮我找动漫角色立绘、带有火焰效果的横版视频，或某个已有标签。
           </div>
-          {planSummary ? (
-            <div className="ai-smart-collection-message is-assistant">{planSummary}</div>
-          ) : null}
-          {temporaryCollection ? (
-            <div className="ai-smart-collection-message is-assistant">
-              已创建临时智能合集“{temporaryCollection.name}”，包含 {temporaryCollection.assetCount} 项已分析素材。是否保留？
-            </div>
-          ) : null}
-        </div>
+        ) : null}
+        {planning ? (
+          <div className="ai-smart-collection-planning" aria-live="polite">
+            正在理解检索条件并生成临时合集…
+          </div>
+        ) : null}
+        {temporaryCollection ? (
+          <div className="ai-smart-collection-result" aria-live="polite">
+            <section className="ai-smart-collection-result-panel">
+              <span>检索条件</span>
+              <strong>{planSummary ?? "已生成受限检索条件。"}</strong>
+            </section>
+            <section className="ai-smart-collection-result-panel is-collection">
+              <span>临时智能合集</span>
+              <strong>{temporaryCollection.name}</strong>
+              <small>命中 {temporaryCollection.assetCount} 项已分析素材</small>
+            </section>
+          </div>
+        ) : null}
         {!temporaryCollection ? (
           <form
             className="ai-smart-collection-composer"
@@ -94,7 +113,7 @@ export function AiSmartCollectionDialog({
               value={request}
             />
             <div className="dialog-actions">
-              <button className="secondary-button" onClick={onClose} type="button">
+              <button className="secondary-button" onClick={close} type="button">
                 {t("common.cancel")}
               </button>
               <button className="primary-button" disabled={planning || !request.trim()} type="submit">
@@ -104,10 +123,10 @@ export function AiSmartCollectionDialog({
           </form>
         ) : (
           <div className="dialog-actions">
-            <button className="secondary-button" onClick={onDiscardTemporary} type="button">
+            <button className="secondary-button" onClick={discardTemporary} type="button">
               丢弃临时合集
             </button>
-            <button className="primary-button" onClick={onKeepTemporary} type="button">
+            <button className="primary-button" onClick={keepTemporary} type="button">
               保留合集
             </button>
           </div>
