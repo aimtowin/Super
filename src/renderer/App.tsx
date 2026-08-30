@@ -5834,6 +5834,19 @@ function AppInner() {
 
   async function executeSearchDefinition(definition: SearchDefinition) {
     if (!api || !library) return;
+    // A draft smart collection is a rule-editing surface: its first query is
+    // composed with the normal discovery controls, then saved by the sidebar
+    // action.  Keep that draft selected while its controls are being edited;
+    // otherwise the debounced search makes it look as though a click on the
+    // smart collection immediately navigated back to All assets.
+    const keepDraftSmartCollectionSelected = Boolean(
+      activeSmartCollectionId &&
+        !hasConfiguredSmartCollectionQuery(
+          smartCollections.find(
+            (collection) => collection.collectionId === activeSmartCollectionId,
+          )?.queryDefinition ?? "{}",
+        ),
+    );
     const requestGeneration = ++searchRequestGenerationRef.current;
     const result = await api.searchAssets({
       libraryId: library.libraryId,
@@ -5852,7 +5865,9 @@ function AppInner() {
     setShowTagManagement(false);
     setActivePluginSidebarViewId(null);
     if (!tagFilter.trim()) setActiveTagId(null);
-    setActiveSmartCollectionId(null);
+    if (!keepDraftSmartCollectionSelected) {
+      setActiveSmartCollectionId(null);
+    }
     if (!pendingRevealRef.current) {
       clearAssetSelection({ preserveFolders: true });
     }
@@ -5920,6 +5935,15 @@ function AppInner() {
     const shouldClearPreviousResults =
       hadDiscoveryInput.current && !hasDiscoveryInput;
     hadDiscoveryInput.current = hasDiscoveryInput;
+    const activeSmartCollection = activeSmartCollectionId
+      ? smartCollections.find(
+          (collection) => collection.collectionId === activeSmartCollectionId,
+        )
+      : undefined;
+    const isConfiguredSmartCollectionActive = Boolean(
+      activeSmartCollection &&
+        hasConfiguredSmartCollectionQuery(activeSmartCollection.queryDefinition),
+    );
     if (
       !library ||
       showTrash ||
@@ -5929,6 +5953,10 @@ function AppInner() {
       // user back on 所有资产. Explicit submit (runSearch) still exits.
       showTagManagement ||
       showPluginSidebarView ||
+      // A saved smart collection owns its own persisted query. Clearing the
+      // visible discovery controls while entering it must not start a second
+      // all-assets search that races the smart-collection result.
+      isConfiguredSmartCollectionActive ||
       (!hasDiscoveryInput && !shouldClearPreviousResults)
     )
       return;
@@ -5944,6 +5972,8 @@ function AppInner() {
     showTrash,
     showTagManagement,
     showPluginSidebarView,
+    activeSmartCollectionId,
+    smartCollections,
     searchValue,
     colorFilter,
     excludeColorFilter,
@@ -5972,9 +6002,8 @@ function AppInner() {
     const collection = smartCollections.find(
       (item) => item.collectionId === collectionId,
     );
-    if (!collection || !hasConfiguredSmartCollectionQuery(collection.queryDefinition)) {
+    if (!collection) {
       closeContextMenu();
-      setNotice(t("toast.smartCollectionNeedsCondition"));
       return;
     }
     await closeAssetPreview(false);
@@ -5982,6 +6011,26 @@ function AppInner() {
     workspaceCanvasRef.current?.scrollTo({ top: 0, left: 0 });
     resetBrowsePagination();
     setAssets([]);
+    setShowTrash(false);
+    setShowTagManagement(false);
+    setActivePluginSidebarViewId(null);
+    setActiveTagId(null);
+    setActiveCollectionId(null);
+    setActiveSmartCollectionId(collectionId);
+    setAssetScope("all");
+    clearAssetSelection();
+    clearDiscoveryControls();
+    recordNavigation({ kind: "smart-collection", collectionId });
+
+    if (!hasConfiguredSmartCollectionQuery(collection.queryDefinition)) {
+      // Drafts deliberately do not execute an unconstrained all-assets query.
+      // They remain visibly selected so the user can set the filter bar and
+      // save it with “用当前条件更新”.
+      setSearchTotal(0);
+      setSearchOffset(0);
+      setNotice(t("toast.smartCollectionNeedsCondition"));
+      return;
+    }
     try {
       const result = await api.executeSmartCollection({
         libraryId: library.libraryId,
@@ -5991,16 +6040,6 @@ function AppInner() {
         offset: 0,
       });
       if (!result.ok) throw new LibraryOperationError(result.error);
-      setShowTrash(false);
-      setShowTagManagement(false);
-    setActivePluginSidebarViewId(null);
-      setActiveTagId(null);
-      setActiveCollectionId(null);
-      setActiveSmartCollectionId(collectionId);
-      setAssetScope("all");
-      clearAssetSelection();
-      clearDiscoveryControls();
-      recordNavigation({ kind: "smart-collection", collectionId });
       setSmartCollections((current) =>
         current.map((collection) =>
           collection.collectionId === collectionId
