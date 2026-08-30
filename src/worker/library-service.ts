@@ -37095,13 +37095,44 @@ export class LibraryService {
           ? true
           : Boolean(fileStat?.isFile() && !fileStat.isSymbolicLink());
         if (!snapshotEntry && (!fileStat || !statIsFile)) {
-          if (asset.availability === 'available') {
-            openLibrary.connection
-              .prepare("UPDATE assets SET availability = 'missing', updated_at = ? WHERE asset_id = ?")
-              .run(new Date().toISOString(), asset.asset_id);
-            changedCount += 1;
-            missingCount += 1;
+          // A linked root can temporarily disappear when a network volume is
+          // offline. That is not evidence that every child was deleted, so
+          // preserve its index and render it unavailable until the root can
+          // be checked again.
+          if (asset.location_kind === 'linked') {
+            const linkedFolder = openLibrary.connection
+              .prepare('SELECT absolute_root_path, status FROM linked_folders WHERE folder_id = ?')
+              .get(asset.linked_folder_id) as {
+                absolute_root_path: string;
+                status: 'available' | 'offline';
+              } | undefined;
+            if (!linkedFolder || linkedFolder.status !== 'available'
+              || this.linkedRootIsGone(linkedFolder.absolute_root_path)) {
+              if (asset.availability === 'available') {
+                openLibrary.connection
+                  .prepare("UPDATE assets SET availability = 'missing', updated_at = ? WHERE asset_id = ?")
+                  .run(new Date().toISOString(), asset.asset_id);
+                changedCount += 1;
+                missingCount += 1;
+              }
+              continue;
+            }
           }
+
+          // The source was scanned successfully and this exact asset is no
+          // longer present. Keeping a `missing` row here leaves a permanent
+          // broken card in every browse/search scope. Remove the index row
+          // instead; its dependent search, AI, revision and job rows cascade
+          // with the asset. Image-sequence membership is maintained outside
+          // SQLite's FK graph, so dissolve it explicitly first.
+          this.dissolveImageSequencesForAssets(openLibrary, [asset.asset_id]);
+          openLibrary.connection
+            .prepare('DELETE FROM assets WHERE asset_id = ?')
+            .run(asset.asset_id);
+          changedCount += 1;
+          // Public protocol field retained for compatibility; it now counts
+          // confirmed disk removals rather than placeholder cards.
+          missingCount += 1;
           continue;
         }
 

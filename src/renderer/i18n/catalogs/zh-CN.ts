@@ -1893,7 +1893,7 @@ export const zhCN = {
     zipImportFailed: "ZIP 导入失败。",
     libraryImportComplete: "已导入并打开「{name}」。",
     diskSyncedAuto: "已自动同步 {count} 项磁盘变化{missing}。",
-    diskSyncedMissing: "，其中 {count} 项丢失",
+    diskSyncedMissing: "，其中已移除 {count} 项",
     textFileSaved: "文件已保存。",
     diskChangedRefreshFailed: "磁盘内容已变化，但界面刷新失败。",
     exportComplete: "导出完成：{files} 文件，{bytes}。",

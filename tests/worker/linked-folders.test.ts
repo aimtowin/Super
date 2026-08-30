@@ -244,6 +244,27 @@ describe('Linked folder import', () => {
     service.closeAll();
   });
 
+  it('removes a linked asset index when its file is deleted but the root remains available', () => {
+    const root = temporaryRoot();
+    const sourceRoot = path.join(root, 'source');
+    mkdirSync(sourceRoot);
+    const removedPath = path.join(sourceRoot, 'removed.png');
+    writeFileSync(removedPath, 'removed');
+    writeFileSync(path.join(sourceRoot, 'kept.png'), 'kept');
+
+    const service = newService();
+    const created = service.createLibrary({ displayName: 'Linked Removal', selectedParentPath: root });
+    service.importFolderAsLinked({ libraryId: created.libraryId, sourceRootPath: sourceRoot });
+
+    rmSync(removedPath);
+    const refreshed = service.refreshManagedAssets(created.libraryId, { includeAssets: true });
+    expect(refreshed).toMatchObject({ changedCount: 1, missingCount: 1 });
+    expect(refreshed.assets.map((asset) => asset.relativeFilePath)).toEqual(['kept.png']);
+    expect(service.listAssets({ libraryId: created.libraryId, recursive: true })
+      .map((asset) => asset.relativeFilePath)).toEqual(['kept.png']);
+    service.closeAll();
+  });
+
   it('Super-a9vh: exposes virtual child folders and non-recursive browse', () => {
     const root = temporaryRoot();
     const sourceRoot = path.join(root, 'source');

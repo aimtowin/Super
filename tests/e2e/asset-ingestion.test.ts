@@ -33,7 +33,6 @@ function sidebarFolderRow(window: Page, folderName: string) {
 }
 
 test('imports files and a directory hierarchy, then reconciles external changes', async () => {
-  const testInfo = test.info();
   const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'super-ingestion-e2e-'));
   const sourceRoot = path.join(temporaryRoot, 'sources');
   const sourceDirectory = path.join(sourceRoot, '角色参考');
@@ -144,21 +143,13 @@ test('imports files and a directory hierarchy, then reconciles external changes'
     writeFileSync(path.join(libraryPath, 'Assets', '项目', 'hero.png'), Buffer.from('image-v2-longer'));
     unlinkSync(importedNestedPath);
     await window.getByRole('button', { name: '刷新磁盘变化' }).click();
-    await expect(
-      window.locator('.missing-overlay[aria-label="文件丢失"]').first(),
-    ).toBeVisible();
-    const missingScreenshot = testInfo.outputPath('external-missing.png');
-    await window.screenshot({ path: missingScreenshot });
-    await testInfo.attach('external-missing', { path: missingScreenshot, contentType: 'image/png' });
-
     const afterExternalChange = await listAllAssets(window);
     const heroAfter = afterExternalChange.find((asset) => asset.displayName === 'hero.png');
     const poseAfter = afterExternalChange.find((asset) => asset.displayName === 'pose.webp');
     expect(heroAfter?.assetId).toBe(heroBefore?.assetId);
     expect(heroAfter?.currentRevisionId).not.toBe(heroBefore?.currentRevisionId);
     expect(heroAfter?.availability).toBe('available');
-    expect(poseAfter?.assetId).toBe(poseBefore?.assetId);
-    expect(poseAfter?.availability).toBe('missing');
+    expect(poseAfter).toBeUndefined();
 
     const repeatedMissingRefresh = await refreshAllAssets(window);
     expect(repeatedMissingRefresh.changedCount).toBe(0);
@@ -166,9 +157,8 @@ test('imports files and a directory hierarchy, then reconciles external changes'
     writeFileSync(importedNestedPath, Buffer.from('pose-restored'));
     const restored = await refreshAllAssets(window);
     const restoredPose = restored.assets.find((asset) => asset.displayName === 'pose.webp');
-    expect(restoredPose?.assetId).toBe(poseBefore?.assetId);
+    expect(restoredPose?.assetId).not.toBe(poseBefore?.assetId);
     expect(restoredPose?.availability).toBe('available');
-    expect(restoredPose?.currentRevisionId).not.toBe(poseBefore?.currentRevisionId);
     unlinkSync(importedNestedPath);
     await window.getByRole('button', { name: '刷新磁盘变化' }).click();
 
@@ -181,7 +171,7 @@ test('imports files and a directory hierarchy, then reconciles external changes'
     await expect(sidebarFolderRow(window, '项目')).toBeVisible();
     const afterReopen = await listAllAssets(window);
     expect(afterReopen.find((asset) => asset.displayName === 'hero.png')?.assetId).toBe(heroBefore?.assetId);
-    expect(afterReopen.find((asset) => asset.displayName === 'pose.webp')?.availability).toBe('missing');
+    expect(afterReopen.find((asset) => asset.displayName === 'pose.webp')).toBeUndefined();
   } finally {
     await application.close();
     rmSync(temporaryRoot, { force: true, recursive: true });
