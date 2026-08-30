@@ -553,11 +553,7 @@ function coercePlanShape(input: unknown): unknown {
   const source = asRecord(input);
   const terms = (value: unknown): unknown[] =>
     Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
-  const rawFilters = Array.isArray(source.filters)
-    ? source.filters
-    : source.filters && typeof source.filters === 'object'
-      ? [source.filters]
-      : [];
+  const rawFilters = coerceCompatibleFilters(source.filters, terms);
   const filters = rawFilters.map((value) => {
     const filter = asRecord(value);
     return {
@@ -580,6 +576,63 @@ function coercePlanShape(input: unknown): unknown {
     filters,
     sort,
   };
+}
+
+/**
+ * A few OpenAI-compatible models return a compact filters object such as
+ * `{ "format": ["png"], "availability": "available" }` despite being
+ * asked for an array of typed clauses. Translate only recognised fields; an
+ * unknown key remains untouched so strict validation rejects it as before.
+ */
+function coerceCompatibleFilters(
+  value: unknown,
+  terms: (value: unknown) => unknown[],
+): unknown[] {
+  const entries = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? [value]
+      : [];
+  const categoricalFields = new Set([
+    'format', 'tag', 'rating', 'favorite', 'source_url', 'availability',
+  ]);
+  const numericFields = new Set(['width', 'height', 'aspect_ratio', 'duration_ms']);
+
+  return entries.flatMap((value) => {
+    const filter = asRecord(value);
+    // This is already the documented clause shape (possibly missing harmless
+    // empty fields, which the caller fills below).
+    if ('kind' in filter || 'field' in filter) return [filter];
+    const keys = Object.keys(filter);
+    if (keys.length === 0) return [filter];
+    // Preserve an unrecognised loose object to make the strict schema fail;
+    // never silently turn a model-invented operation into a search filter.
+    if (keys.some((key) => !categoricalFields.has(key) && !numericFields.has(key))) return [filter];
+    return keys.map((field) => {
+      const fieldValue = filter[field];
+      if (categoricalFields.has(field)) {
+        return {
+          kind: 'categorical', field, values: terms(fieldValue), ranges: [], exclude: false,
+        };
+      }
+      const rawRanges = Array.isArray(fieldValue)
+        ? fieldValue
+        : fieldValue && typeof fieldValue === 'object'
+          ? [fieldValue]
+          : [];
+      return {
+        kind: 'numeric', field, values: [],
+        ranges: rawRanges.map((range) => {
+          const record = asRecord(range);
+          return {
+            min: typeof record.min === 'number' ? record.min : null,
+            max: typeof record.max === 'number' ? record.max : null,
+          };
+        }),
+        exclude: false,
+      };
+    });
+  });
 }
 
 function unique(values: string[]): string[] {

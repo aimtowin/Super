@@ -6052,6 +6052,7 @@ function AppInner() {
       favoriteFilter !== "any" ||
       sourceUrlFilter !== "any" ||
       availabilityFilter !== "any" ||
+      analysisStatusFilter !== "any" ||
       widthRange.min ||
       widthRange.max ||
       heightRange.min ||
@@ -6121,6 +6122,7 @@ function AppInner() {
     sourceUrlFilter,
     availabilityFilter,
     excludeAvailabilityFilter,
+    analysisStatusFilter,
     widthRange,
     heightRange,
     aspectRatioRange,

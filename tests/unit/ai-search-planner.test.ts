@@ -97,6 +97,26 @@ describe('AI natural-language search planner', () => {
     });
   });
 
+  it('normalizes the compact recognized filter map returned by some compatible models', async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      choices: [{ message: { content: JSON.stringify({
+        keywords: ['动漫'],
+        filters: { format: ['png'], availability: 'available' },
+      }) } }],
+    }));
+
+    await expect(planAiSearch({
+      apiFormat: 'openai_chat', model: 'compatible-model', apiKey: 'secret',
+      naturalQuery: '动漫图片', fetchFn,
+    })).resolves.toEqual({
+      keywords: ['动漫'], synonyms: [], exclusions: [],
+      filters: [
+        { field: 'format', values: ['png'], exclude: false },
+        { field: 'availability', values: ['available'], exclude: false },
+      ],
+    });
+  });
+
   it('uses a Gemini API-key header rather than putting credentials in the URL', async () => {
     const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
       candidates: [{ content: { parts: [{ text: JSON.stringify(rawPlan) }] } }],
