@@ -74,6 +74,7 @@ type MoreFilterState = {
   sourceUrlFilter: "any" | "yes" | "no";
   availabilityFilter: "any" | "available" | "missing";
   excludeAvailabilityFilter: boolean;
+  analysisStatusFilter: "any" | "analyzed" | "unanalyzed";
   longEdgeRange: RangeState;
   widthRange: RangeState;
   heightRange: RangeState;
@@ -117,6 +118,8 @@ export type DimensionFilterBarProps = {
   setAvailabilityFilter: (value: "any" | "available" | "missing") => void;
   excludeAvailabilityFilter: boolean;
   setExcludeAvailabilityFilter: (value: boolean) => void;
+  analysisStatusFilter: "any" | "analyzed" | "unanalyzed";
+  setAnalysisStatusFilter: (value: "any" | "analyzed" | "unanalyzed") => void;
   aspectRatioRange: RangeState;
   setAspectRatioRange: Dispatch<SetStateAction<RangeState>>;
   /** Selected shape/aspect ranges (OR). Empty → use aspectRatioRange alone. */
@@ -237,6 +240,8 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
     setAvailabilityFilter,
     excludeAvailabilityFilter,
     setExcludeAvailabilityFilter,
+    analysisStatusFilter,
+    setAnalysisStatusFilter,
     aspectRatioRange,
     setAspectRatioRange,
     aspectRatioRanges,
@@ -488,6 +493,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
     favoriteFilter !== "any" ||
     sourceUrlFilter !== "any" ||
     availabilityFilter !== "any" ||
+    analysisStatusFilter !== "any" ||
     longEdgeRange.min !== "" ||
     longEdgeRange.max !== "" ||
     widthRange.min !== "" ||
@@ -596,6 +602,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
         sourceUrlFilter,
         availabilityFilter,
         excludeAvailabilityFilter,
+        analysisStatusFilter,
         longEdgeRange,
         widthRange,
         heightRange,
@@ -606,6 +613,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
         sourceUrlFilter: "any",
         availabilityFilter: "any",
         excludeAvailabilityFilter: false,
+        analysisStatusFilter: "any",
         longEdgeRange: EMPTY_RANGE,
         widthRange: EMPTY_RANGE,
         heightRange: EMPTY_RANGE,
@@ -616,6 +624,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
         setSourceUrlFilter(value.sourceUrlFilter);
         setAvailabilityFilter(value.availabilityFilter);
         setExcludeAvailabilityFilter(value.excludeAvailabilityFilter);
+        setAnalysisStatusFilter(value.analysisStatusFilter);
         setLongEdgeRange(value.longEdgeRange);
         setWidthRange(value.widthRange);
         setHeightRange(value.heightRange);
@@ -1027,6 +1036,20 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                   <option value="any">{t("common.all")}</option>
                   <option value="available">{t("filter.available")}</option>
                   <option value="missing">{t("filter.missing")}</option>
+                </select>
+              </label>
+              <label>
+                AI 分析状态
+                <select
+                  aria-label="AI 分析状态"
+                  className="text-field"
+                  disabled={controlsDisabled}
+                  onChange={(event) => setAnalysisStatusFilter(event.target.value as typeof analysisStatusFilter)}
+                  value={analysisStatusFilter}
+                >
+                  <option value="any">{t("common.all")}</option>
+                  <option value="analyzed">已分析</option>
+                  <option value="unanalyzed">未分析</option>
                 </select>
               </label>
               <label className="dimension-filter-check">

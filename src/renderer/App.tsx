@@ -498,6 +498,7 @@ type QueryFilterSnapshot = {
   sourceUrlFilter: "any" | "yes" | "no";
   availabilityFilter: "any" | "available" | "missing";
   excludeAvailabilityFilter: boolean;
+  analysisStatusFilter: "any" | "analyzed" | "unanalyzed";
   widthRange: QueryNumericRangeState;
   heightRange: QueryNumericRangeState;
   aspectRatioRange: QueryNumericRangeState;
@@ -883,6 +884,9 @@ function AppInner() {
   >("any");
   const [excludeAvailabilityFilter, setExcludeAvailabilityFilter] =
     useState(false);
+  const [analysisStatusFilter, setAnalysisStatusFilter] = useState<
+    "any" | "analyzed" | "unanalyzed"
+  >("any");
   const [widthRange, setWidthRange] = useState({
     min: "",
     max: "",
@@ -2114,6 +2118,7 @@ function AppInner() {
       sourceUrlFilter,
       availabilityFilter,
       excludeAvailabilityFilter,
+      analysisStatusFilter,
       widthRange,
       heightRange,
       aspectRatioRange,
@@ -3974,6 +3979,7 @@ function AppInner() {
     setSourceUrlFilter("any");
     setAvailabilityFilter("any");
     setExcludeAvailabilityFilter(false);
+    setAnalysisStatusFilter("any");
     setWidthRange({ min: "", max: "", exclude: false });
     setHeightRange({ min: "", max: "", exclude: false });
     setAspectRatioRange({ min: "", max: "", exclude: false });
@@ -3996,6 +4002,7 @@ function AppInner() {
     setSourceUrlFilter("any");
     setAvailabilityFilter("any");
     setExcludeAvailabilityFilter(false);
+    setAnalysisStatusFilter("any");
     setWidthRange({ min: "", max: "", exclude: false });
     setHeightRange({ min: "", max: "", exclude: false });
     setAspectRatioRange({ min: "", max: "", exclude: false });
@@ -4035,6 +4042,9 @@ function AppInner() {
       case "availability":
         setAvailabilityFilter("any");
         setExcludeAvailabilityFilter(false);
+        return;
+      case "analysis_status":
+        setAnalysisStatusFilter("any");
         return;
       case "aspect_ratio":
         setAspectRatioRange({ min: "", max: "", exclude: false });
@@ -5029,6 +5039,7 @@ function AppInner() {
       sourceUrlFilter,
       availabilityFilter,
       excludeAvailabilityFilter,
+      analysisStatusFilter,
       widthRange,
       heightRange,
       aspectRatioRange,
@@ -5114,6 +5125,12 @@ function AppInner() {
         field: "availability",
         values: [filtersState.availabilityFilter],
         exclude: filtersState.excludeAvailabilityFilter,
+      });
+    if (filtersState.analysisStatusFilter !== "any")
+      filters.push({
+        field: "analysis_status",
+        values: [filtersState.analysisStatusFilter],
+        exclude: false,
       });
     const technicalRanges: Array<{
       field: "width" | "height" | "aspect_ratio" | "duration_ms" | "long_edge";
@@ -9800,6 +9817,7 @@ function AppInner() {
           className={`workspace-discovery${previewAsset ? " is-viewing" : previewRestoring ? " is-restoring" : ""}`}
         >
           <DimensionFilterBar
+            analysisStatusFilter={analysisStatusFilter}
             availabilityFilter={availabilityFilter}
             aspectRatioRange={aspectRatioRange}
             aspectRatioRanges={aspectRatioRanges}
@@ -9828,6 +9846,7 @@ function AppInner() {
             ratingFilter={ratingFilter}
             setAspectRatioRange={setAspectRatioRange}
             setAspectRatioRanges={setAspectRatioRanges}
+            setAnalysisStatusFilter={setAnalysisStatusFilter}
             setAvailabilityFilter={setAvailabilityFilter}
             setColorFilter={setColorFilter}
             setDurationRange={setDurationRange}
@@ -9876,6 +9895,7 @@ function AppInner() {
               sourceUrlFilter,
               availabilityFilter,
               excludeAvailabilityFilter,
+              analysisStatusFilter,
               widthRange,
               heightRange,
               aspectRatioRange,

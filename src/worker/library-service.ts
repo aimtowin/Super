@@ -26154,6 +26154,19 @@ export class LibraryService {
           params.push(...filter.values);
           break;
         }
+        case 'analysis_status': {
+          const hasAcceptedAnalysis = `EXISTS (
+            SELECT 1 FROM asset_ai_analysis_state ai_state
+             WHERE ai_state.asset_id = a.asset_id
+          )`;
+          const includesAnalyzed = filter.values.includes('analyzed');
+          const includesUnanalyzed = filter.values.includes('unanalyzed');
+          if (includesAnalyzed && includesUnanalyzed) break;
+          if (includesAnalyzed) conditions.push(filter.exclude ? `(NOT ${hasAcceptedAnalysis})` : hasAcceptedAnalysis);
+          else if (includesUnanalyzed) conditions.push(filter.exclude ? hasAcceptedAnalysis : `(NOT ${hasAcceptedAnalysis})`);
+          else conditions.push('1 = 0');
+          break;
+        }
         case 'color': {
           const ids = parseColorFilterIds(filter.values.join(','));
           const built = colorFilterSql(

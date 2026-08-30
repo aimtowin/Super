@@ -366,6 +366,7 @@ const categoricalFilterClauseSchema = z.strictObject({
     'favorite',
     'source_url',
     'availability',
+    'analysis_status',
     'color',
   ]),
   values: z.array(boundedSearchValue).max(32),

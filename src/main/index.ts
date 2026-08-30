@@ -1701,6 +1701,14 @@ function publishAssetChange(event: AssetChangeEvent): void {
       ...(parsed.source === undefined ? {} : { source: parsed.source }),
     },
   }));
+  // Linked folders are reconciled by the Worker watcher rather than the
+  // import bridge. Reconcile the unanalysed queue after a watcher change so
+  // files added to an existing link receive the same opt-in auto-analysis as
+  // files imported into a managed library. The queue's durable state makes
+  // duplicate watcher notifications harmless.
+  if (parsed.source === 'watcher') {
+    void enqueueAutoAnalyzeAfterImport(parsed.libraryId, [], undefined, true);
+  }
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send(
     ASSET_CHANGE_CHANNEL,
@@ -1770,10 +1778,11 @@ async function enqueueAutoAnalyzeAfterImport(
   libraryId: string,
   importedAssetIds: string[],
   folderId?: string,
+  reconcileUnanalyzedLibrary = false,
 ): Promise<void> {
   const config = loadAiConfig();
   if (!config.autoAnalyzeEnabled || !config.hasKey || !config.apiFormat) return;
-  if ((importedAssetIds.length === 0 && !folderId) || !workerClient) return;
+  if ((importedAssetIds.length === 0 && !folderId && !reconcileUnanalyzedLibrary) || !workerClient) return;
 
   try {
     const result = await workerClient.request({
@@ -1785,7 +1794,7 @@ async function enqueueAutoAnalyzeAfterImport(
     if (result.ok && result.type === "ai.jobs.enqueued") {
       logger?.info(
         "auto-analyze",
-        `Enqueued ${result.enqueued} AI analysis jobs after import.`,
+        `Enqueued ${result.enqueued} AI analysis jobs after import or source refresh.`,
       );
       await processAiQueue(libraryId);
     }

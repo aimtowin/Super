@@ -23,6 +23,7 @@ export type DiscoveryFilterSnapshot = {
   sourceUrlFilter: "any" | "yes" | "no";
   availabilityFilter: "any" | "available" | "missing";
   excludeAvailabilityFilter: boolean;
+  analysisStatusFilter?: "any" | "analyzed" | "unanalyzed";
   widthRange: { min: string; max: string; exclude: boolean };
   heightRange: { min: string; max: string; exclude: boolean };
   aspectRatioRange: { min: string; max: string; exclude: boolean };
@@ -129,6 +130,12 @@ export function buildActiveFilterChips(
       detail: snapshot.excludeAvailabilityFilter ? "−" : undefined,
     });
   }
+  if (snapshot.analysisStatusFilter && snapshot.analysisStatusFilter !== "any") {
+    chips.push({
+      id: "analysis_status",
+      label: snapshot.analysisStatusFilter === "analyzed" ? "已分析" : "未分析",
+    });
+  }
 
   const aspectRanges =
     snapshot.aspectRatioRanges && snapshot.aspectRatioRanges.length > 0
@@ -193,6 +200,7 @@ export type ClearableFilterId =
   | "favorite"
   | "source_url"
   | "availability"
+  | "analysis_status"
   | "aspect_ratio"
   | "long_edge"
   | "width"
