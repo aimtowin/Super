@@ -2855,6 +2855,62 @@ const AI_ANALYSIS_STATE_SCHEMA_CHECKSUM = createHash('sha256')
   .update(AI_ANALYSIS_STATE_SCHEMA_SQL)
   .digest('hex');
 
+// A migration retry can encounter the durable v46 tables when a previous
+// build completed the DDL but crashed before recording schema_migrations.
+// Recreate only missing objects, then run the idempotent backfill.
+function ensureAiAnalysisStateSchema(connection: DatabaseConnection): void {
+  if (!hasSchemaObject(connection, 'asset_ai_analysis_state')) {
+    connection.exec(`
+      CREATE TABLE asset_ai_analysis_state (
+        asset_id TEXT PRIMARY KEY REFERENCES assets(asset_id) ON DELETE CASCADE,
+        analyzed_at TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        model_version TEXT NOT NULL
+      );
+    `);
+  }
+  connection.exec(`
+    INSERT OR IGNORE INTO asset_ai_analysis_state
+      (asset_id, analyzed_at, model_id, model_version)
+    SELECT asset_id, MAX(generated_at), MAX(model_id), MAX(model_version)
+      FROM ai_content GROUP BY asset_id;
+    INSERT OR IGNORE INTO asset_ai_analysis_state
+      (asset_id, analyzed_at, model_id, model_version)
+    SELECT aat.asset_id, COALESCE(MAX(ac.generated_at), datetime('now')),
+           COALESCE(MAX(aat.model_id), 'legacy'), COALESCE(MAX(aat.model_version), 'legacy')
+      FROM ai_asset_tags aat
+      LEFT JOIN ai_content ac ON ac.asset_id = aat.asset_id
+     GROUP BY aat.asset_id;
+  `);
+  if (!hasSchemaObject(connection, 'ai_reanalysis_jobs')) {
+    connection.exec(`
+      CREATE TABLE ai_reanalysis_jobs (
+        job_id TEXT PRIMARY KEY REFERENCES jobs(job_id) ON DELETE CASCADE,
+        asset_id TEXT NOT NULL REFERENCES assets(asset_id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL
+      );
+    `);
+  }
+  if (!hasSchemaObject(connection, 'ai_reanalysis_proposals')) {
+    connection.exec(`
+      CREATE TABLE ai_reanalysis_proposals (
+        asset_id TEXT PRIMARY KEY REFERENCES assets(asset_id) ON DELETE CASCADE,
+        job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+        description TEXT,
+        tags_json TEXT NOT NULL,
+        rating TEXT,
+        enabled_fields_json TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        model_version TEXT NOT NULL,
+        generated_at TEXT NOT NULL
+      );
+    `);
+  }
+  connection.exec(
+    'CREATE INDEX IF NOT EXISTS ai_reanalysis_proposals_job_idx ON ai_reanalysis_proposals(job_id);',
+  );
+}
+
 // Migration v47: automatic AI analysis is explicitly opt-in per source
 // folder.  Global AI credentials may be configured, but they must never make
 // every managed or linked directory start analysing on their own.
@@ -5522,6 +5578,8 @@ function migrateDatabaseUnserialized(connection: DatabaseConnection, allowFresh:
           ensureContentFingerprintColumn(connection);
         } else if (migration.version === 38) {
           ensureSyncSchema(connection);
+        } else if (migration.version === 46) {
+          ensureAiAnalysisStateSchema(connection);
         } else if (migration.version === 47) {
           ensureFolderAutoAiAnalysisSchema(connection);
         } else {
@@ -39833,16 +39891,20 @@ export class LibraryService {
     this.cancelJobs(libraryId);
     // A close is an interruption, not a user cancellation: persist active
     // linked-index removals as queued so the next open continues safely.
-    openLibrary.connection.prepare(
-      `UPDATE linked_folder_removal_jobs
-          SET status = 'queued', updated_at = ?
-        WHERE library_id = ? AND status = 'running'`,
-    ).run(new Date().toISOString(), libraryId);
-    openLibrary.connection.prepare(
-      `UPDATE linked_folder_index_jobs
-          SET status = 'queued', updated_at = ?
-        WHERE library_id = ? AND status = 'running'`,
-    ).run(new Date().toISOString(), libraryId);
+    if (hasSchemaObject(openLibrary.connection, 'linked_folder_removal_jobs')) {
+      openLibrary.connection.prepare(
+        `UPDATE linked_folder_removal_jobs
+            SET status = 'queued', updated_at = ?
+          WHERE library_id = ? AND status = 'running'`,
+      ).run(new Date().toISOString(), libraryId);
+    }
+    if (hasSchemaObject(openLibrary.connection, 'linked_folder_index_jobs')) {
+      openLibrary.connection.prepare(
+        `UPDATE linked_folder_index_jobs
+            SET status = 'queued', updated_at = ?
+          WHERE library_id = ? AND status = 'running'`,
+      ).run(new Date().toISOString(), libraryId);
+    }
     this.abortActiveMediaJobs(libraryId);
     this.stopAssetWatcher(libraryId);
     this.stopLinkedWatchers(libraryId);
