@@ -2497,7 +2497,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-color: color-mix(in srgb, var(--danger) 42%, var(--divider));
 }
 
-.ai-smart-collection-dialog {
+.create-dialog.ai-smart-collection-dialog {
   width: min(620px, calc(100vw - 48px));
   max-height: calc(100dvh - 32px);
   /* .create-dialog's auto margins can consume the available flex space and
@@ -2505,9 +2505,12 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
      already owns centering, so keep this surface free of auto margins. */
   margin: 0;
   border-color: color-mix(in srgb, var(--divider) 78%, var(--accent));
-  background: color-mix(in srgb, var(--pane) 82%, transparent);
-  box-shadow: 0 20px 52px rgb(0 0 0 / 28%);
-  backdrop-filter: blur(20px) saturate(135%);
+  /* Override the later generic .create-dialog solid surface. This modal is
+     intentionally a true glass sheet, with the workspace remaining visible
+     behind the result panels rather than merely using a dark opaque card. */
+  background: color-mix(in srgb, var(--pane) 58%, transparent);
+  box-shadow: 0 20px 52px rgb(0 0 0 / 32%), inset 0 1px 0 rgb(255 255 255 / 9%);
+  backdrop-filter: blur(24px) saturate(145%);
 }
 
 .ai-smart-collection-disclaimer {
