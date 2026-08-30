@@ -2805,6 +2805,56 @@ const LINKED_FOLDER_INDEX_JOBS_SCHEMA_CHECKSUM = createHash('sha256')
   .update(LINKED_FOLDER_INDEX_JOBS_SCHEMA_SQL)
   .digest('hex');
 
+// Migration v46: AI analysis is a durable asset state rather than an
+// inference from whichever output fields happened to be enabled. Re-analysis
+// results are staged until the user explicitly accepts them, so an unwanted
+// model response cannot overwrite accepted metadata.
+const AI_ANALYSIS_STATE_SCHEMA_SQL = `
+  CREATE TABLE asset_ai_analysis_state (
+    asset_id TEXT PRIMARY KEY REFERENCES assets(asset_id) ON DELETE CASCADE,
+    analyzed_at TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    model_version TEXT NOT NULL
+  );
+
+  INSERT OR IGNORE INTO asset_ai_analysis_state
+    (asset_id, analyzed_at, model_id, model_version)
+  SELECT asset_id, MAX(generated_at), MAX(model_id), MAX(model_version)
+    FROM ai_content
+   GROUP BY asset_id;
+
+  INSERT OR IGNORE INTO asset_ai_analysis_state
+    (asset_id, analyzed_at, model_id, model_version)
+  SELECT aat.asset_id, COALESCE(MAX(ac.generated_at), datetime('now')),
+         COALESCE(MAX(aat.model_id), 'legacy'), COALESCE(MAX(aat.model_version), 'legacy')
+    FROM ai_asset_tags aat
+    LEFT JOIN ai_content ac ON ac.asset_id = aat.asset_id
+   GROUP BY aat.asset_id;
+
+  CREATE TABLE ai_reanalysis_jobs (
+    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id) ON DELETE CASCADE,
+    asset_id TEXT NOT NULL REFERENCES assets(asset_id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE ai_reanalysis_proposals (
+    asset_id TEXT PRIMARY KEY REFERENCES assets(asset_id) ON DELETE CASCADE,
+    job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+    description TEXT,
+    tags_json TEXT NOT NULL,
+    rating TEXT,
+    enabled_fields_json TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    model_version TEXT NOT NULL,
+    generated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX ai_reanalysis_proposals_job_idx ON ai_reanalysis_proposals(job_id);
+`;
+const AI_ANALYSIS_STATE_SCHEMA_CHECKSUM = createHash('sha256')
+  .update(AI_ANALYSIS_STATE_SCHEMA_SQL)
+  .digest('hex');
+
 // Keep individual recipes bounded so a DB-only mutation cannot turn the
 // library database into an unbounded snapshot store. Large-content/history
 // operations remain a separate phase with explicit byte retention policy.
@@ -2950,6 +3000,11 @@ export const MIGRATIONS = [
     version: 45,
     sql: LINKED_FOLDER_INDEX_JOBS_SCHEMA_SQL,
     checksum: LINKED_FOLDER_INDEX_JOBS_SCHEMA_CHECKSUM,
+  },
+  {
+    version: 46,
+    sql: AI_ANALYSIS_STATE_SCHEMA_SQL,
+    checksum: AI_ANALYSIS_STATE_SCHEMA_CHECKSUM,
   },
 ] as const;
 export const SUPPORTED_SCHEMA_VERSION = MIGRATIONS.at(-1)!.version;
@@ -17613,7 +17668,7 @@ export class LibraryService {
       tags: boolean;
       rating: boolean;
     };
-  }): { tagsWritten: string[]; fieldsWritten: string[]; committed: boolean } {
+  }): { tagsWritten: string[]; fieldsWritten: string[]; committed: boolean; staged: boolean } {
     const openLibrary = this.requireOpenLibrary(input.libraryId);
     const now = new Date().toISOString();
     const tagsWritten: string[] = [];
@@ -17630,6 +17685,33 @@ export class LibraryService {
           "SELECT status FROM jobs WHERE library_id = ? AND job_id = ? AND status = 'running'",
         ).get(openLibrary.summary.libraryId, input.guardJobId);
         if (!job) return false;
+      }
+      const isReanalysis = input.guardJobId
+        && openLibrary.connection.prepare(
+          'SELECT 1 FROM ai_reanalysis_jobs WHERE job_id = ? AND asset_id = ?',
+        ).get(input.guardJobId, input.assetId) !== undefined;
+      const hasAcceptedResult = openLibrary.connection.prepare(
+        'SELECT 1 FROM asset_ai_analysis_state WHERE asset_id = ?',
+      ).get(input.assetId) !== undefined;
+      if (isReanalysis && hasAcceptedResult) {
+        openLibrary.connection.prepare(
+          `INSERT INTO ai_reanalysis_proposals
+             (asset_id, job_id, description, tags_json, rating, enabled_fields_json,
+              model_id, model_version, generated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(asset_id) DO UPDATE SET
+             job_id = excluded.job_id, description = excluded.description,
+             tags_json = excluded.tags_json, rating = excluded.rating,
+             enabled_fields_json = excluded.enabled_fields_json,
+             model_id = excluded.model_id, model_version = excluded.model_version,
+             generated_at = excluded.generated_at`,
+        ).run(
+          input.assetId, input.guardJobId, input.description ?? null,
+          JSON.stringify(input.tags ?? []),
+          input.rating == null ? null : String(input.rating),
+          JSON.stringify(input.enabledFields), input.modelId, input.modelVersion, now,
+        );
+        return true;
       }
       // A successful analysis replaces the complete enabled AI layer. Clear
       // old tags even when the provider returns an empty list so stale model
@@ -17727,12 +17809,71 @@ export class LibraryService {
           writeField('rating', String(score));
         }
       }
+      openLibrary.connection.prepare(
+        `INSERT INTO asset_ai_analysis_state (asset_id, analyzed_at, model_id, model_version)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(asset_id) DO UPDATE SET
+           analyzed_at = excluded.analyzed_at, model_id = excluded.model_id,
+           model_version = excluded.model_version`,
+      ).run(input.assetId, now, input.modelId, input.modelVersion);
       return true;
     })();
 
-    if (committed) this.syncAssetSearchContent(openLibrary.connection, input.assetId);
+    const staged = Boolean(
+      committed && input.guardJobId && openLibrary.connection.prepare(
+        'SELECT 1 FROM ai_reanalysis_proposals WHERE asset_id = ? AND job_id = ?',
+      ).get(input.assetId, input.guardJobId),
+    );
+    if (committed && !staged) this.syncAssetSearchContent(openLibrary.connection, input.assetId);
 
-    return { tagsWritten, fieldsWritten, committed };
+    return { tagsWritten, fieldsWritten, committed, staged };
+  }
+
+  /** True when an asset has an accepted AI analysis, including an empty result. */
+  hasAcceptedAiAnalysis(libraryId: string, assetId: string): boolean {
+    const openLibrary = this.requireOpenLibrary(libraryId);
+    return openLibrary.connection.prepare(
+      'SELECT 1 FROM asset_ai_analysis_state WHERE asset_id = ? LIMIT 1',
+    ).get(assetId) !== undefined;
+  }
+
+  /** Reads the staged candidate created by a single-resource re-analysis. */
+  getAiReanalysisProposal(libraryId: string, assetId: string): {
+    description: string | null;
+    tags: string[];
+    rating: number | null;
+    enabledFields: { description: boolean; tags: boolean; rating: boolean };
+    modelId: string;
+    modelVersion: string;
+    generatedAt: string;
+  } | null {
+    const openLibrary = this.requireOpenLibrary(libraryId);
+    const row = openLibrary.connection.prepare(
+      `SELECT description, tags_json, rating, enabled_fields_json, model_id, model_version, generated_at
+         FROM ai_reanalysis_proposals WHERE asset_id = ?`,
+    ).get(assetId) as {
+      description: string | null; tags_json: string; rating: string | null;
+      enabled_fields_json: string; model_id: string; model_version: string; generated_at: string;
+    } | undefined;
+    if (!row) return null;
+    try {
+      const tags = JSON.parse(row.tags_json);
+      const enabledFields = JSON.parse(row.enabled_fields_json);
+      if (!Array.isArray(tags) || typeof enabledFields !== 'object' || !enabledFields) return null;
+      return {
+        description: row.description,
+        tags: tags.filter((tag): tag is string => typeof tag === 'string'),
+        rating: row.rating == null ? null : Number.parseInt(row.rating, 10) || null,
+        enabledFields: {
+          description: enabledFields.description === true,
+          tags: enabledFields.tags === true,
+          rating: enabledFields.rating === true,
+        },
+        modelId: row.model_id, modelVersion: row.model_version, generatedAt: row.generated_at,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /** Retrieve current AI content rows for an asset. */
@@ -17914,6 +18055,10 @@ export class LibraryService {
           if (clearRating) deleteAiField.run(assetId, 'rating');
         }
         if (clearTags) deleteAiTags.run(assetId);
+        if (clearAll) {
+          conn.prepare('DELETE FROM asset_ai_analysis_state WHERE asset_id = ?').run(assetId);
+          conn.prepare('DELETE FROM ai_reanalysis_proposals WHERE asset_id = ?').run(assetId);
+        }
         this.syncAssetSearchContent(conn, assetId);
       }
     })();
@@ -17921,10 +18066,7 @@ export class LibraryService {
     return { clearedCount: targetAssetIds.length, affectedAssetIds: targetAssetIds };
   }
 
-  /**
-   * 返回给定资产里没有任何 AI 生成数据的（ai_content 无记录）——供
-   * 「AI分析未分析项」菜单计数与批量跳过（运行时判断，不动数据库字段）。
-   */
+  /** Returns assets without an accepted AI analysis for menus and batch work. */
   pendingAiAssets(input: {
     libraryId: string;
     assetIds: string[];
@@ -17937,8 +18079,8 @@ export class LibraryService {
         `SELECT asset_id FROM assets
           WHERE asset_id IN (${placeholders})
             AND NOT EXISTS (
-              SELECT 1 FROM ai_content
-               WHERE ai_content.asset_id = assets.asset_id
+              SELECT 1 FROM asset_ai_analysis_state state
+               WHERE state.asset_id = assets.asset_id
             )`,
       )
       .all(...input.assetIds) as Array<{ asset_id: string }>;
@@ -17997,6 +18139,9 @@ export class LibraryService {
          (job_id, library_id, asset_id, revision_id, kind, status,
           priority, progress, attempt_count, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 'queued', 0, 0.0, 0, ?, ?)`,
+    );
+    const markReanalysisJob = conn.prepare(
+      'INSERT INTO ai_reanalysis_jobs (job_id, asset_id, created_at) VALUES (?, ?, ?)',
     );
     const getRevision = conn.prepare(
       'SELECT current_revision_id FROM assets WHERE asset_id = ?',
@@ -18085,7 +18230,10 @@ export class LibraryService {
           const hasAiContent = conn
             .prepare('SELECT 1 FROM ai_content WHERE asset_id = ? LIMIT 1')
             .get(assetId);
-          if (hasAiContent) {
+          const hasAcceptedResult = conn
+            .prepare('SELECT 1 FROM asset_ai_analysis_state WHERE asset_id = ? LIMIT 1')
+            .get(assetId);
+          if (hasAiContent || hasAcceptedResult) {
             skippedAssetIds.push(assetId);
             continue;
           }
@@ -18106,6 +18254,7 @@ export class LibraryService {
           now,
           now,
         );
+        if (input.forceExisting) markReanalysisJob.run(jobId, assetId, now);
         enqueued++;
         jobIds.push(jobId);
       }

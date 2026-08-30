@@ -845,7 +845,7 @@ function makeImageRequest(): AiAnalysisRequest {
 }
 
 describe('pendingAiAssets（「AI分析未分析项」运行时判断）', () => {
-  it('returns only assets without any ai_content records', () => {
+  it('returns only assets without an accepted AI analysis', () => {
     const root = temporaryRoot();
     const service = new LibraryService();
     const created = service.createLibrary({
@@ -883,6 +883,60 @@ describe('pendingAiAssets（「AI分析未分析项」运行时判断）', () =>
       service.pendingAiAssets({ libraryId: created.libraryId, assetIds: ['missing-id'] }),
     ).toEqual([]);
 
+    service.closeAll();
+  });
+});
+
+describe('single asset re-analysis staging', () => {
+  it('keeps the accepted result until the candidate is explicitly reviewed', () => {
+    const root = temporaryRoot();
+    const service = new LibraryService();
+    const created = service.createLibrary({
+      displayName: 'AI Reanalysis Proposal',
+      selectedParentPath: root,
+    });
+    writeFileSync(path.join(root, 'asset.png'), 'image-data');
+    const imported = importNoConflict(service, created.libraryId, path.join(root, 'asset.png'));
+    const assetId = imported.assets[0]!.assetId;
+
+    service.writeAiAnalysisResult({
+      libraryId: created.libraryId,
+      assetId,
+      description: 'accepted description',
+      tags: ['accepted'],
+      modelId: 'test-model',
+      modelVersion: 'v1',
+      enabledFields: { description: true, tags: true, rating: false },
+    });
+    expect(service.hasAcceptedAiAnalysis(created.libraryId, assetId)).toBe(true);
+
+    const queued = service.enqueueAiAnalysisJobs({
+      libraryId: created.libraryId,
+      assetIds: [assetId],
+      forceExisting: true,
+    });
+    const job = service.claimNextAiJob(created.libraryId);
+    expect(job?.jobId).toBe(queued.jobIds[0]);
+
+    const staged = service.writeAiAnalysisResult({
+      libraryId: created.libraryId,
+      assetId,
+      guardJobId: job!.jobId,
+      description: 'candidate description',
+      tags: ['candidate'],
+      modelId: 'test-model',
+      modelVersion: 'v2',
+      enabledFields: { description: true, tags: true, rating: false },
+    });
+
+    expect(staged).toMatchObject({ committed: true, staged: true });
+    expect(service.getAiContent(created.libraryId, assetId)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: 'accepted description' })]),
+    );
+    expect(service.listAiTagNames(created.libraryId, assetId)).toEqual(['accepted']);
+    expect(service.getAiReanalysisProposal(created.libraryId, assetId)).toMatchObject({
+      description: 'candidate description', tags: ['candidate'], modelVersion: 'v2',
+    });
     service.closeAll();
   });
 });
