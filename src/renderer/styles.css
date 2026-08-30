@@ -1845,6 +1845,20 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   gap: 2px;
 }
 
+.nav-tree-row.has-trailing {
+  grid-template-columns: 16px minmax(0, 1fr) 20px;
+}
+
+.nav-folder-ai-action {
+  align-self: center;
+  color: var(--tertiary);
+}
+
+.nav-folder-ai-action:hover:not(:disabled),
+.nav-folder-ai-action:focus-visible {
+  color: var(--accent);
+}
+
 .nav-disclosure,
 .nav-disclosure-spacer {
   display: inline-grid;
@@ -2426,6 +2440,119 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 
 .workspace-ai-progress .secondary-button:hover:not(:disabled) {
   background: var(--hover);
+}
+
+.ai-batch-review-dialog {
+  width: min(720px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 72px));
+}
+
+.ai-batch-review-summary {
+  margin-top: 0;
+}
+
+.ai-batch-review-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ai-batch-review-section {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  background: var(--canvas);
+}
+
+.ai-batch-review-section h3 {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.ai-batch-review-section ul {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 188px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.ai-batch-review-section li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.ai-batch-review-section li > span,
+.ai-batch-review-section li > small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-batch-review-section li > small {
+  color: var(--secondary);
+  font-size: 11px;
+}
+
+.ai-batch-review-section.is-failed {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--divider));
+}
+
+.ai-smart-collection-dialog {
+  width: min(620px, calc(100vw - 48px));
+}
+
+.ai-smart-collection-disclaimer {
+  margin-top: 0;
+}
+
+.ai-smart-collection-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  margin: 12px 0;
+  overflow: auto;
+}
+
+.ai-smart-collection-message {
+  align-self: flex-start;
+  max-width: 92%;
+  padding: 9px 11px;
+  border: 1px solid var(--divider);
+  border-radius: 10px 10px 10px 3px;
+  background: var(--raised);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ai-smart-collection-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-smart-collection-composer textarea {
+  resize: vertical;
+}
+
+@media (max-width: 680px) {
+  .ai-batch-review-sections {
+    grid-template-columns: 1fr;
+  }
 }
 
 [data-theme="light"] .workspace-ai-progress {

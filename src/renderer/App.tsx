@@ -154,6 +154,12 @@ import {
   type CreateLibraryPhase,
 } from "./CreateDialog";
 import { CollectionEditorDialog } from "./CollectionEditorDialog";
+import { AiSmartCollectionDialog } from "./AiSmartCollectionDialog";
+import {
+  AiBatchReviewDialog,
+  type AiBatchReview,
+  type AiBatchReviewItem,
+} from "./AiBatchReviewDialog";
 import {
   AiConfigDialog,
   type AiConnectionState,
@@ -859,6 +865,11 @@ function AppInner() {
   const [activeSmartCollectionId, setActiveSmartCollectionId] = useState<
     string | null
   >(null);
+  const [aiSmartSearchOpen, setAiSmartSearchOpen] = useState(false);
+  const [aiSmartSearchPlanning, setAiSmartSearchPlanning] = useState(false);
+  const [aiSmartSearchPlan, setAiSmartSearchPlan] = useState<AiSearchPlan | null>(null);
+  const [aiSmartTemporaryCollection, setAiSmartTemporaryCollection] =
+    useState<SmartCollectionSummary | null>(null);
   const [searchValue, setSearchValue] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [formatFilter, setFormatFilter] = useState("");
@@ -1420,12 +1431,15 @@ function AppInner() {
   const analyzingBatchSizeRef = useRef(0);
   const aiBatchJobIdsRef = useRef<string[]>([]);
   const aiBatchSkippedCountRef = useRef(0);
+  const aiBatchSkippedAssetsRef = useRef<AiBatchReviewItem[]>([]);
+  const aiBatchReviewFolderNameRef = useRef<string | null>(null);
   const lastAiBatchJobIdsRef = useRef<string[]>([]);
   const lastAiBatchAssetIdRef = useRef<string | null>(null);
   const aiBatchStatusRequestRef = useRef(0);
   const refreshAiBatchStatusRef = useRef<() => void>(() => undefined);
   const [aiBatchProgress, setAiBatchProgress] =
     useState<AiBatchProgressSnapshot | null>(null);
+  const [aiBatchReview, setAiBatchReview] = useState<AiBatchReview | null>(null);
   const [aiUiPrefs, setAiUiPrefs] = useState<AiUiPreferences>(() =>
     loadAiUiPreferences(),
   );
@@ -5741,6 +5755,71 @@ function AppInner() {
     if (listResult.ok) setSmartCollections(listResult.value);
   }, [api, library]);
 
+  async function createAiTemporarySmartCollection(naturalQuery: string) {
+    if (!api || !library) return;
+    if (!aiHasKey) {
+      setError(t("command.reason.aiNotConfigured"));
+      return;
+    }
+    setAiSmartSearchPlanning(true);
+    try {
+      const planned = await api.planAiSearch({ naturalQuery });
+      if (!planned.ok) {
+        setError(toMessage(planned.error, t("toast.aiAnalyzeFailed"), locale));
+        return;
+      }
+      const queryDefinition = aiSearchPlanToDefinition(planned.value.plan, {
+        analyzedOnly: true,
+      });
+      const collection = await api.createSmartCollection({
+        libraryId: library.libraryId,
+        name: `AI 搜索 · ${naturalQuery.trim().slice(0, 48)}`,
+        queryDefinitionJson: JSON.stringify(queryDefinition),
+      });
+      if (!collection.ok) {
+        setError(toMessage(collection.error, t("toast.smartCollectionSaveFailed"), locale));
+        return;
+      }
+      setAiSmartSearchPlan(planned.value.plan);
+      setAiSmartTemporaryCollection(collection.value);
+      setSmartCollections((current) => [
+        ...current.filter((item) => item.collectionId !== collection.value.collectionId),
+        collection.value,
+      ]);
+    } catch (caught) {
+      setError(toMessage(caught, t("toast.aiAnalyzeFailed"), locale));
+    } finally {
+      setAiSmartSearchPlanning(false);
+    }
+  }
+
+  async function discardAiTemporarySmartCollection() {
+    if (!api || !library || !aiSmartTemporaryCollection) return;
+    const collectionId = aiSmartTemporaryCollection.collectionId;
+    const result = await api.deleteSmartCollection({
+      libraryId: library.libraryId,
+      collectionId,
+    });
+    if (!result.ok) {
+      setError(toMessage(result.error, t("toast.smartCollectionDeleteFailed"), locale));
+      return;
+    }
+    setSmartCollections((current) => current.filter((item) => item.collectionId !== collectionId));
+    setAiSmartTemporaryCollection(null);
+    setAiSmartSearchPlan(null);
+    setNotice("已丢弃临时智能合集。");
+  }
+
+  function keepAiTemporarySmartCollection() {
+    if (!aiSmartTemporaryCollection) return;
+    const collectionId = aiSmartTemporaryCollection.collectionId;
+    setAiSmartTemporaryCollection(null);
+    setAiSmartSearchPlan(null);
+    setAiSmartSearchOpen(false);
+    setNotice("已保留 AI 创建的智能合集。");
+    void chooseSmartCollection(collectionId);
+  }
+
   const {
     inlineSmartCollectionEdit,
     openInlineSmartCollectionCreate,
@@ -8781,6 +8860,8 @@ function AppInner() {
       aiBatchStatusRequestRef.current++;
       aiBatchJobIdsRef.current = jobIds;
       aiBatchSkippedCountRef.current = skippedCount;
+      aiBatchSkippedAssetsRef.current = result.value.skippedAssets;
+      aiBatchReviewFolderNameRef.current = null;
       lastAiBatchJobIdsRef.current = jobIds;
       analyzingAssetIdRef.current = targetIds[0] ?? null;
       lastAiBatchAssetIdRef.current = analyzingAssetIdRef.current;
@@ -8899,6 +8980,8 @@ function AppInner() {
       // whole library becoming idle. Other manual or automatic jobs may run.
       aiBatchJobIdsRef.current = [];
       aiBatchStatusRequestRef.current++;
+      const reviewFolderName = aiBatchReviewFolderNameRef.current;
+      const skippedReviewItems = aiBatchSkippedAssetsRef.current;
       const pendingAssetId = analyzingAssetIdRef.current;
       const batchSize = analyzingBatchSizeRef.current;
       aiAnalyzingRef.current = false;
@@ -8906,6 +8989,29 @@ function AppInner() {
       analyzingBatchSizeRef.current = 0;
       setAiAnalyzing(false);
       setAiBatchProgress(null);
+
+      if (reviewFolderName) {
+        const toReviewItem = (job: AiJobStatus["jobs"][number]): AiBatchReviewItem => ({
+          assetId: job.assetId,
+          assetName: job.assetName ?? job.assetId,
+          detail: job.errorDetail ?? job.errorCode,
+        });
+        setAiBatchReview({
+          folderName: reviewFolderName,
+          succeeded: result.value.jobs
+            .filter((job) => job.status === "succeeded")
+            .map(toReviewItem),
+          failed: result.value.jobs
+            .filter((job) => job.status === "failed")
+            .map(toReviewItem),
+          skipped: skippedReviewItems,
+          cancelled: result.value.jobs
+            .filter((job) => job.status === "cancelled")
+            .map(toReviewItem),
+        });
+      }
+      aiBatchSkippedAssetsRef.current = [];
+      aiBatchReviewFolderNameRef.current = null;
 
       const detail = summarizeAiFailureCodes(
         collectRecentAiFailureCodes(result.value.jobs),
@@ -9093,6 +9199,10 @@ function AppInner() {
       setError(t("command.reason.aiNotConfigured"));
       return;
     }
+    if (aiAnalyzingRef.current) {
+      setNotice("已有 AI 批量分析正在进行，请等待完成或先停止该任务。");
+      return;
+    }
     const scoped = await api.searchAssets({
       libraryId: library.libraryId,
       scope: { kind: "folder", folderId, recursive: true },
@@ -9110,6 +9220,7 @@ function AppInner() {
     }
     const jobIds: string[] = [];
     const skippedAssetIds: string[] = [];
+    const skippedAssets: AiBatchReviewItem[] = [];
     for (let offset = 0; offset < assetIds.length; offset += 10_000) {
       const result = await api.analyzeAssets({
         libraryId: library.libraryId,
@@ -9121,16 +9232,27 @@ function AppInner() {
       }
       jobIds.push(...result.value.jobIds);
       skippedAssetIds.push(...result.value.skippedAssetIds);
+      skippedAssets.push(...result.value.skippedAssets);
     }
     if (jobIds.length === 0) {
+      setAiBatchReview({
+        folderName: name,
+        succeeded: [],
+        failed: [],
+        skipped: skippedAssets,
+        cancelled: [],
+      });
       setNotice(`${name} 中的素材均已分析或不支持分析。`);
       return;
     }
     aiBatchStatusRequestRef.current++;
     aiBatchJobIdsRef.current = jobIds;
     aiBatchSkippedCountRef.current = skippedAssetIds.length;
+    aiBatchSkippedAssetsRef.current = skippedAssets;
+    aiBatchReviewFolderNameRef.current = name;
     lastAiBatchJobIdsRef.current = jobIds;
     analyzingAssetIdRef.current = null;
+    lastAiBatchAssetIdRef.current = null;
     analyzingBatchSizeRef.current = jobIds.length + skippedAssetIds.length;
     setAiBatchProgress(computeAiBatchProgressForJobs(jobIds, [], { skipped: skippedAssetIds.length }));
     aiAnalyzingRef.current = true;
@@ -9228,6 +9350,8 @@ function AppInner() {
           // unrelated or partially cancelled batch tracking.
           aiBatchJobIdsRef.current = [];
           aiBatchSkippedCountRef.current = 0;
+          aiBatchSkippedAssetsRef.current = [];
+          aiBatchReviewFolderNameRef.current = null;
           lastAiBatchJobIdsRef.current = [];
           lastAiBatchAssetIdRef.current = null;
           aiBatchStatusRequestRef.current++;
@@ -9680,6 +9804,16 @@ function AppInner() {
           cancelInlineFolderEdit();
           openInlineSmartCollectionCreate();
         }}
+        onOpenAiSmartSearch={() => {
+          cancelInlineFolderEdit();
+          cancelInlineSmartCollectionEdit();
+          setAiSmartSearchPlan(null);
+          setAiSmartTemporaryCollection(null);
+          setAiSmartSearchOpen(true);
+        }}
+        onAnalyzeFolder={(folderId, name) =>
+          void analyzeUnanalyzedFolder(folderId, name)
+        }
         inlineFolderEdit={inlineFolderEdit}
         onInlineFolderEditChange={changeInlineFolderEdit}
         onInlineFolderEditCommit={(onCreateSuccess) =>
@@ -11413,6 +11547,25 @@ function AppInner() {
         onSave={() => void saveCollectionDetails()}
         onCancel={() => setCollectionEditor(null)}
       />
+      <AiSmartCollectionDialog
+        open={aiSmartSearchOpen}
+        planning={aiSmartSearchPlanning}
+        plan={aiSmartSearchPlan}
+        temporaryCollection={aiSmartTemporaryCollection}
+        onClose={() => {
+          if (!aiSmartSearchPlanning && !aiSmartTemporaryCollection) {
+            setAiSmartSearchOpen(false);
+            setAiSmartSearchPlan(null);
+          }
+        }}
+        onSubmit={(request) => void createAiTemporarySmartCollection(request)}
+        onKeepTemporary={keepAiTemporarySmartCollection}
+        onDiscardTemporary={() => void discardAiTemporarySmartCollection()}
+      />
+      <AiBatchReviewDialog
+        review={aiBatchReview}
+        onClose={() => setAiBatchReview(null)}
+      />
       <RenameDialog
         open={renameTarget !== null}
         kind={renameTarget?.kind ?? "collection"}
@@ -12252,7 +12405,10 @@ function organizationNoun(kind: OrganizationKind, locale: AppLocale) {
       : "dialog.rename.nounSmartCollection",
   );
 }
-export function aiSearchPlanToDefinition(plan: AiSearchPlan): SearchDefinition {
+export function aiSearchPlanToDefinition(
+  plan: AiSearchPlan,
+  options: { analyzedOnly?: boolean } = {},
+): SearchDefinition {
   const positiveTerms = [...new Set([...plan.keywords, ...plan.synonyms])];
   const clauses: SearchQuery["clauses"] = [];
   if (positiveTerms.length > 0)
@@ -12266,9 +12422,20 @@ export function aiSearchPlanToDefinition(plan: AiSearchPlan): SearchDefinition {
       exclude: true,
     });
   }
+  const planFilters = options.analyzedOnly
+    ? plan.filters.filter(
+        (filter) => !(filter.field === "analysis_status" && "values" in filter),
+      ).slice(0, 15)
+    : plan.filters;
+  const filters: FilterClause[] = options.analyzedOnly
+    ? [
+        ...planFilters,
+        { field: "analysis_status", values: ["analyzed"], exclude: false },
+      ]
+    : planFilters;
   return {
     ...(clauses.length > 0 ? { search: { clauses } } : {}),
-    ...(plan.filters.length > 0 ? { filters: plan.filters } : {}),
+    ...(filters.length > 0 ? { filters } : {}),
     ...(plan.sort ? { sort: plan.sort } : {}),
   };
 }

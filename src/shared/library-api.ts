@@ -675,6 +675,11 @@ export interface SuperLibraryApi {
     assetIds: string[];
     jobIds: string[];
     skippedAssetIds: string[];
+    skippedAssets: Array<{
+      assetId: string;
+      assetName: string;
+      reason: 'already_analyzed' | 'ignored' | 'unsupported' | 'missing';
+    }>;
     enqueued: number;
   }>>;
   // Thumbnail & Preview

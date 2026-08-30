@@ -3814,15 +3814,16 @@ async function handleLibraryRequest(input: unknown): Promise<RendererResult> {
           ];
           if (jobIds.length > 0) {
             void processAiQueue(request.libraryId);
-            return {
-              ok: true,
-              type: "assets.analyze-queued",
-              assetIds: request.assetIds,
-              jobIds,
-              skippedAssetIds: enqueueResult.skippedAssetIds,
-              enqueued: enqueueResult.enqueued,
-            } satisfies RendererResult;
           }
+          return {
+            ok: true,
+            type: "assets.analyze-queued",
+            assetIds: request.assetIds,
+            jobIds,
+            skippedAssetIds: enqueueResult.skippedAssetIds,
+            skippedAssets: enqueueResult.skippedAssets ?? [],
+            enqueued: enqueueResult.enqueued,
+          } satisfies RendererResult;
         }
       } catch (error) {
         logger?.error("ai.analyze.batch-enqueue", error);

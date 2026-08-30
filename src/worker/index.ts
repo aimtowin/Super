@@ -3917,7 +3917,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
       }
     }
     case 'ai.enqueue-analysis': {
-      const { enqueued, jobIds, alreadyPendingJobIds, skippedAssetIds } = libraryService.enqueueAiAnalysisJobs(request.command);
+      const { enqueued, jobIds, alreadyPendingJobIds, skippedAssetIds, skippedAssets } = libraryService.enqueueAiAnalysisJobs(request.command);
       publishAiProgress(request.command.libraryId);
       return {
         ok: true,
@@ -3927,6 +3927,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
         jobIds,
         alreadyPendingJobIds,
         skippedAssetIds,
+        skippedAssets,
       };
     }
     case 'ai.pending-assets.request': {

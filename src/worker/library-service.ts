@@ -18126,6 +18126,11 @@ export class LibraryService {
     jobIds: string[];
     alreadyPendingJobIds: string[];
     skippedAssetIds: string[];
+    skippedAssets: Array<{
+      assetId: string;
+      assetName: string;
+      reason: 'already_analyzed' | 'ignored' | 'unsupported' | 'missing';
+    }>;
   } {
     const openLibrary = this.requireOpenLibrary(input.libraryId);
     const conn = openLibrary.connection;
@@ -18192,6 +18197,19 @@ export class LibraryService {
     const jobIds: string[] = [];
     const alreadyPendingJobIds: string[] = [];
     const skippedAssetIds: string[] = [];
+    const skippedAssets: Array<{
+      assetId: string;
+      assetName: string;
+      reason: 'already_analyzed' | 'ignored' | 'unsupported' | 'missing';
+    }> = [];
+    const skipAsset = (
+      assetId: string,
+      assetName: string,
+      reason: 'already_analyzed' | 'ignored' | 'unsupported' | 'missing',
+    ) => {
+      skippedAssetIds.push(assetId);
+      skippedAssets.push({ assetId, assetName, reason });
+    };
     conn.transaction(() => {
       for (const assetId of targetAssetIds) {
         const row = conn
@@ -18205,9 +18223,11 @@ export class LibraryService {
             linked_folder_id: string | null;
           } | undefined;
         if (!row) {
-          skippedAssetIds.push(assetId);
+          skipAsset(assetId, assetId, 'missing');
           continue;
         }
+
+        const assetName = path.basename(row.relative_file_path) || assetId;
 
         // Ignored assets must never appear in the task queue. Keep this gate
         // before format/dedup checks so explicit AI requests cannot briefly
@@ -18219,7 +18239,7 @@ export class LibraryService {
           row.relative_file_path,
           'asset',
         )) {
-          skippedAssetIds.push(assetId);
+          skipAsset(assetId, assetName, 'ignored');
           continue;
         }
 
@@ -18228,7 +18248,7 @@ export class LibraryService {
         const isVideo = videoExts.has(ext);
         const isModel = modelExts.has(ext);
         if (!isImage && !isVideo && !isModel) {
-          skippedAssetIds.push(assetId);
+          skipAsset(assetId, assetName, 'unsupported');
           continue;
         }
         // Super-140fe2: videos no longer require a pre-existing contact
@@ -18261,7 +18281,7 @@ export class LibraryService {
             .prepare('SELECT 1 FROM asset_ai_analysis_state WHERE asset_id = ? LIMIT 1')
             .get(assetId);
           if (hasAiContent || hasAcceptedResult) {
-            skippedAssetIds.push(assetId);
+            skipAsset(assetId, assetName, 'already_analyzed');
             continue;
           }
         }
@@ -18287,7 +18307,7 @@ export class LibraryService {
       }
     })();
 
-    return { enqueued, jobIds, alreadyPendingJobIds, skippedAssetIds };
+    return { enqueued, jobIds, alreadyPendingJobIds, skippedAssetIds, skippedAssets };
   }
 
   claimNextAiJob(libraryId: string, excludedJobIds: string[] = []): {

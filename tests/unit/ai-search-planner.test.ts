@@ -202,6 +202,24 @@ describe('AI natural-language search planner', () => {
     });
   });
 
+  it('forces AI smart collections to read accepted analyses only', () => {
+    expect(aiSearchPlanToDefinition({
+      keywords: ['anime'],
+      synonyms: [],
+      exclusions: [],
+      filters: [
+        { field: 'tag', values: ['角色'], exclude: false },
+        { field: 'analysis_status', values: ['unanalyzed'], exclude: false },
+      ],
+    }, { analyzedOnly: true })).toEqual({
+      search: { clauses: [{ field: null, values: ['anime'], exclude: false }] },
+      filters: [
+        { field: 'tag', values: ['角色'], exclude: false },
+        { field: 'analysis_status', values: ['analyzed'], exclude: false },
+      ],
+    });
+  });
+
   it('bounds renderer requests and responses at the IPC boundary', () => {
     expect(parseRendererRequest({ type: 'ai.search-plan.request', naturalQuery: '找宽屏城市图' }))
       .toEqual({ type: 'ai.search-plan.request', naturalQuery: '找宽屏城市图' });

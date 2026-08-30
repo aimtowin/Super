@@ -1432,6 +1432,11 @@ const assetOperationSuccessSchemas = [
     // skipped assets without turning an idempotent request into a failure.
     jobIds: z.array(nonBlankString),
     skippedAssetIds: z.array(nonBlankString),
+    skippedAssets: z.array(z.strictObject({
+      assetId: nonBlankString,
+      assetName: nonBlankString,
+      reason: z.enum(['already_analyzed', 'ignored', 'unsupported', 'missing']),
+    })).optional(),
     enqueued: z.number().int().nonnegative(),
   }),
   z.strictObject({
@@ -1939,6 +1944,11 @@ const workerSuccessResultSchema = z.discriminatedUnion('type', [
     jobIds: z.array(nonBlankString),
     alreadyPendingJobIds: z.array(nonBlankString),
     skippedAssetIds: z.array(nonBlankString),
+    skippedAssets: z.array(z.strictObject({
+      assetId: nonBlankString,
+      assetName: nonBlankString,
+      reason: z.enum(['already_analyzed', 'ignored', 'unsupported', 'missing']),
+    })).optional(),
   }),
   z.strictObject({
     ok: z.literal(true),

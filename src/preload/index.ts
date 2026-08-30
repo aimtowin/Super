@@ -1801,6 +1801,11 @@ const library: SuperLibraryApi = Object.freeze({
     assetIds: string[];
     jobIds: string[];
     skippedAssetIds: string[];
+    skippedAssets: Array<{
+      assetId: string;
+      assetName: string;
+      reason: 'already_analyzed' | 'ignored' | 'unsupported' | 'missing';
+    }>;
     enqueued: number;
   }>> {
     const result = await request({
@@ -1818,6 +1823,7 @@ const library: SuperLibraryApi = Object.freeze({
         assetIds: result.assetIds,
         jobIds: result.jobIds,
         skippedAssetIds: result.skippedAssetIds,
+        skippedAssets: result.skippedAssets ?? [],
         enqueued: result.enqueued,
       },
     };
