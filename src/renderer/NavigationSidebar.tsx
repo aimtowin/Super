@@ -383,7 +383,7 @@ function InlineCollectionEditRow({
 /**
  * Name-edit row for the smart-collections section 「+」. Enter commits,
  * Escape cancels, blur routes through the same commit resolution; typed
- * failures (including missing discovery conditions) stay under the row.
+ * failures stay under the row.
  */
 function InlineSmartCollectionEditRow({
   state,

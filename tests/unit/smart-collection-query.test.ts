@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { hasMeaningfulSmartCollectionCondition } from "../../src/shared/smart-collection-query";
+import {
+  hasConfiguredSmartCollectionQuery,
+  hasMeaningfulSmartCollectionCondition,
+} from "../../src/shared/smart-collection-query";
 
 describe("hasMeaningfulSmartCollectionCondition (CU-M5)", () => {
   it("rejects empty definitions", () => {
@@ -45,5 +48,18 @@ describe("hasMeaningfulSmartCollectionCondition (CU-M5)", () => {
         sort: { field: "rating", order: "desc" },
       }),
     ).toBe(true);
+  });
+});
+
+describe("hasConfiguredSmartCollectionQuery", () => {
+  it("keeps draft, malformed, and sort-only collections out of the all-assets query", () => {
+    expect(hasConfiguredSmartCollectionQuery("{}")).toBe(false);
+    expect(hasConfiguredSmartCollectionQuery('{"sort":{"field":"name"}}')).toBe(false);
+    expect(hasConfiguredSmartCollectionQuery("not-json")).toBe(false);
+  });
+
+  it("accepts a persisted search or filter rule", () => {
+    expect(hasConfiguredSmartCollectionQuery('{"filters":[{"field":"favorite"}]}')).toBe(true);
+    expect(hasConfiguredSmartCollectionQuery('{"search":{"clauses":[{"values":["hero"]}]}}')).toBe(true);
   });
 });

@@ -21,8 +21,9 @@ export const EMPTY_SMART_COLLECTION_QUERY_JSON = "{}";
 
 /**
  * SMART-007 / Super-era: sidebar inline create. Create always succeeds with
- * a draft query (current discovery snapshot, or `{}` if empty). Caller opens
- * the settings dialog after success — do not block create for missing filters.
+ * a draft query (current discovery snapshot, or `{}` if empty). The caller
+ * keeps the current browse surface available so filters can be chosen after
+ * creation — do not block create for missing filters.
  */
 
 export interface UseInlineSmartCollectionEditParams {
@@ -36,7 +37,7 @@ export interface UseInlineSmartCollectionEditParams {
   };
   setNotice: (message: string, historyEntryId?: string) => void;
   reloadSmartCollections: () => Promise<void>;
-  /** Fired after a successful create so the host can open settings. */
+  /** Fired after a successful create so the host can guide rule setup. */
   onCreated?: (collection: SmartCollectionSummary) => void;
 }
 

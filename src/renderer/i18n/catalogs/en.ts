@@ -1770,6 +1770,7 @@ export const en = {
     aiSearchFallbackFailed: "{explanation} Normal keyword search also failed: {detail}",
     desktopNoResponse: "Desktop service did not respond.",
     smartCollectionSaved: "Smart collection saved.",
+    smartCollectionCreatedConfigure: "Smart collection created. Set a search or filter on this page, then right-click it and choose “Update with current conditions”.",
     smartCollectionSaveFailed: "Failed to save smart collection.",
     smartCollectionNeedsCondition:
       "Add a search query or at least one filter before saving a smart collection.",

@@ -194,10 +194,6 @@ import {
   loadImageSequencePreferences,
   saveImageSequencePreferences,
 } from "./image-sequence-preferences";
-import {
-  SmartCollectionSettingsDialog,
-  type SmartCollectionSettingsTarget,
-} from "./SmartCollectionSettingsDialog";
 import { MediaJobsDialog } from "./MediaJobsDialog";
 import { PluginJobActivityBanner } from "./PluginJobActivityBanner";
 import { AiConnectionFailureDialog } from "./AiConnectionFailureDialog";
@@ -335,7 +331,10 @@ import type {
   TagSummary,
   TrashedFolderSummary,
 } from "../shared/asset-types";
-import { hasMeaningfulSmartCollectionCondition } from "../shared/smart-collection-query";
+import {
+  hasConfiguredSmartCollectionQuery,
+  hasMeaningfulSmartCollectionCondition,
+} from "../shared/smart-collection-query";
 import { expandFormatFilterTokens } from "../shared/text-media";
 import type {
   SuperLibraryApi,
@@ -1134,8 +1133,6 @@ function AppInner() {
     [activePluginSidebarViewId, pluginSidebarViews],
   );
   const showPluginSidebarView = activePluginSidebarView !== undefined;
-  const [smartCollectionSettings, setSmartCollectionSettings] =
-    useState<SmartCollectionSettingsTarget | null>(null);
   const [appLogOpen, setAppLogOpen] = useState(false);
   const [libraryRecoveryDialogOpen, setLibraryRecoveryDialogOpen] =
     useState(false);
@@ -5733,12 +5730,11 @@ function AppInner() {
     getQueryDefinition: () => currentQueryDefinition(),
     setNotice,
     reloadSmartCollections,
-    onCreated: (collection) => {
-      setSmartCollectionSettings({
-        collectionId: collection.collectionId,
-        name: collection.name,
-      });
-      void chooseSmartCollection(collection.collectionId);
+    onCreated: () => {
+      // Keep the current surface interactive: it is where the user chooses
+      // the rule for a newly-created draft.  A modal and a draft navigation
+      // previously hid those filters and then cleared them.
+      setNotice(t("toast.smartCollectionCreatedConfigure"));
     },
   });
 
@@ -5973,6 +5969,14 @@ function AppInner() {
 
   async function chooseSmartCollection(collectionId: string) {
     if (!api || !library) return;
+    const collection = smartCollections.find(
+      (item) => item.collectionId === collectionId,
+    );
+    if (!collection || !hasConfiguredSmartCollectionQuery(collection.queryDefinition)) {
+      closeContextMenu();
+      setNotice(t("toast.smartCollectionNeedsCondition"));
+      return;
+    }
     await closeAssetPreview(false);
     closeContextMenu();
     workspaceCanvasRef.current?.scrollTo({ top: 0, left: 0 });
@@ -7921,7 +7925,6 @@ function AppInner() {
       scriptSandboxPreviewOpen ||
       aboutOpen ||
       openSourceLicensesOpen ||
-      Boolean(smartCollectionSettings) ||
       Boolean(imageSequenceDialog) ||
       Boolean(imageSequenceImportOffer) ||
       Boolean(fatalAlertMessage) ||
@@ -11562,24 +11565,6 @@ function AppInner() {
         onDownloadAndInstall={() => void downloadAppUpdate()}
         onCancelDownload={cancelAppUpdateDownload}
       />
-      {smartCollectionSettings ? (
-        <SmartCollectionSettingsDialog
-          key={smartCollectionSettings.collectionId}
-          onClose={() => setSmartCollectionSettings(null)}
-          onRename={async (collectionId, name) => {
-            await renameSmartCollection(collectionId, name);
-            setSmartCollectionSettings((current) =>
-              current && current.collectionId === collectionId
-                ? { ...current, name }
-                : current,
-            );
-          }}
-          onSaveCurrentQuery={async (collectionId) => {
-            await updateSmartCollectionQuery(collectionId);
-          }}
-          target={smartCollectionSettings}
-        />
-      ) : null}
       <CreateDialog
         busy={busy}
         open={dialog === "library"}

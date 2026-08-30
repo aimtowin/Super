@@ -1756,6 +1756,7 @@ export const zhCN = {
     aiSearchFallbackFailed: "{explanation} 普通关键词搜索也失败：{detail}",
     desktopNoResponse: "桌面服务没有响应。",
     smartCollectionSaved: "智能合集已保存。",
+    smartCollectionCreatedConfigure: "智能合集已创建。请在当前页面设置搜索词或过滤条件，再右键该合集选择「用当前条件更新」。",
     smartCollectionSaveFailed: "保存智能合集失败。",
     smartCollectionNeedsCondition: "保存智能合集前请先设置搜索词或至少一个过滤条件。",
     smartCollectionRunFailed: "执行智能合集失败。",
