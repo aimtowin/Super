@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 
 import AdmZip from 'adm-zip';
@@ -358,6 +358,8 @@ describe('Super app update release contract', () => {
     const portableBytes = Buffer.from('portable update bytes that are long enough to stream');
     const checksum = createHash('sha256').update(portableBytes).digest('hex');
     const root = await mkdtemp(path.join(tmpdir(), 'super-app-update-cancel-test-'));
+    const rangeRequests: string[] = [];
+    let assetRequestCount = 0;
     try {
       const payload = releasePayload({
         assets: [{
@@ -378,10 +380,24 @@ describe('Super app update release contract', () => {
         executablePath: path.join(root, 'Super.exe'),
         tempDirectory: root,
         downloadsDirectory: path.join(root, 'Downloads'),
+        preparedUpdateDirectory: path.join(root, 'updates'),
         environment: { SUPER_DISTRIBUTION: 'portable' },
         fetchImpl: async (url, init) => {
           if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
+          assetRequestCount += 1;
+          const range = new Headers(init?.headers).get('range');
+          if (range !== null) rangeRequests.push(range);
+          if (assetRequestCount > 1) {
+            const offset = Number(/^bytes=(\d+)-$/u.exec(range ?? '')?.[1]);
+            return new Response(portableBytes.subarray(offset), {
+              status: 206,
+              headers: {
+                'content-range': `bytes ${offset}-${portableBytes.byteLength - 1}/${portableBytes.byteLength}`,
+                etag: '"release-1"',
+              },
+            });
+          }
           const signal = init?.signal;
           const stream = new ReadableStream<Uint8Array>({
             start(controller) {
@@ -417,6 +433,92 @@ describe('Super app update release contract', () => {
       const result = await downloadPromise;
       expect(result).toEqual({ ok: false, status: 'error', code: 'cancelled' });
       expect((await readdir(path.join(root, 'Downloads')))).toEqual([]);
+      expect((await readdir(path.join(root, 'updates', 'partials'))).sort())
+        .toEqual(expect.arrayContaining([expect.stringMatching(/\.part$/u), expect.stringMatching(/\.json$/u)]));
+
+      const resumed = await service.downloadAndInstall();
+      expect(resumed).toEqual({
+        ok: true,
+        status: 'completed',
+        action: 'portable-downloaded',
+        version: '0.1.3',
+        distribution: 'portable',
+      });
+      expect(rangeRequests).toHaveLength(1);
+      expect(rangeRequests[0]).toMatch(/^bytes=\d+-$/u);
+      const downloaded = await readdir(path.join(root, 'Downloads'));
+      expect(downloaded).toHaveLength(1);
+      expect(await readFile(path.join(root, 'Downloads', downloaded[0]!))).toEqual(portableBytes);
+      expect(await readdir(path.join(root, 'updates', 'partials'))).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('restarts from zero when an update server ignores a Range request', async () => {
+    const portableBytes = Buffer.from('portable update bytes returned in full after a stale range');
+    const checksum = createHash('sha256').update(portableBytes).digest('hex');
+    const root = await mkdtemp(path.join(tmpdir(), 'super-app-update-range-fallback-test-'));
+    const assetUrl = 'https://liuyangyang.me/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip';
+    const partialBytes = portableBytes.subarray(0, 11);
+    const updateDirectory = path.join(root, 'updates');
+    const partialKey = createHash('sha256')
+      .update(`${assetUrl}\n${checksum}\n${portableBytes.byteLength}`)
+      .digest('hex');
+    const partialRoot = path.join(updateDirectory, 'partials');
+    const partialPath = path.join(partialRoot, `update-${partialKey}.part`);
+    const metadataPath = path.join(partialRoot, `update-${partialKey}.json`);
+    const rangeRequests: string[] = [];
+    try {
+      await mkdir(partialRoot, { recursive: true });
+      await writeFile(partialPath, partialBytes);
+      await writeFile(metadataPath, JSON.stringify({
+        schemaVersion: 1,
+        assetUrl,
+        assetName: 'Super-win-x86-64-0.1.3-portable.zip',
+        version: '0.1.3',
+        expectedSha256: checksum,
+        totalBytes: portableBytes.byteLength,
+        validator: '"old-release"',
+      }));
+      const payload = releasePayload({
+        assets: [{
+          name: 'Super-win-x86-64-0.1.3-portable.zip',
+          browser_download_url: assetUrl,
+          size: portableBytes.byteLength,
+        }, {
+          name: 'Super-win-x86-64-0.1.3-portable.zip.sha256',
+          browser_download_url: `${assetUrl}.sha256`,
+          size: checksum.length,
+        }],
+      });
+      const service = createAppUpdateService({
+        currentVersion: '0.1.1',
+        isPackaged: true,
+        platform: 'win32',
+        arch: 'x64',
+        executablePath: path.join(root, 'Super.exe'),
+        tempDirectory: root,
+        downloadsDirectory: path.join(root, 'Downloads'),
+        preparedUpdateDirectory: updateDirectory,
+        environment: { SUPER_DISTRIBUTION: 'portable' },
+        fetchImpl: async (url, init) => {
+          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
+          if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
+          const range = new Headers(init?.headers).get('range');
+          if (range !== null) rangeRequests.push(range);
+          return new Response(portableBytes, { headers: { etag: '"new-release"' } });
+        },
+        showItemInFolder: () => undefined,
+      });
+
+      const result = await service.downloadAndInstall();
+      expect(result).toMatchObject({ ok: true, action: 'portable-downloaded' });
+      expect(rangeRequests).toEqual(['bytes=11-']);
+      const downloaded = await readdir(path.join(root, 'Downloads'));
+      expect(downloaded).toHaveLength(1);
+      expect(await readFile(path.join(root, 'Downloads', downloaded[0]!))).toEqual(portableBytes);
+      expect(await readdir(partialRoot)).toEqual([]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -1,10 +1,13 @@
 import { createHash } from 'node:crypto';
-import { createWriteStream, existsSync, readdirSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, readdirSync } from 'node:fs';
 import {
   access,
   mkdir,
   mkdtemp,
+  readFile,
+  rename,
   rm,
+  stat,
   writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
@@ -120,6 +123,23 @@ type PreparedInstaller = {
   version: string;
   distribution: 'installed';
   releaseNotes: string;
+};
+
+type UpdatePartialMetadata = {
+  schemaVersion: 1;
+  assetUrl: string;
+  assetName: string;
+  version: string;
+  expectedSha256: string;
+  totalBytes: number;
+  validator?: string;
+};
+
+type ResumableDownload = {
+  partialPath: string;
+  metadataPath: string;
+  downloadedBytes: number;
+  metadata: UpdatePartialMetadata;
 };
 
 export type RestoredPreparedUpdate = {
@@ -375,11 +395,14 @@ async function writeDownloadedResponse(
   options: {
     signal?: AbortSignal;
     totalBytes?: number;
+    initialBytes?: number;
+    append?: boolean;
     onProgress?: AppUpdateServiceOptions['onDownloadProgress'];
   } = {},
-): Promise<string> {
-  const hash = createHash('sha256');
+): Promise<void> {
   await mkdir(path.dirname(targetPath), { recursive: true });
+  const initialBytes = options.initialBytes ?? 0;
+  const append = options.append === true;
   const reportProgress = (downloadedBytes: number) => {
     emitDownloadProgress(options.onProgress, {
       phase: 'downloading',
@@ -390,16 +413,15 @@ async function writeDownloadedResponse(
   if (response.body === null) {
     const bytes = Buffer.from(await response.arrayBuffer());
     if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    if (bytes.byteLength > MAX_DOWNLOAD_BYTES) {
+    if (initialBytes + bytes.byteLength > MAX_DOWNLOAD_BYTES) {
       throw new Error('The update response is too large.');
     }
-    hash.update(bytes);
-    await writeFile(targetPath, bytes, { mode: 0o600, flag: 'wx' });
-    reportProgress(bytes.byteLength);
-    return hash.digest('hex');
+    await writeFile(targetPath, bytes, { mode: 0o600, flag: append ? 'a' : 'wx' });
+    reportProgress(initialBytes + bytes.byteLength);
+    return;
   }
-  let downloadedBytes = 0;
-  const hashingTransform = new Transform({
+  let downloadedBytes = initialBytes;
+  const progressTransform = new Transform({
     transform(chunk: Buffer | string, _encoding, callback) {
       if (options.signal?.aborted) {
         callback(new DOMException('Aborted', 'AbortError'));
@@ -410,22 +432,124 @@ async function writeDownloadedResponse(
         callback(new Error('The update response is too large.'));
         return;
       }
-      hash.update(chunk);
       reportProgress(downloadedBytes);
       callback(null, chunk);
     },
   });
-  try {
-    await pipeline(
-      Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
-      hashingTransform,
-      createWriteStream(targetPath, { flags: 'wx', mode: 0o600 }),
-      { signal: options.signal },
-    );
-  } catch (error) {
-    await rm(targetPath, { force: true }).catch(() => undefined);
-    throw error;
+  await pipeline(
+    Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
+    progressTransform,
+    createWriteStream(targetPath, { flags: append ? 'a' : 'wx', mode: 0o600 }),
+    { signal: options.signal },
+  );
+}
+
+function updatePartialPaths(
+  options: AppUpdateServiceOptions,
+  input: Pick<UpdatePartialMetadata, 'assetUrl' | 'assetName' | 'version' | 'expectedSha256' | 'totalBytes'>,
+): Pick<ResumableDownload, 'partialPath' | 'metadataPath'> {
+  const cacheDirectory = options.preparedUpdateDirectory
+    ?? path.join(options.tempDirectory, 'super-update-cache');
+  const key = createHash('sha256')
+    .update(`${input.assetUrl}\n${input.expectedSha256}\n${input.totalBytes}`)
+    .digest('hex');
+  const basePath = path.join(cacheDirectory, 'partials', `update-${key}`);
+  return { partialPath: `${basePath}.part`, metadataPath: `${basePath}.json` };
+}
+
+function parsePartialMetadata(input: unknown): UpdatePartialMetadata | undefined {
+  if (!isRecord(input)
+    || input.schemaVersion !== 1
+    || typeof input.assetUrl !== 'string'
+    || typeof input.assetName !== 'string'
+    || typeof input.version !== 'string'
+    || typeof input.expectedSha256 !== 'string'
+    || typeof input.totalBytes !== 'number'
+    || !Number.isSafeInteger(input.totalBytes)
+    || input.totalBytes < 1
+    || (input.validator !== undefined && typeof input.validator !== 'string')) {
+    return undefined;
   }
+  return {
+    schemaVersion: 1,
+    assetUrl: input.assetUrl,
+    assetName: input.assetName,
+    version: input.version,
+    expectedSha256: input.expectedSha256.toLowerCase(),
+    totalBytes: input.totalBytes,
+    ...(typeof input.validator === 'string' && input.validator.length <= 512
+      ? { validator: input.validator }
+      : {}),
+  };
+}
+
+function responseValidator(response: Response): string | undefined {
+  const value = response.headers.get('etag') ?? response.headers.get('last-modified');
+  return value !== null && value.length > 0 && value.length <= 512 ? value : undefined;
+}
+
+function responseResumesAt(response: Response, offset: number, totalBytes: number): boolean {
+  if (response.status !== 206) return false;
+  const contentRange = response.headers.get('content-range');
+  const match = contentRange === null
+    ? undefined
+    : /^bytes\s+(\d+)-(\d+)\/(\d+)$/iu.exec(contentRange.trim());
+  if (match === undefined || match === null) return false;
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  const total = Number(match[3]);
+  return Number.isSafeInteger(start)
+    && Number.isSafeInteger(end)
+    && Number.isSafeInteger(total)
+    && start === offset
+    && end >= start
+    && total === totalBytes;
+}
+
+async function removePartialDownload(paths: Pick<ResumableDownload, 'partialPath' | 'metadataPath'>): Promise<void> {
+  await Promise.all([
+    rm(paths.partialPath, { force: true }),
+    rm(paths.metadataPath, { force: true }),
+  ]);
+}
+
+async function savePartialMetadata(metadataPath: string, metadata: UpdatePartialMetadata): Promise<void> {
+  await mkdir(path.dirname(metadataPath), { recursive: true });
+  const temporaryPath = `${metadataPath}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(metadata)}\n`, { mode: 0o600 });
+  await rename(temporaryPath, metadataPath);
+}
+
+async function loadPartialDownload(
+  paths: Pick<ResumableDownload, 'partialPath' | 'metadataPath'>,
+  expected: UpdatePartialMetadata,
+): Promise<ResumableDownload | undefined> {
+  try {
+    const metadata = parsePartialMetadata(JSON.parse(await readFile(paths.metadataPath, 'utf8')));
+    if (metadata === undefined
+      || metadata.assetUrl !== expected.assetUrl
+      || metadata.assetName !== expected.assetName
+      || metadata.version !== expected.version
+      || metadata.expectedSha256 !== expected.expectedSha256
+      || metadata.totalBytes !== expected.totalBytes) {
+      await removePartialDownload(paths);
+      return undefined;
+    }
+    const partialStat = await stat(paths.partialPath);
+    if (!partialStat.isFile() || partialStat.size <= 0 || partialStat.size > expected.totalBytes) {
+      await removePartialDownload(paths);
+      return undefined;
+    }
+    return { ...paths, downloadedBytes: partialStat.size, metadata };
+  } catch {
+    await removePartialDownload(paths).catch(() => undefined);
+    return undefined;
+  }
+}
+
+async function sha256File(filePath: string): Promise<string> {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
   return hash.digest('hex');
 }
 
@@ -693,6 +817,14 @@ export class AppUpdateService {
         });
         return installResultError('verification-failed');
       }
+      if (asset.size < 1 || asset.size > MAX_DOWNLOAD_BYTES) {
+        this.#options.logger?.info('app-update.verify', 'Update has no usable total byte size.', {
+          version: update.release.version,
+          assetName: asset.name,
+          assetSize: asset.size,
+        });
+        return installResultError('verification-failed');
+      }
 
       const installedCacheDirectory = update.target.distribution === 'installed'
         ? this.#options.preparedUpdateDirectory
@@ -707,37 +839,88 @@ export class AppUpdateService {
       downloadPath = updateDirectory === undefined
         ? await nextAvailableDownloadPath(this.#options.downloadsDirectory, asset.name)
         : path.join(updateDirectory, asset.name);
-      const response = await this.#fetch(asset.browserDownloadUrl, {
-        headers: superUpdateRequestHeaders(this.#options, 'application/octet-stream'),
-        redirect: 'follow',
-        signal,
-      });
-      if (!response.ok) {
-        this.#options.logger?.info('app-update.download', 'Update asset request failed.', {
-          status: response.status,
-          version: update.release.version,
-          assetName: asset.name,
+      const totalBytes = asset.size;
+      const partialMetadata: UpdatePartialMetadata = {
+        schemaVersion: 1,
+        assetUrl: asset.browserDownloadUrl,
+        assetName: asset.name,
+        version: update.release.version,
+        expectedSha256,
+        totalBytes,
+      };
+      const partialPaths = updatePartialPaths(this.#options, partialMetadata);
+      let partial = await loadPartialDownload(partialPaths, partialMetadata);
+      if (partial?.downloadedBytes === totalBytes) {
+        emitDownloadProgress(this.#options.onDownloadProgress, {
+          phase: 'downloading',
+          downloadedBytes: totalBytes,
+          totalBytes,
         });
-        return installResultError('download-failed');
+        if (await sha256File(partial.partialPath) === expectedSha256) {
+          await rename(partial.partialPath, downloadPath);
+          await rm(partial.metadataPath, { force: true });
+          partial = undefined;
+        } else {
+          await removePartialDownload(partial);
+          partial = undefined;
+        }
       }
-      const totalBytes = asset.size > 0 ? asset.size : undefined;
-      emitDownloadProgress(this.#options.onDownloadProgress, {
-        phase: 'downloading',
-        downloadedBytes: 0,
-        totalBytes,
-      });
-      const actualSha256 = await writeDownloadedResponse(response, downloadPath, {
-        signal,
-        totalBytes,
-        onProgress: this.#options.onDownloadProgress,
-      });
-      if (actualSha256 !== expectedSha256) {
-        await rm(downloadPath, { force: true }).catch(() => undefined);
-        this.#options.logger?.info('app-update.verify', 'Downloaded update checksum mismatch.', {
-          version: update.release.version,
-          assetName: asset.name,
+      if (!existsSync(downloadPath)) {
+        const resumeOffset = partial?.downloadedBytes ?? 0;
+        const headers = superUpdateRequestHeaders(this.#options, 'application/octet-stream');
+        if (resumeOffset > 0) {
+          headers.Range = `bytes=${resumeOffset}-`;
+          if (partial?.metadata.validator !== undefined) headers['If-Range'] = partial.metadata.validator;
+        }
+        const response = await this.#fetch(asset.browserDownloadUrl, {
+          headers,
+          redirect: 'follow',
+          signal,
         });
-        return installResultError('verification-failed');
+        const acceptsResume = resumeOffset > 0 && responseResumesAt(response, resumeOffset, totalBytes);
+        const restartsDownload = resumeOffset > 0 && response.status === 200;
+        if (!response.ok || (resumeOffset > 0 && !acceptsResume && !restartsDownload)) {
+          if (resumeOffset > 0 && response.status === 416) await removePartialDownload(partialPaths);
+          this.#options.logger?.info('app-update.download', 'Update asset request failed.', {
+            status: response.status,
+            version: update.release.version,
+            assetName: asset.name,
+            resumedBytes: resumeOffset,
+          });
+          return installResultError('download-failed');
+        }
+        const validator = responseValidator(response);
+        const downloadMetadata: UpdatePartialMetadata = {
+          ...partialMetadata,
+          ...(validator === undefined
+            ? (partial?.metadata.validator === undefined ? {} : { validator: partial.metadata.validator })
+            : { validator }),
+        };
+        if (restartsDownload) await removePartialDownload(partialPaths);
+        await savePartialMetadata(partialPaths.metadataPath, downloadMetadata);
+        emitDownloadProgress(this.#options.onDownloadProgress, {
+          phase: 'downloading',
+          downloadedBytes: restartsDownload ? 0 : resumeOffset,
+          totalBytes,
+        });
+        await writeDownloadedResponse(response, partialPaths.partialPath, {
+          signal,
+          totalBytes,
+          initialBytes: restartsDownload ? 0 : resumeOffset,
+          append: acceptsResume,
+          onProgress: this.#options.onDownloadProgress,
+        });
+        const actualSha256 = await sha256File(partialPaths.partialPath);
+        if (actualSha256 !== expectedSha256) {
+          await removePartialDownload(partialPaths);
+          this.#options.logger?.info('app-update.verify', 'Downloaded update checksum mismatch.', {
+            version: update.release.version,
+            assetName: asset.name,
+          });
+          return installResultError('verification-failed');
+        }
+        await rename(partialPaths.partialPath, downloadPath);
+        await rm(partialPaths.metadataPath, { force: true });
       }
 
       if (update.target.distribution === 'portable') {
