@@ -69,7 +69,7 @@ Click to select and double-click to open the viewer. Drag on empty canvas space 
 
 ### Create a root-level folder
 
-A new folder normally becomes a child of the selected folder. To create at the root, double-click a passive title-bar area outside buttons and inputs. This resets the sidebar's creation target to the root while keeping the current view and open preview. Clicking or dragging the title bar does not trigger this change.
+A new folder normally becomes a child of the selected folder. Starting with v2.3.0, click the sidebar's **Folders** heading or its trailing blank area, then the adjacent **+**, to create at the library root. The heading highlights the root creation target without changing the current view, open preview, or keyboard focus on mouse click. Show ignored items, add, and link remain independent buttons. Clicking, dragging, or double-clicking the title bar no longer changes the creation target; double-click retains the native window behavior.
 
 Folders and All assets render progressively in pages. Sidebar counts, exact totals, and previews may update later. The indeterminate loading bar means a result is pending, not a measured completion percentage.
 

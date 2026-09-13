@@ -47,6 +47,7 @@ function createNavigationProps(
     onEnterTrash: noop,
     onEnterTagManagement: noop,
     onChooseFolder: noop,
+    onResetFolderCreateParent: noop,
     onChooseCollection: noop,
     onChooseSmartCollection: noop,
     onExternalDragOver: noop,
@@ -95,6 +96,66 @@ describe("NavigationSidebar virtual library root", () => {
     root = undefined;
     container?.remove();
     container = undefined;
+  });
+
+  it("resets only the creation parent and preserves mouse focus", async () => {
+    const onResetFolderCreateParent = vi.fn();
+    const onChooseFolder = vi.fn();
+    const props = createNavigationProps({ assetScope: "child", onResetFolderCreateParent, onChooseFolder });
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root?.render(createElement(LocaleProvider, null, createElement(NavigationSidebar, props))));
+    const button = container.querySelector<HTMLButtonElement>(".nav-section-title-action");
+    expect(button).not.toBeNull();
+    expect(button?.getAttribute("aria-pressed")).toBe("false");
+    const focusTarget = document.createElement("input");
+    container.append(focusTarget);
+    focusTarget.focus();
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 });
+    button?.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    await act(async () => button?.click());
+    expect(document.activeElement).toBe(focusTarget);
+    expect(onResetFolderCreateParent).toHaveBeenCalledOnce();
+    expect(onChooseFolder).not.toHaveBeenCalled();
+    expect(props.onChooseAllAssets).not.toHaveBeenCalled();
+  });
+
+  it("marks the root creation target and isolates neighboring icon actions", async () => {
+    const onResetFolderCreateParent = vi.fn();
+    const onAddFolder = vi.fn();
+    const onImportFolderAsLinked = vi.fn();
+    const onToggleShowIgnoredItems = vi.fn();
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root?.render(createElement(LocaleProvider, null, createElement(NavigationSidebar, createNavigationProps({
+      onResetFolderCreateParent, onAddFolder, onImportFolderAsLinked, onToggleShowIgnoredItems,
+    })))));
+    const button = container.querySelector<HTMLButtonElement>(".nav-section-title-action");
+    expect(button?.getAttribute("aria-pressed")).toBe("true");
+    const icons = button?.closest(".nav-section-heading")?.querySelectorAll<HTMLButtonElement>(".nav-section-actions button");
+    expect(icons?.length).toBe(3);
+    await act(async () => icons?.forEach(icon => icon.click()));
+    expect(onAddFolder).toHaveBeenCalledOnce();
+    expect(onImportFolderAsLinked).toHaveBeenCalledOnce();
+    expect(onToggleShowIgnoredItems).toHaveBeenCalledOnce();
+    expect(onResetFolderCreateParent).not.toHaveBeenCalled();
+  });
+
+  it("disables root creation selection without an open library", async () => {
+    const onResetFolderCreateParent = vi.fn();
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root?.render(createElement(LocaleProvider, null, createElement(NavigationSidebar, createNavigationProps({
+      library: null, onResetFolderCreateParent,
+    })))));
+    const button = container.querySelector<HTMLButtonElement>(".nav-section-title-action");
+    expect(button?.disabled).toBe(true);
+    await act(async () => button?.click());
+    expect(onResetFolderCreateParent).not.toHaveBeenCalled();
   });
 
   it("renders one selectable root row with its direct-asset count", async () => {

@@ -83,7 +83,6 @@ import {
   ScopeBreadcrumbs,
   buildScopeBreadcrumbSegments,
 } from "./ScopeBreadcrumbs";
-import { shouldClearFolderScopeFromToolbarDoubleClick } from "./toolbar-root-scope";
 import {
   buildLinkedFolderBreadcrumbTrail,
   buildManagedFolderBreadcrumbTrail,
@@ -9632,21 +9631,7 @@ function AppInner() {
       className={`app-shell${leftOpen ? "" : " left-collapsed"}${rightOpen ? "" : " right-collapsed"}${panelResizing ? " is-resizing" : ""}`}
       style={panelResizeShellStyle as React.CSSProperties}
     >
-      <header
-        className="app-toolbar"
-        onDoubleClick={(event) => {
-          if (
-            sidebarFolderScope === "all" ||
-            sidebarFolderScope === "root" ||
-            !shouldClearFolderScopeFromToolbarDoubleClick(event.target)
-          ) {
-            return;
-          }
-          // Do not navigate or close the current preview: this action only
-          // changes the left-sidebar selection / next folder-create target.
-          setSidebarFolderScope("root");
-        }}
-      >
+      <header className="app-toolbar">
         <div className="toolbar-cluster toolbar-nav-cluster">
           <ToolButton
             icon={leftOpen ? "panel-left-close" : "panel-left"}
@@ -9856,6 +9841,7 @@ function AppInner() {
         onEnterTagManagement={() => void enterTagManagement()}
         onChoosePluginSidebarView={(viewId) => void enterPluginSidebarView(viewId)}
         onChooseFolder={(folderId) => void chooseFolder(folderId)}
+        onResetFolderCreateParent={() => setSidebarFolderScope("root")}
         onChooseCollection={(collectionId, recursive) =>
           void chooseCollection(collectionId, recursive)
         }

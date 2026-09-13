@@ -454,16 +454,16 @@ test("creates under the selected folder from the sidebar plus entry, cancels wit
       "父级",
     );
 
-    // A plain click (including the click emitted after an Electron title-bar
-    // drag) must preserve the selected folder. A deliberate double-click only
-    // changes the sidebar's create target to root; the active folder canvas
-    // stays in place.
+    // Clicking or double-clicking the title bar preserves the creation target.
+    // Only the Folders heading resets it, without changing the folder canvas.
     const passiveToolbarSurface = window.locator(".scope-trace");
     await passiveToolbarSurface.click({ position: { x: 200, y: 16 } });
     await expect(window.locator(".scope-crumb-label.is-current")).toHaveText(
       "父级",
     );
     await passiveToolbarSurface.dblclick({ position: { x: 200, y: 16 } });
+    await expect(sidebarFolderRow(window, "父级")).toHaveClass(/is-active/);
+    await window.locator(".nav-section-title-action").click();
     await expect(window.locator(".scope-crumb-label.is-current")).toHaveText(
       "父级",
     );

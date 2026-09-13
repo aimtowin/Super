@@ -188,6 +188,7 @@ export const en = {
   },
   nav: {
     folders: "Folders",
+    resetFolderCreateParent: "Create the next folder at library root without changing the current view",
     showIgnored: "Show hidden items",
     collections: "Collections",
     smartCollections: "Smart collections",

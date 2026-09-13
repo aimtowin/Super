@@ -1823,6 +1823,42 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   text-transform: uppercase;
 }
 
+.nav-section-title-action {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  margin-left: -6px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-section-title-action:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.nav-section-title-action[aria-pressed="true"],
+.nav-section-title-action:active:not(:disabled) {
+  background: var(--active);
+  color: var(--text);
+}
+
+.nav-section-title-action:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.nav-section-title-action:disabled {
+  cursor: default;
+}
+
 .nav-section-actions {
   display: flex;
   align-items: center;

@@ -471,6 +471,10 @@ function InlineSmartCollectionEditRow({
 
 function Section({
   title,
+  titleAction,
+  titleActive,
+  titleDisabled,
+  titleHint,
   action,
   actionLabel,
   toggleAction,
@@ -481,6 +485,10 @@ function Section({
   children,
 }: {
   title: string;
+  titleAction?: () => void;
+  titleActive?: boolean;
+  titleDisabled?: boolean;
+  titleHint?: string;
   action?: () => void;
   /** Explicit primary tooltip; defaults to nav.addSection. */
   actionLabel?: string;
@@ -497,7 +505,23 @@ function Section({
   return (
     <section className="nav-section">
       <div className="nav-section-heading">
-        <span>{title}</span>
+        {titleAction ? (
+          <button
+            type="button"
+            className="nav-section-title-action"
+            aria-pressed={Boolean(titleActive)}
+            disabled={titleDisabled}
+            data-hover-tip={titleHint}
+            onMouseDown={(event) => {
+              // Mouse selection changes only the creation parent, not preview focus.
+              // Keyboard users can still focus and activate this native button.
+              if (event.button === 0) event.preventDefault();
+            }}
+            onClick={titleAction}
+          >
+            {title}
+          </button>
+        ) : <span>{title}</span>}
         {(action || secondaryAction || toggleAction) && (
           <span className="nav-section-actions">
             {toggleAction && (
@@ -579,6 +603,7 @@ export interface NavigationSidebarProps {
   onEnterTagManagement: () => void;
   onChoosePluginSidebarView?: (viewId: string) => void;
   onChooseFolder: (folderId: string) => void;
+  onResetFolderCreateParent: () => void;
   onChooseCollection: (collectionId: string, recursive?: boolean) => void;
   onChooseSmartCollection: (collectionId: string) => void;
 
@@ -718,6 +743,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
     onEnterTagManagement,
     onChoosePluginSidebarView,
     onChooseFolder,
+    onResetFolderCreateParent,
     onChooseCollection,
     onChooseSmartCollection,
     onExternalDragOver,
@@ -1559,6 +1585,10 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
         ))}
         <Section
           title={t("nav.folders")}
+          titleAction={onResetFolderCreateParent}
+          titleActive={Boolean(library && assetScope === "root")}
+          titleDisabled={!library}
+          titleHint={t("nav.resetFolderCreateParent")}
           action={library ? onAddFolder : undefined}
           actionLabel={t("nav.addFolder")}
           toggleAction={library ? onToggleShowIgnoredItems : undefined}

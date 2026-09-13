@@ -177,6 +177,7 @@ export const zhCN = {
   },
   nav: {
     folders: "文件夹",
+    resetFolderCreateParent: "将新建文件夹的父级切回根目录，不切换当前内容",
     showIgnored: "显示隐藏项目",
     collections: "合集",
     smartCollections: "智能合集",

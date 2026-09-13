@@ -1,6 +1,6 @@
 # Installation
 
-> Applies to Super Lib v2.2.8; package availability follows release attachments.
+> Applies to Super Lib v2.3.0; package availability follows release attachments.
 
 Super Lib is free. Download it from the [latest Super Release](https://github.com/aimtowin/Super/releases/latest). New users can follow the [quick start](quick-start.en.md).
 
@@ -13,7 +13,7 @@ Use [Super Releases](https://github.com/aimtowin/Super/releases) for the current
 
 ## Other platforms
 
-The current `v2.2.8` release provides a Windows x64 installer. Check the actual release attachments for availability on other platforms.
+The current `v2.3.0` release provides a Windows x64 installer. Check the actual release attachments for availability on other platforms.
 
 ## Windows
 

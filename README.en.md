@@ -40,7 +40,7 @@ Super Lib itself is free. Optional third-party AI services may charge according 
 
 ## Install and use
 
-The current `v2.2.8` release provides a Windows x64 installer. Download `SuperSetup.exe` for a first installation. Full update ZIPs and delta packages are update-delivery artifacts. Availability on other platforms depends on the files actually attached to a release.
+The current `v2.3.0` release provides a Windows x64 installer. Download `SuperSetup.exe` for a first installation. Full update ZIPs and delta packages are update-delivery artifacts. Availability on other platforms depends on the files actually attached to a release.
 
 Libraries live at the location you choose. Importing copies assets into the library; linking references files at their existing location, which must remain accessible. See the [quick start](docs/user-guide/quick-start.en.md).
 

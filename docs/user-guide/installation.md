@@ -1,6 +1,6 @@
 # 安装
 
-> 适用版本：Super Lib v2.2.8；安装包可用性以发行附件为准。
+> 适用版本：Super Lib v2.3.0；安装包可用性以发行附件为准。
 
 Super Lib 完全免费。在 [Super Releases](https://github.com/aimtowin/Super/releases/latest) 下载最新版。首次使用建议同时阅读[快速上手](quick-start.md)。
 
@@ -13,7 +13,7 @@ Windows 安装包和版本说明以 [Super Releases](https://github.com/aimtowin
 
 ## 其他平台
 
-当前 `v2.2.8` 的发行附件提供 Windows x64 安装包。其他平台是否提供可下载版本，以 Release 实际附件为准。
+当前 `v2.3.0` 的发行附件提供 Windows x64 安装包。其他平台是否提供可下载版本，以 Release 实际附件为准。
 
 ## Windows
 
