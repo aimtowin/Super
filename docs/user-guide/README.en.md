@@ -2,7 +2,8 @@
 
 A Super usage guide for end users. Chinese version: [README.md](README.md)
 
-- [Install](installation.en.md) — macOS / Windows, upgrades
+- [Quick start](quick-start.en.md) — install, create a local library, optionally configure AI and appearance
+- [Install](installation.en.md) — Windows installation, updates, and other platforms
 - [Basics](basics.en.md) — libraries, importing, browsing, organization, file actions, and the viewer
 - [Search and filters](search-and-filters.en.md) — advanced query syntax, filter dimensions, and Shift multi-select
 - [WebDAV cloud sync](sync.en.md) — server configuration, library binding, auto-sync, opening remote synced libraries
@@ -14,10 +15,12 @@ A Super usage guide for end users. Chinese version: [README.md](README.md)
 
 ## Quick start
 
-1. Install Super (see [Install](installation.en.md))
-2. Launch the app and create a local library
-3. Drag images, videos, audio, 3D models, or text into the window, or click Import
-4. Assets appear on the canvas. Double-click to open the viewer; right-click for more actions. Thumbnails, metadata, and AI analysis complete progressively in the background
+1. Download `SuperSetup.exe` from the [latest release](https://github.com/aimtowin/Super/releases/latest) and install it.
+2. Create a library on a local disk; an SSD is recommended.
+3. Optionally configure **Settings → AI** and **Settings → Appearance**.
+4. Import assets or link an existing folder, then browse and organize. Double-click to open the viewer; right-click for more actions.
+
+Super Lib is free. Third-party AI providers may charge separately. See the [quick start](quick-start.en.md) for details.
 
 Data stays in your local library directory; for syncing across machines, use WebDAV cloud sync (see [Sync](sync.en.md)).
 
@@ -25,7 +28,7 @@ Data stays in your local library directory; for syncing across machines, use Web
 
 A typical workspace has library navigation on the left, the asset canvas in the center, and the Inspector on the right. On Windows, the upper-left Main menu contains File, Edit, Window, Library, and Settings; macOS also exposes the same commands in the native menu. Import, search, filtering, and sorting stay in the top toolbar.
 
-![Super library overview](../assets/ui/super-Preview.png)
+![Super Lib library overview](../assets/ui/super-workspace-2.2.8.png)
 
 See [Basics](basics.en.md) for the complete workflow.
 

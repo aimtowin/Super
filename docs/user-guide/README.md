@@ -2,7 +2,8 @@
 
 面向最终用户的 Super 使用指南。英文版：[README.en.md](README.en.md)
 
-- [安装](installation.md)——macOS / Windows 安装、升级
+- [快速上手](quick-start.md)——下载安装、创建本地资产库、可选 AI 与外观配置
+- [安装](installation.md)——Windows 安装、更新与其他平台说明
 - [基本使用](basics.md)——资源库、导入、浏览、标签、合集、文件操作和查看器
 - [搜索与过滤](search-and-filters.md)——高级搜索语法、过滤维度和 Shift 多选
 - [WebDAV 云同步](sync.md)——服务器配置、资源库绑定、自动同步与打开远端同步库
@@ -14,10 +15,12 @@
 
 ## 快速开始
 
-1. 安装 Super（见[安装](installation.md)）
-2. 启动应用，创建本地资源库
-3. 把图片、视频、音频、3D 模型或文本拖入窗口，或点击「导入文件」
-4. 资产出现在画布中。双击打开查看器，右键查看更多操作；缩略图、元数据和 AI 分析会在后台渐进完成
+1. 从 [Release](https://github.com/aimtowin/Super/releases/latest) 下载 `SuperSetup.exe` 并安装。
+2. 启动应用，在本机磁盘创建资源库，建议使用固态硬盘。
+3. 按需配置「设置 → AI」与「设置 → 外观」，也可以跳过。
+4. 导入素材或链接已有文件夹，开始浏览和整理。双击打开查看器，右键查看更多操作。
+
+Super Lib 完全免费，第三方 AI 服务可能另行收费。完整入门步骤见[快速上手](quick-start.md)。
 
 数据保存在本机资源库目录；如需多台电脑间同步，可使用 WebDAV 云同步（见[同步](sync.md)）。
 
@@ -25,7 +28,7 @@
 
 典型工作区由左侧资源库导航、中部资产画布和右侧 Inspector 组成。Windows 使用左上角「主菜单」承载文件、编辑、窗口、资源库和设置；macOS 还提供同内容的系统菜单。导入、搜索、过滤和排序集中在顶部工具栏。
 
-![Super 资源库总览](../assets/ui/super-Preview.png)
+![Super Lib 资源库总览](../assets/ui/super-workspace-2.2.8.png)
 
 完整流程见[基本使用](basics.md)。
 

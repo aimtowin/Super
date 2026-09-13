@@ -1,31 +1,21 @@
 # Installation
 
-Authorized installers are published through [Super Releases](https://github.com/aimtowin/Super/releases) or supplied directly by the project team.
+Super Lib is free. Download it from the [latest Super Release](https://github.com/aimtowin/Super/releases/latest). New users can follow the [quick start](quick-start.en.md).
 
 ## Requirements
 
-- macOS: Apple Silicon (arm64) or Intel (x64), macOS 11 or newer
 - Windows: 64-bit Windows 10 or Windows 11
-- The app uses about 500 MB; library data needs additional space
+- A local SSD is recommended for the library; assets and preview caches need additional space
 
 Use [Super Releases](https://github.com/aimtowin/Super/releases) for the current Windows installer and version notes.
 
-## macOS
+## Other platforms
 
-1. Download the matching `Super-<version>-arm64.dmg` or x64 package.
-2. Open the DMG and drag Super to Applications.
-
-Unsigned development builds may trigger Gatekeeper. Verify the source, then right-click the app, choose Open, and confirm. If it is still blocked, clear quarantine from Terminal:
-
-```bash
-xattr -cr /Applications/Super.app
-```
-
-To uninstall, move the app to the Trash. Libraries live where you created them and are not removed with the app.
+The current `v2.2.8` release provides a Windows x64 installer. Check the actual release attachments for availability on other platforms.
 
 ## Windows
 
-1. Download `Super-<version> Setup.exe` or the Windows package attached to the release.
+1. Download [SuperSetup.exe](https://github.com/aimtowin/Super/releases/latest/download/SuperSetup.exe).
 2. Run the installer and follow the prompts.
 
 Unsigned development builds may trigger SmartScreen. Verify the source, then choose **More info → Run anyway**. Uninstall from **Settings → Apps**.
@@ -36,4 +26,6 @@ The project team distributes the browser extension package with supported releas
 
 ## Upgrading
 
-Replace the macOS app with the new DMG, or run the new Windows installer over the existing install. Libraries and user configuration live outside the application install directory and normally remain; back up a library before upgrading. Follow the release notes for migrations and platform-specific caveats.
+Download through the in-app update prompt or run a newer `SuperSetup.exe` over the existing installation. In-app updates prefer an available delta matching your installed version and otherwise use the full package. Once downloaded and prepared, confirm installation, wait for the separate updater to finish, then click **Launch Super Lib**.
+
+Libraries and user configuration live outside the installation directory; back up your library before upgrading. Full update ZIPs, delta ZIPs, and SHA-256 files are update and verification attachments; a first installation does not require downloading each one.

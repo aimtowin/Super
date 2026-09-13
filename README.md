@@ -4,19 +4,28 @@
 
 </div>
 
-# Super
+# Super Lib
 
 <div align="center">
 
-<img src="docs/assets/ui/super-Logo.png" alt="Super 标志" width="30%" />
+<img src="docs/assets/ui/super-Logo.png" alt="Super Lib 标志" width="160" />
 
 </div>
 
-Super 是面向创意工作的本地优先视觉资产工作台。它将素材导入、浏览、检索、标签、合集、预览、链接文件夹、浏览器采集、AI 分析和本地同步集中在一个桌面应用中。
+Super Lib 是一款完全免费的本地素材管理应用。把图片、视频、音频和模型放进一个工作区，用文件夹、标签、颜色筛选与合集整理素材，也可以按需配置 AI 分析和自己的界面外观。
 
-## 发布状态
+[下载 Windows 安装包](https://github.com/aimtowin/Super/releases/latest/download/SuperSetup.exe) · [查看版本与其他下载文件](https://github.com/aimtowin/Super/releases/latest) · [快速上手](docs/user-guide/quick-start.md) · [反馈问题](https://github.com/aimtowin/Super/issues)
 
-Super 为专有软件。本仓库用于经授权的开发、构建、验证与版本管理；不构成公开源码分发或公开更新渠道。安装包、扩展包与访问权限由项目团队单独发放。
+![Super Lib 主界面：素材浏览、文件夹导航与自定义背景](docs/assets/ui/super-workspace-2.2.8.png)
+
+## 从一个本地资产库开始
+
+1. 下载并安装 `SuperSetup.exe`，打开 Super Lib。
+2. 在本机磁盘中选择位置创建资产库，建议使用固态硬盘，并为素材与预览缓存留出空间。
+3. 按需在「设置 → AI」配置 AI 服务，在「设置 → 外观」调整主题、背景与字体大小。这两步都可以跳过。
+4. 导入素材或链接已有文件夹，开始浏览、筛选和整理。
+
+应用本身完全免费。可选的第三方 AI 服务可能另行收费，费用由所选服务商决定。
 
 ## 功能概览
 
@@ -25,20 +34,23 @@ Super 为专有软件。本仓库用于经授权的开发、构建、验证与�
 - **本地优先**：托管导入会复制素材进入资源库；链接文件夹则原位引用外部目录。资源库数据保存在本机，可按需使用 WebDAV 在设备间同步。
 - **浏览与预览**：缩略图、视频预览、资源信息、查看器和后台派生任务均以不阻塞浏览为原则。
 - **自动化与扩展**：支持插件、受控自动化脚本和 MCP 本机连接；所有写入能力受权限、执行计划与风险确认约束。
-- **AI 分析**：可对受支持媒体生成描述、标签和结构化信息；仅在用户显式配置并启用后才会向所选服务提交资产。
+- **AI 分析与查找**：为受支持媒体生成描述和标签，并用自然语言查找已分析素材、创建临时智能合集。AI 是可选功能，需自行配置服务。
+- **自定义外观**：深浅主题、自定义背景、主题色和 1–4 档应用字体大小。
 - **外部资源库与浏览器采集**：可打开符合支持条件的外部资源库；浏览器扩展可把网页图片和视频保存到当前打开的 Super 资源库。
-
-<div align="center">
-
-<img src="docs/assets/ui/super-Preview.png" alt="Super 工作区预览" />
-
-</div>
 
 ## 安装与使用
 
-请通过项目团队提供的安装包安装 Super。Windows 构建默认输出 `SuperSetup.exe`；资源库和用户配置独立于安装目录，升级或卸载应用不会自动删除资源库。
+当前 `v2.2.8` 提供 Windows x64 安装包。首次安装请下载 `SuperSetup.exe`；发布页上的完整更新 ZIP 和 delta 增量包用于更新交付，不是首次安装的首选入口。其他平台的安装包以发布页实际附件为准。
+
+资产库保存在创建时选择的位置。导入会复制素材进入库；链接文件夹会引用原位置的文件，原目录需要保持可访问。详情见[快速上手](docs/user-guide/quick-start.md)。
 
 详细的安装、导入、浏览、同步、AI、扩展和故障排查说明见[使用手册](docs/user-guide/README.md)。
+
+## 反馈与许可
+
+遇到 Bug 可以在 [GitHub Issues](https://github.com/aimtowin/Super/issues) 提交，也可以通过作者发布 Super Lib 的社媒平台反馈。请附上应用版本、操作步骤、预期结果、实际结果和必要截图；具体格式见[故障排查](docs/user-guide/troubleshooting.md)。
+
+Super Lib 免费使用。仓库代码许可见 [MIT LICENSE](LICENSE)，第三方组件和素材许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 本地构建
 
@@ -67,6 +79,7 @@ npm run make:inno
 
 | 文档 | 内容 |
 | --- | --- |
+| [快速上手](docs/user-guide/quick-start.md) | 从下载安装到创建资产库、可选配置和第一次导入 |
 | [使用手册](docs/user-guide/README.md) | 安装、导入、浏览、搜索、标签、合集、同步、AI、浏览器扩展与故障排查 |
 | [扩展作者手册](docs/manual/README.md) | 插件、自动化脚本和 MCP 的开发指南与 API 参考 |
 | [产品简报](docs/product-brief.md) | 产品愿景、范围、术语与交付边界 |

@@ -57,7 +57,11 @@ Choose `AI analysis` from an asset context menu or use the batch action for a mu
 
 ![Start AI analysis from the asset context menu](../assets/ui/AI-analyze-menu.png)
 
-Results appear in the AI section of the asset Inspector. A successful re-analysis replaces the current AI result and does not keep history; clearing AI content does not remove manual content or tag entities.
+Results appear in the AI section of the asset Inspector. Re-analysis produces a proposal for review; the current AI result is replaced only when you accept it. Clearing AI content does not remove manual content or tag entities.
+
+## AI asset search
+
+Open AI asset search from the sidebar's smart collections section and describe what you want to find. The configured AI service interprets search conditions, which are then applied locally to analyzed assets. Keep the result as a smart collection or discard the temporary collection. Search uses existing analysis and does not automatically analyze the entire library.
 
 ## Jobs and failures
 
@@ -67,4 +71,4 @@ If a video contact sheet or thumbnail is not ready, retry media generation from 
 
 ## Privacy and cost
 
-Super does not upload an entire library or provide AI search. Only explicitly submitted, supported assets are sent to the selected provider; check its privacy terms and pricing before enabling AI.
+Super Lib itself is free; third-party AI services may charge. Analysis sends images or previews of supported assets. AI search sends your query and the context needed to build a search plan to the selected provider, then performs filtering locally. It does not upload the entire library as part of a search. Review the provider's privacy terms and pricing before enabling AI.

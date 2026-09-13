@@ -1,11 +1,12 @@
 # Super 文档
 
-本文档目录随 Super 源码版本维护，覆盖产品使用、扩展开发、产品范围与领域术语。内部设计记录、开发日志与 QA 证据不属于交付文档，也不在此仓库中发布。
+本文档目录随 Super Lib 源码版本维护，覆盖产品使用、扩展开发、产品范围与领域术语。首次使用请从[快速上手](user-guide/quick-start.md)开始；开发计划与历史记录供维护者参考，具体操作以使用手册为准。
 
 ## 交付文档
 
 | 文档 | 内容 |
 | --- | --- |
+| [快速上手](user-guide/quick-start.md) | 下载安装、创建本地资产库、可选 AI 与外观配置 |
 | [使用手册](user-guide/README.md) | 安装、导入、浏览、搜索与过滤、标签/合集、查看器、AI 分析、插件/MCP、故障排查（中英双语） |
 | [扩展作者手册](manual/README.md) | 插件、脚本、MCP 开发指南与 API 参考 |
 | [产品简报](product-brief.md) | 产品愿景与 MVP 边界 |
@@ -13,7 +14,7 @@
 
 ## 构建与交付
 
-构建环境、常用验证命令和 Windows 安装包输出位置见仓库根目录的 [README.md](../README.md)。Super 为专有软件；本仓库只面向经授权的开发、构建与验证，不提供公开的源码分发或更新通道。
+构建环境、常用验证命令和 Windows 安装包输出位置见仓库根目录的 [README.md](../README.md)。Super Lib 完全免费，Windows 安装包在 [GitHub Release](https://github.com/aimtowin/Super/releases/latest) 下载。仓库代码许可见 [LICENSE](../LICENSE)。
 
 ## 文档维护原则
 
