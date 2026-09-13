@@ -11,6 +11,11 @@ export default tseslint.config(
       '.worktrees/**',
       '.media-build/**',
       'artifacts/**',
+      // Local preview/build scratch space; never production source.
+      'tmp/**',
+      // Internal skill reference material may intentionally contain third-party
+      // declarations and browser snippets outside this application's lint rules.
+      'docs/internal/**',
       'dist/**',
       'out/**',
       'coverage/**',

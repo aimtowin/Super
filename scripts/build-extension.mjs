@@ -116,7 +116,10 @@ async function bundleScriptEntries() {
         outDir,
         emptyOutDir: index === 0,
         minify: false,
-        sourcemap: true,
+        // The extension ships as a user-loadable production artifact inside
+        // Super. Source maps are useful only for local extension debugging and
+        // add several copies of the bundled scripts to every desktop package.
+        sourcemap: false,
         rollupOptions: {
           input: path.join(sourceDir, `${entry.name}.ts`),
           output: {

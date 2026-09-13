@@ -19,6 +19,7 @@
  * implemented as an inverse surface-colored veil so panels keep readability.
  */
 :root {
+  --app-font-scale: 1;
   --ui-background-color: var(--ui-surface-canvas);
   --ui-background-image: none;
   --ui-background-image-opacity: 0.8;
@@ -145,12 +146,12 @@
     "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei", sans-serif;
   --ui-font-family-mono: "IBM Plex Mono", "SFMono-Regular", Consolas,
     "Liberation Mono", monospace;
-  --ui-font-size-micro: 11px;
-  --ui-font-size-caption: 12px;
-  --ui-font-size-body: 13px;
-  --ui-font-size-label: 12px;
-  --ui-font-size-title: 16px;
-  --ui-font-size-heading: 18px;
+  --ui-font-size-micro: calc(11px * var(--app-font-scale));
+  --ui-font-size-caption: calc(12px * var(--app-font-scale));
+  --ui-font-size-body: calc(13px * var(--app-font-scale));
+  --ui-font-size-label: calc(12px * var(--app-font-scale));
+  --ui-font-size-title: calc(16px * var(--app-font-scale));
+  --ui-font-size-heading: calc(18px * var(--app-font-scale));
   --ui-line-height-tight: 1.2;
   --ui-line-height-normal: 1.4;
   --ui-line-height-relaxed: 1.55;

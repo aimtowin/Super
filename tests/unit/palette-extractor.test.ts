@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { dominantColorMetrics, extractRepresentativePalette } from '../../src/worker/palette-extractor';
+import {
+  colorMetrics,
+  dominantColorMetrics,
+  extractRepresentativePalette,
+} from '../../src/worker/palette-extractor';
 
 describe('extractRepresentativePalette', () => {
   it('is deterministic and reports normalized representative ratios', () => {
@@ -44,5 +48,10 @@ describe('extractRepresentativePalette', () => {
     expect(dominantColorMetrics('#FF0000')).toEqual({ hue: 0, lightness: 0.5 });
     expect(dominantColorMetrics('#00FF00')).toEqual({ hue: 120, lightness: 0.5 });
     expect(dominantColorMetrics('#0000FF')).toEqual({ hue: 240, lightness: 0.5 });
+  });
+
+  it('derives HSL saturation for the per-colour palette index', () => {
+    expect(colorMetrics('#808080')).toEqual({ hue: 0, saturation: 0, lightness: 0.501961 });
+    expect(colorMetrics('#FF0000')).toEqual({ hue: 0, saturation: 1, lightness: 0.5 });
   });
 });

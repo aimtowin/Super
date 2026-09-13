@@ -67,6 +67,18 @@ export {
   type EffectiveThemeTokenResult,
 } from './theme-composition';
 export {
+  APP_FONT_SIZE_LEVELS,
+  APP_FONT_SIZE_PREFERENCES_KEY,
+  DEFAULT_APP_FONT_SIZE_LEVEL,
+  appFontScaleForLevel,
+  applyAppFontSizeLevel,
+  clampAppFontSizeLevel,
+  loadAppFontSizePreferences,
+  saveAppFontSizeLevel,
+  type AppFontSizeLevel,
+  type AppFontSizePreferences,
+} from './font-size-preferences';
+export {
   DEFAULT_THEME_PROFILE,
   THEME_PROFILE_IDS,
   THEME_PROFILE_PREF_KEY,

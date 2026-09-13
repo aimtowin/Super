@@ -11,11 +11,14 @@ import { useT } from '../i18n';
 import { Button, Progress } from '../ui/primitives';
 import { cx } from '../ui/primitives/cx';
 import { formatBackgroundBytes } from './background-image-compression';
-import type { BackgroundImageSource } from './background-preferences';
+import type {
+  BackgroundImageKind,
+  BackgroundImageSource,
+} from './background-preferences';
 
 export type BackgroundImagePanelProps = {
-  /** Current wallpaper data URL, or null when no image is configured. */
-  readonly imageDataUrl: string | null;
+  /** Whether the image is built in, user-selected, or intentionally disabled. */
+  readonly imageKind: BackgroundImageKind;
   /** Provenance of the stored wallpaper; absent for legacy/empty state. */
   readonly imageSource: BackgroundImageSource | null;
   /** Exact CSS the app shell uses to render the backdrop. */
@@ -30,6 +33,8 @@ export type BackgroundImagePanelProps = {
   readonly onSelectFile: (file: File) => void;
   /** Remove the wallpaper, keeping color/mode/opacity untouched. */
   readonly onRemove: () => void;
+  /** Restore the bundled wallpaper after a custom image or explicit opt-out. */
+  readonly onUseDefault: () => void;
 };
 
 /**
@@ -39,7 +44,7 @@ export type BackgroundImagePanelProps = {
  * tree; the dropzone button is the focusable trigger.
  */
 export function BackgroundImagePanel({
-  imageDataUrl,
+  imageKind,
   imageSource,
   previewStyle,
   busy,
@@ -47,6 +52,7 @@ export function BackgroundImagePanel({
   notices,
   onSelectFile,
   onRemove,
+  onUseDefault,
 }: BackgroundImagePanelProps): ReactNode {
   const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -70,7 +76,7 @@ export function BackgroundImagePanel({
     if (file) onSelectFile(file);
   }
 
-  const hasImage = imageDataUrl !== null;
+  const hasImage = imageKind !== 'none';
 
   return (
     <div className="app-settings-background-image">
@@ -103,6 +109,11 @@ export function BackgroundImagePanel({
             <Button iconName="refresh" onClick={openPicker} size="sm" variant="secondary">
               {t('settings.backgroundReplaceImage')}
             </Button>
+            {imageKind === 'custom' ? (
+              <Button iconName="refresh" onClick={onUseDefault} size="sm" variant="quiet">
+                {t('settings.backgroundRestoreDefault')}
+              </Button>
+            ) : null}
             <Button iconName="trash" onClick={onRemove} size="sm" variant="quiet">
               {t('settings.backgroundRemoveImage')}
             </Button>
@@ -131,7 +142,11 @@ export function BackgroundImagePanel({
           type="file"
         />
       </div>
-      {imageSource ? (
+      {imageKind === 'default' ? (
+        <p className="app-settings-background-meta">
+          {t('settings.backgroundBuiltInImage')}
+        </p>
+      ) : imageSource ? (
         <p className="app-settings-background-meta">
           {`${imageSource.fileName} · ${imageSource.width}×${imageSource.height}`}
           {imageSource.encodedBytes < imageSource.originalBytes
@@ -141,7 +156,17 @@ export function BackgroundImagePanel({
               })}`
             : null}
         </p>
-      ) : null}
+      ) : (
+        <Button
+          className="app-settings-background-restore-default"
+          iconName="refresh"
+          onClick={onUseDefault}
+          size="sm"
+          variant="secondary"
+        >
+          {t('settings.backgroundUseDefault')}
+        </Button>
+      )}
       {notices.length > 0 ? (
         <p className="app-settings-background-notice">
           {notices.map((notice, index) => (

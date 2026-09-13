@@ -28,6 +28,7 @@ import {
   browseLoadMoreObserverRoot,
   excludeLocallyDeletedAssets,
 } from "./asset-browse-load-more";
+import { BROWSE_LAYOUT_CHUNK_SIZE } from "../shared/browse-scope";
 import {
   browsePageOffset,
   contiguousBrowsePageRuns,
@@ -44,17 +45,15 @@ const browseDiagnosticsEnabled = Boolean(
 export const BROWSE_PAGE_SIZE = 100;
 
 /**
- * The tail sentinel is deliberately disabled while the compact layout index
- * is hydrating. During that window the sentinel is still rendered directly
- * after the first page, so a large scope can look "near the end" and enqueue
- * a tail query before the full scrollbar geometry exists. That background
- * query competes with the first real scrollbar jump for the single Worker.
+ * The sentinel doubles as progressive layout hydration. Until the complete
+ * geometry exists, reaching the current tail asks for the next small layout
+ * chunk; once complete, it resumes the normal page-tail fallback.
  */
 export function shouldRunBrowseSentinel(options: {
   layoutHydrationComplete: boolean;
   total: number;
 }): boolean {
-  return options.layoutHydrationComplete && options.total > 0;
+  return options.total > 0;
 }
 
 /** Match the observer's 800px root margin with an explicit geometry guard. */
@@ -124,16 +123,26 @@ export async function fetchBrowseScopeIds(options: {
 }
 
 /** Fetch only the full-scope identity + geometry index used by virtual layout. */
+export type BrowseLayoutPage = {
+  layout: BrowseLayoutEntry[];
+  total: number;
+  offset: number;
+};
+
 export async function fetchBrowseLayout(options: {
   api: SuperLibraryApi;
   definition: BrowsePageDefinition;
-}): Promise<BrowseLayoutEntry[] | null> {
+  offset?: number;
+  limit?: number;
+}): Promise<BrowseLayoutPage | null> {
   const { api, definition } = options;
   const result = definition.kind === "smart-collection"
     ? await api.executeSmartCollection({
         libraryId: definition.libraryId,
         collectionId: definition.collectionId,
         layoutOnly: true,
+        offset: options.offset,
+        limit: options.limit,
       })
     : await api.searchAssets({
         libraryId: definition.libraryId,
@@ -143,9 +152,11 @@ export async function fetchBrowseLayout(options: {
         sort: definition.sort ?? undefined,
         showIgnored: definition.showIgnored,
         layoutOnly: true,
+        offset: options.offset,
+        limit: options.limit,
       });
   return result.ok && result.value.layout !== undefined
-    ? result.value.layout
+    ? { layout: result.value.layout, total: result.value.total, offset: result.value.offset }
     : null;
 }
 
@@ -312,6 +323,7 @@ export function useBrowsePagination(
   const totalRef = useRef(0);
   const layoutRef = useRef<BrowseLayoutEntry[]>([]);
   const layoutHydrationCompleteRef = useRef(false);
+  const layoutFetchInFlightRef = useRef(false);
   const filledOffsetsRef = useRef<Set<number>>(new Set());
   const inFlightOffsetsRef = useRef<Set<number>>(new Set());
   const deletedIdsRef = useRef<Set<string>>(new Set());
@@ -338,11 +350,60 @@ export function useBrowsePagination(
     setHasMorePages(false);
   }, []);
 
+  const hydrateNextLayoutChunk = useCallback(
+    async (definition: BrowsePageDefinition, generation: number) => {
+      if (!api || generation !== generationRef.current) return;
+      const offset = layoutRef.current.length;
+      if (offset >= totalRef.current) {
+        layoutHydrationCompleteRef.current = true;
+        setLayoutHydrationVersion((version) => version + 1);
+        return;
+      }
+      if (layoutFetchInFlightRef.current) return;
+      layoutFetchInFlightRef.current = true;
+      try {
+        const page = await fetchBrowseLayout({
+          api,
+          definition,
+          offset,
+          limit: Math.min(BROWSE_LAYOUT_CHUNK_SIZE, totalRef.current - offset),
+        });
+        if (generation !== generationRef.current) return;
+        if (!page || (page.layout.length === 0 && page.total > offset)) {
+          // Do not strand the current browse scope if a non-critical geometry
+          // response fails. The already-painted section still paginates.
+          layoutHydrationCompleteRef.current = true;
+          setLayoutHydrationVersion((version) => version + 1);
+          return;
+        }
+        totalRef.current = page.total;
+        setSearchTotal(page.total);
+        const nextLayout = page.offset === layoutRef.current.length
+          ? [...layoutRef.current, ...page.layout]
+          : page.offset === 0
+            ? page.layout
+            : layoutRef.current;
+        layoutRef.current = nextLayout;
+        layoutHydrationCompleteRef.current =
+          nextLayout.length >= page.total || page.layout.length === 0;
+        setBrowseLayout(nextLayout);
+        setLayoutHydrationVersion((version) => version + 1);
+        applyTarget(definition)((current) =>
+          mergeLoadedBrowsePage({ current, items: [], layout: nextLayout }),
+        );
+      } finally {
+        layoutFetchInFlightRef.current = false;
+      }
+    },
+    [api, applyTarget, setBrowseLayout, setSearchTotal],
+  );
+
   const beginPage = useCallback(
     (definition: BrowsePageDefinition, firstPage: BrowseFirstPage) => {
       definitionRef.current = definition;
       generationRef.current += 1;
       inFlightOffsetsRef.current = new Set();
+      layoutFetchInFlightRef.current = false;
       deletedIdsRef.current = new Set();
       totalRef.current = firstPage.total;
       const initialLayout = firstPage.items.map((asset) => ({
@@ -364,28 +425,11 @@ export function useBrowsePagination(
       refreshHasMore(firstPage.total, filled);
       applyTarget(definition)([...firstPage.items]);
       const generation = generationRef.current;
-      if (api) {
-        void fetchBrowseLayout({ api, definition }).then((layout) => {
-          if (generation !== generationRef.current) return;
-          // Whether the full layout succeeded or failed, the sentinel may now
-          // fall back to its normal tail-page behavior. On success the full
-          // geometry prevents a false early intersection; on failure this
-          // preserves the existing pagination fallback.
-          layoutHydrationCompleteRef.current = true;
-          setLayoutHydrationVersion((version) => version + 1);
-          // A superseded/failed layout response must never erase the compact
-          // geometry that currently owns the scrollbar. An actually empty
-          // scope is valid only when the first page also reported total=0.
-          if (!layout || (layout.length === 0 && totalRef.current > 0)) return;
-          layoutRef.current = layout;
-          setBrowseLayout(layout);
-          applyTarget(definition)((current) =>
-            mergeLoadedBrowsePage({ current, items: [], layout }),
-          );
-        });
+      if (api && !layoutHydrationCompleteRef.current) {
+        void hydrateNextLayoutChunk(definition, generation);
       }
     },
-    [api, applyTarget, refreshHasMore, setBrowseLayout, setSearchOffset, setSearchTotal],
+    [api, applyTarget, hydrateNextLayoutChunk, refreshHasMore, setBrowseLayout, setSearchOffset, setSearchTotal],
   );
 
   const fetchPageAt = useCallback(
@@ -570,12 +614,17 @@ export function useBrowsePagination(
   const appendNextPage = useCallback(async () => {
     const total = totalRef.current;
     if (total <= 0) return;
+    if (!layoutHydrationCompleteRef.current) {
+      const definition = definitionRef.current;
+      if (definition) await hydrateNextLayoutChunk(definition, generationRef.current);
+      return;
+    }
     // The sentinel sits after the last slot. Fill the tail window — never the
     // first unfilled offset — so a jump to the end is not queued behind
     // pages 0, 100, 200…
     const last = Math.max(0, total - 1);
     await ensureVisibleRange(last, last);
-  }, [ensureVisibleRange]);
+  }, [ensureVisibleRange, hydrateNextLayoutChunk]);
 
   const fetchScopeAssetIds = useCallback(
     (): Promise<string[] | null> =>
@@ -609,6 +658,7 @@ export function useBrowsePagination(
     totalRef.current = 0;
     layoutRef.current = [];
     layoutHydrationCompleteRef.current = false;
+    layoutFetchInFlightRef.current = false;
     setLayoutHydrationVersion((version) => version + 1);
     setBrowseLayout([]);
     filledOffsetsRef.current = new Set();

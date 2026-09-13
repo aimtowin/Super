@@ -55,6 +55,7 @@ import {
   NATIVE_EDIT_COPY_CHANNEL,
   WINDOW_CONTROL_CHANNEL,
   WINDOW_MAXIMIZED_CHANNEL,
+  WINDOW_MOVE_STARTED_CHANNEL,
   VIEWER_VIDEO_SHORTCUTS_ACTIVE_CHANNEL,
   VIEWER_VIDEO_SHORTCUT_CHANNEL,
   BROWSE_SHORTCUT_CHANNEL,
@@ -1284,15 +1285,15 @@ const library: SuperLibraryApi = Object.freeze({
     return { ok: true as const, value: { items: result.items, total: result.total, offset: result.offset, ...(result.assetIds ? { assetIds: result.assetIds } : {}), ...(result.layout ? { layout: result.layout } : {}) } };
   },
 
-  async searchAssets({ libraryId, query, filters, scope, sort, scopeMode, idsOnly, layoutOnly, limit, offset, showIgnored }: { libraryId: string; query?: SearchQuery | null; filters?: FilterClause[]; scope?: SearchScope; sort?: { field: 'name' | 'modified_at' | 'created_at' | 'byte_size' | 'long_edge' | 'duration' | 'rating' | 'color' | 'author'; order: 'asc' | 'desc' }; scopeMode?: boolean; idsOnly?: boolean; layoutOnly?: boolean; limit?: number; offset?: number; showIgnored?: boolean }) {
+  async searchAssets({ libraryId, query, filters, scope, sort, scopeMode, idsOnly, layoutOnly, deferTotal, limit, offset, showIgnored }: { libraryId: string; query?: SearchQuery | null; filters?: FilterClause[]; scope?: SearchScope; sort?: { field: 'name' | 'modified_at' | 'created_at' | 'byte_size' | 'long_edge' | 'duration' | 'rating' | 'color' | 'author'; order: 'asc' | 'desc' }; scopeMode?: boolean; idsOnly?: boolean; layoutOnly?: boolean; deferTotal?: boolean; limit?: number; offset?: number; showIgnored?: boolean }) {
     const parsedQuery = searchQuerySchema.safeParse(query ?? null);
     if (!parsedQuery.success) {
       return { ok: false as const, error: createPublicError('INVALID_SEARCH_QUERY') };
     }
-    const result = await request({ type: 'asset.search.request', libraryId, query: parsedQuery.data, filters, scope, sort, scopeMode, idsOnly, layoutOnly, limit, offset, showIgnored });
+    const result = await request({ type: 'asset.search.request', libraryId, query: parsedQuery.data, filters, scope, sort, scopeMode, idsOnly, layoutOnly, deferTotal, limit, offset, showIgnored });
     if (!result.ok) return failure(result);
     if (result.type !== 'asset.search.result') throw new Error('Unexpected search-assets response.');
-    return { ok: true as const, value: { items: result.items, total: result.total, offset: result.offset, snippets: result.snippets, ...(result.assetIds ? { assetIds: result.assetIds } : {}), ...(result.layout ? { layout: result.layout } : {}) } };
+    return { ok: true as const, value: { items: result.items, total: result.total, ...(result.totalIsExact === false ? { totalIsExact: false } : {}), offset: result.offset, snippets: result.snippets, ...(result.assetIds ? { assetIds: result.assetIds } : {}), ...(result.layout ? { layout: result.layout } : {}) } };
   },
 
   async planAiSearch({ naturalQuery }: { naturalQuery: string }): Promise<LibraryApiResult<{ plan: AiSearchPlan; apiFormat: AiApiFormat; model: string }>> {
@@ -2489,6 +2490,13 @@ const shell: SuperShellApi = Object.freeze({
     ipcRenderer.on(WINDOW_MAXIMIZED_CHANNEL, handler);
     return () => {
       ipcRenderer.removeListener(WINDOW_MAXIMIZED_CHANNEL, handler);
+    };
+  },
+  onWindowMoveStarted(listener: () => void): () => void {
+    const handler = () => listener();
+    ipcRenderer.on(WINDOW_MOVE_STARTED_CHANNEL, handler);
+    return () => {
+      ipcRenderer.removeListener(WINDOW_MOVE_STARTED_CHANNEL, handler);
     };
   },
   onSwipe(listener: (direction: ShellSwipeDirection) => void): () => void {

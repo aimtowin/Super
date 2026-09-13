@@ -28,14 +28,21 @@ describe("color-filter-presets", () => {
     expect(covered.every(Boolean)).toBe(true);
   });
 
+  it('provides a palette-grade hue catalogue plus black, gray, and white', () => {
+    expect(COLOR_PRESETS.filter((preset) => preset.kind === 'hue')).toHaveLength(18);
+    expect(COLOR_PRESETS.map((preset) => preset.id)).toEqual(expect.arrayContaining([
+      'scarlet', 'amber', 'chartreuse', 'teal', 'sky', 'indigo', 'magenta', 'gray',
+    ]));
+  });
+
   it("builds inclusive match SQL and null-safe exclude SQL for hues", () => {
     const match = colorFilterSql("h", ["blue"], false);
     expect(match?.sql).toContain("IS NOT NULL");
-    expect(match?.params).toEqual([195, 255]);
+    expect(match?.params).toEqual([230, 250]);
 
     const exclude = colorFilterSql("h", ["red"], true);
     expect(exclude?.sql).toContain("NOT");
-    expect(exclude?.params).toEqual([345, 360, 0, 15]);
+    expect(exclude?.params).toEqual([350, 360, 0, 10]);
   });
 
   it("matches black/white via lightness column", () => {

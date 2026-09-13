@@ -29,6 +29,7 @@ import {
   type Stats,
 } from 'node:fs';
 import {
+  access as accessAsync,
   lstat as lstatAsync,
   opendir as opendirAsync,
   realpath as realpathAsync,
@@ -55,6 +56,7 @@ import {
   resolveOiiotoolPath,
 } from './binary-resolver';
 import {
+  colorMetrics,
   dominantColorMetrics,
   extractRepresentativePalette,
   type RepresentativeColor,
@@ -131,7 +133,7 @@ import {
   CONTENT_REPLACE_STAGE_CHUNK_MAX_BYTES,
 } from '../shared/content-replace';
 import { smartCollectionQueryDefinitionSchema, extractedVideoMetadataSchema, type AssetMetadataResult, type ExtractedMetadataResult, type ExtractedVideoMetadata, type AssetSummary, type BrowseLayoutEntry, type CollectionSummary, type FilterClause, type FolderBrowseEntry, type IgnoredPath, type LinkedFolderDirectoryMutation, type LinkedFolderRule, type LinkedFolderSummary, type ManagedFolderSummary, type SearchScope, type SmartCollectionQueryDefinition, type SmartCollectionSummary, type TagCooccurrenceGraph, type TagSummary, type TrashedFolderSummary } from '../shared/asset-types';
-import { BROWSE_SCOPE_MAX_ASSETS } from '../shared/browse-scope';
+import { BROWSE_LAYOUT_CHUNK_SIZE, BROWSE_SCOPE_MAX_ASSETS } from '../shared/browse-scope';
 import {
   createAutomationFilePlanHash,
   createAutomationImportPlanHash,
@@ -2926,6 +2928,66 @@ const FOLDER_AUTO_AI_ANALYSIS_SCHEMA_CHECKSUM = createHash('sha256')
   .update(FOLDER_AUTO_AI_ANALYSIS_SCHEMA_SQL)
   .digest('hex');
 
+/**
+ * One row per representative colour. The old artifact columns remain for the
+ * colour sort, while this index makes filtering every palette colour fast.
+ */
+const PALETTE_COLOR_INDEX_SCHEMA_SQL = `
+  CREATE TABLE palette_color_index (
+    revision_id TEXT NOT NULL REFERENCES revisions(revision_id) ON DELETE CASCADE,
+    color_position INTEGER NOT NULL CHECK (color_position >= 0),
+    hex TEXT,
+    ratio REAL NOT NULL CHECK (ratio >= 0 AND ratio <= 1),
+    hue REAL CHECK (hue IS NULL OR (hue >= 0 AND hue < 360)),
+    saturation REAL CHECK (saturation IS NULL OR (saturation >= 0 AND saturation <= 1)),
+    lightness REAL CHECK (lightness IS NULL OR (lightness >= 0 AND lightness <= 1)),
+    PRIMARY KEY (revision_id, color_position)
+  );
+
+  CREATE INDEX palette_color_index_filter
+    ON palette_color_index(revision_id, hue, saturation, lightness);
+
+  -- Do not synchronously read every JSON artifact during migration. A primary
+  -- compatibility row preserves the prior behaviour until bounded backfill
+  -- expands each historical palette from its on-disk JSON.
+  INSERT INTO palette_color_index
+    (revision_id, color_position, hex, ratio, hue, saturation, lightness)
+  SELECT revision_id, 0, NULL, 1, dominant_hue, NULL, dominant_lightness
+    FROM revision_artifacts
+   WHERE kind = 'extracted_palette'
+     AND status = 'ready'
+     AND invalidated_at IS NULL
+     AND dominant_hue IS NOT NULL;
+`;
+const PALETTE_COLOR_INDEX_SCHEMA_CHECKSUM = createHash('sha256')
+  .update(PALETTE_COLOR_INDEX_SCHEMA_SQL)
+  .digest('hex');
+
+// Migration v49: direct linked-folder views always constrain linked_folder_id
+// before applying their relative-path predicate. This partial covering index
+// keeps the common first-page query off unrelated linked sources and avoids a
+// table scan before the deferred total/layout hydration runs.
+const ACTIVE_LINKED_FOLDER_PATH_INDEX_SCHEMA_SQL = `
+  CREATE INDEX IF NOT EXISTS assets_active_linked_folder_path_idx
+    ON assets(linked_folder_id, relative_file_path, asset_id)
+    WHERE deleted_at IS NULL AND location_kind = 'linked';
+`;
+const ACTIVE_LINKED_FOLDER_PATH_INDEX_SCHEMA_CHECKSUM = createHash('sha256')
+  .update(ACTIVE_LINKED_FOLDER_PATH_INDEX_SCHEMA_SQL)
+  .digest('hex');
+
+function ensurePaletteColorIndexSchema(connection: DatabaseConnection): void {
+  // Compatibility fixtures and real interrupted upgrades can retain the table
+  // while their migration receipt is absent. Make the additive v48 recipe
+  // idempotent without changing its canonical checksum.
+  connection.exec(
+    PALETTE_COLOR_INDEX_SCHEMA_SQL
+      .replace('CREATE TABLE palette_color_index', 'CREATE TABLE IF NOT EXISTS palette_color_index')
+      .replace('CREATE INDEX palette_color_index_filter', 'CREATE INDEX IF NOT EXISTS palette_color_index_filter')
+      .replace('INSERT INTO palette_color_index', 'INSERT OR IGNORE INTO palette_color_index'),
+  );
+}
+
 function ensureFolderAutoAiAnalysisSchema(connection: DatabaseConnection): void {
   if (!columnsFor(connection, 'managed_folders').has('auto_ai_analysis')) {
     connection.exec(
@@ -3095,6 +3157,16 @@ export const MIGRATIONS = [
     sql: FOLDER_AUTO_AI_ANALYSIS_SCHEMA_SQL,
     checksum: FOLDER_AUTO_AI_ANALYSIS_SCHEMA_CHECKSUM,
   },
+  {
+    version: 48,
+    sql: PALETTE_COLOR_INDEX_SCHEMA_SQL,
+    checksum: PALETTE_COLOR_INDEX_SCHEMA_CHECKSUM,
+  },
+  {
+    version: 49,
+    sql: ACTIVE_LINKED_FOLDER_PATH_INDEX_SCHEMA_SQL,
+    checksum: ACTIVE_LINKED_FOLDER_PATH_INDEX_SCHEMA_CHECKSUM,
+  },
 ] as const;
 export const SUPPORTED_SCHEMA_VERSION = MIGRATIONS.at(-1)!.version;
 
@@ -3137,6 +3209,12 @@ interface OpenLibrary {
    */
   collectionCountCache?: { changeSequence: number; counts: Map<string, number> };
   /**
+   * Smart collections evaluate a full search definition for their badge.
+   * Reusing the counts until the durable sequence advances prevents the
+   * sidebar from re-running every smart query after unrelated navigation.
+   */
+  smartCollectionCountCache?: { changeSequence: number; counts: Map<string, number> };
+  /**
    * Super-4bdd26: memo for recursive per-folder asset counts keyed by
    * change sequence + showIgnored. The sidebar re-requests it after every
    * mutation; the direct-count GROUP BY dominates the ~20ms otherwise.
@@ -3171,6 +3249,11 @@ interface OpenReconciliationTask {
   generation: number;
   libraryId: string;
   promise: Promise<void>;
+}
+
+interface WatchedRefreshScope {
+  managed: boolean;
+  linkedFolderIds: string[];
 }
 
 interface ArtifactPathCacheEntry {
@@ -4109,6 +4192,8 @@ export interface RefreshManagedAssetsOptions {
   discoverSources?: boolean;
   /** Pre-scanned source entries; used by the cancellable background scanner. */
   discovery?: RefreshManagedAssetsDiscovery;
+  /** Limit a watcher refresh to the linked roots that actually changed. */
+  linkedFolderIds?: readonly string[];
   /** Avoid materializing all AssetSummary objects for background maintenance. */
   includeAssets?: boolean;
 }
@@ -4848,6 +4933,18 @@ function migrateLegacyPluginMigrationHistory(connection: DatabaseConnection): vo
     connection.exec(RAW_VIEWER_ARTIFACT_SCHEMA_SQL);
   }
   ensureContentFingerprintColumn(connection);
+  // This historical branch predates the later additive migrations. Materialize
+  // their objects before rewriting receipts through the current schema tail.
+  connection.exec(AUTO_ANALYSIS_SUPPRESSION_SCHEMA_SQL);
+  ensureSyncSchema(connection);
+  connection.exec(SYNC_SESSIONS_SCHEMA_SQL);
+  connection.exec(ASSETS_ACTIVE_NAME_INDEX_SCHEMA_SQL);
+  connection.exec(ASSETS_ACTIVE_CREATED_DESC_INDEX_SCHEMA_SQL);
+  connection.exec(TOMBSTONE_BACKFILL_INDEX_SCHEMA_SQL);
+  connection.exec(LINKED_FOLDER_REMOVAL_JOBS_SCHEMA_SQL);
+  connection.exec(LINKED_FOLDER_INDEX_JOBS_SCHEMA_SQL);
+  ensureAiAnalysisStateSchema(connection);
+  ensureFolderAutoAiAnalysisSchema(connection);
   const historyObjects = [
     'operation_history',
     'operation_history_steps',
@@ -4867,6 +4964,11 @@ function migrateLegacyPluginMigrationHistory(connection: DatabaseConnection): vo
   if (!columnsFor(connection, 'operation_history').has('redo_sequence')) {
     connection.exec(OPERATION_HISTORY_REDO_STACK_SCHEMA_SQL);
   }
+  // This compatibility path rewrites history directly through the current
+  // tail, so materialize the latest additive indexes before recording their
+  // migration receipts.
+  ensurePaletteColorIndexSchema(connection);
+  connection.exec(ACTIVE_LINKED_FOLDER_PATH_INDEX_SCHEMA_SQL);
   connection.prepare('DELETE FROM schema_migrations WHERE version >= 24').run();
   const insert = connection.prepare(
     'INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)',
@@ -5582,6 +5684,8 @@ function migrateDatabaseUnserialized(connection: DatabaseConnection, allowFresh:
           ensureAiAnalysisStateSchema(connection);
         } else if (migration.version === 47) {
           ensureFolderAutoAiAnalysisSchema(connection);
+        } else if (migration.version === 48) {
+          ensurePaletteColorIndexSchema(connection);
         } else {
           connection.exec(migration.sql);
         }
@@ -5823,6 +5927,18 @@ export class LibraryService {
   private readonly reconciliationByLibrary = new Map<string, OpenReconciliationTask>();
   private readonly reconciliationGenerationByLibrary = new Map<string, number>();
   /**
+   * The Worker remains alive while Super is in the Windows tray so filesystem
+   * watchers continue to receive events.  Heavy reconciliation is paused in
+   * that state; watcher changes are coalesced and replayed after foregrounding.
+   */
+  private backgroundMaintenancePaused = false;
+  private readonly pendingWatchedAssetRefreshes = new Set<string>();
+  private readonly pendingWatchedLinkedRefreshes = new Map<string, Set<string>>();
+  private readonly watchedRefreshTasks = new Map<string, OpenReconciliationTask>();
+  private readonly watchedRefreshDrains = new Map<string, Promise<void>>();
+  private readonly closingWatchedLibraries = new WeakSet<OpenLibrary>();
+  private readonly pendingReconciliationLibraries = new Set<string>();
+  /**
    * Open automation groups are keyed by their Main-owned execution source.
    * The value is an in-memory reservation until the first real step is
    * recorded. Keeping the reservation out of `operation_history` prevents a
@@ -5928,7 +6044,10 @@ export class LibraryService {
   private async refreshManagedAssetsOnOpen(
     libraryId: string,
     task: OpenReconciliationTask,
+    scope?: WatchedRefreshScope,
   ): Promise<void> {
+    let changedCount = 0;
+    let missingCount = 0;
     try {
       this.assertReconciliationActive(task);
       const openLibrary = this.openById.get(libraryId);
@@ -5946,7 +6065,9 @@ export class LibraryService {
           location_kind: 'managed' | 'linked';
           linked_folder_id: string | null;
           relative_file_path: string;
-        }>);
+        }>).filter((asset) => scope === undefined || (asset.location_kind === 'managed'
+          ? scope.managed
+          : scope.linkedFolderIds.includes(asset.linked_folder_id ?? '')));
 
       // One async filesystem walk supplies both the existing-asset snapshot
       // and the new-file discovery set. The old implementation first lstat'ed
@@ -5954,7 +6075,7 @@ export class LibraryService {
       // on a 20k library that doubled NAS metadata traffic and forced hundreds
       // of synchronous DB batches.
       this.assertReconciliationActive(task);
-      const discovery = await this.collectManagedAssetDiscoveryAsync(task);
+      const discovery = await this.collectManagedAssetDiscoveryAsync(task, scope);
       const discoveredManagedPaths = new Set(
         discovery.managedEntries.map((entry) => portablePathIdentity(entry.relativePath)),
       );
@@ -5976,8 +6097,6 @@ export class LibraryService {
             && !linkedPaths.has(portablePathIdentity(asset.relative_file_path));
         })
         .map((asset) => asset.asset_id);
-      let changedCount = 0;
-      let missingCount = 0;
       // Missing rows are the only remaining fallback-lstat path. It is usually
       // a tiny set; keep it small on network libraries because a missing NAS
       // entry can still spend a full timeout in the OS path resolver.
@@ -5986,7 +6105,9 @@ export class LibraryService {
         this.assertReconciliationActive(task);
         const refresh = this.refreshManagedAssets(libraryId, {
           assetIds: staleExistingAssetIds.slice(offset, offset + missingBatchSize),
-          discoverSources: false,
+          // Discovery already probed root availability. An empty snapshot
+          // avoids synchronously probing every unrelated linked root again.
+          discovery: { managedEntries: [], linkedEntriesByFolder: new Map() },
         });
         changedCount += refresh.changedCount;
         missingCount += refresh.missingCount;
@@ -6000,7 +6121,13 @@ export class LibraryService {
       const discovered = await this.applyDiscoveredAssetsInBatches(task, discovery);
       changedCount += discovered.changedCount;
       missingCount += discovered.missingCount;
-      if (changedCount > 0 && this.shouldEmitWatcherAssetChange()) {
+    } catch (error) {
+      if (task.controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;
+      this.diagnose(scope === undefined ? 'open.refresh-managed-assets' : 'asset-watcher.refresh', error, { libraryId });
+    } finally {
+      // A pause can arrive after some batches committed. Notify those writes
+      // too: replaying the scan later will correctly find no diff for them.
+      if (this.hasOpenLibrary(libraryId) && changedCount > 0 && this.shouldEmitWatcherAssetChange()) {
         this.options.onAssetsChanged?.({
           type: 'asset.changed',
           libraryId,
@@ -6009,10 +6136,76 @@ export class LibraryService {
           source: 'watcher',
         });
       }
-    } catch (error) {
-      if (task.controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;
-      this.diagnose('open.refresh-managed-assets', error, { libraryId });
     }
+  }
+
+  private queueWatchedRefresh(libraryId: string, folderId?: string): void {
+    if (folderId === undefined) this.pendingWatchedAssetRefreshes.add(libraryId);
+    else {
+      const folders = this.pendingWatchedLinkedRefreshes.get(libraryId) ?? new Set<string>();
+      folders.add(folderId);
+      this.pendingWatchedLinkedRefreshes.set(libraryId, folders);
+    }
+    this.startWatchedRefreshDrain(libraryId);
+  }
+
+  /** Await already-dispatched watcher work (also used by deterministic tests). */
+  async waitForWatchedRefreshes(libraryId: string): Promise<void> {
+    while (this.watchedRefreshDrains.has(libraryId)) await this.watchedRefreshDrains.get(libraryId);
+  }
+
+  private startWatchedRefreshDrain(libraryId: string): void {
+    const openLibrary = this.openById.get(libraryId);
+    if (this.backgroundMaintenancePaused || !openLibrary || this.closingWatchedLibraries.has(openLibrary)
+      || this.watchedRefreshDrains.has(libraryId)) return;
+    // Defer even the first slice so a watcher callback can never synchronously
+    // enumerate a source tree ahead of an arriving browse message.
+    const promise = Promise.resolve().then(async () => {
+      while (!this.backgroundMaintenancePaused && this.openById.get(libraryId) === openLibrary
+        && !this.closingWatchedLibraries.has(openLibrary)) {
+        const previous = this.reconciliationByLibrary.get(libraryId);
+        if (previous) await previous.promise;
+        if (this.backgroundMaintenancePaused || this.openById.get(libraryId) !== openLibrary
+          || this.closingWatchedLibraries.has(openLibrary)) return;
+        if (!this.pendingWatchedAssetRefreshes.has(libraryId)
+          && !this.pendingWatchedLinkedRefreshes.get(libraryId)?.size) return;
+        const task: OpenReconciliationTask = {
+          controller: new AbortController(), generation: 0, libraryId, promise: Promise.resolve(),
+        };
+        this.watchedRefreshTasks.set(libraryId, task);
+        let scope: WatchedRefreshScope | undefined;
+        task.promise = (async () => {
+          try {
+            await this.yieldReconciliation(task);
+            scope = {
+              managed: this.pendingWatchedAssetRefreshes.delete(libraryId),
+              linkedFolderIds: [...(this.pendingWatchedLinkedRefreshes.get(libraryId) ?? [])],
+            };
+            this.pendingWatchedLinkedRefreshes.delete(libraryId);
+            await this.refreshManagedAssetsOnOpen(libraryId, task, scope);
+          } finally {
+            if (task.controller.signal.aborted && scope && this.openById.get(libraryId) === openLibrary
+              && !this.closingWatchedLibraries.has(openLibrary)) {
+              if (scope.managed) this.pendingWatchedAssetRefreshes.add(libraryId);
+              const pending = this.pendingWatchedLinkedRefreshes.get(libraryId) ?? new Set<string>();
+              for (const folderId of scope.linkedFolderIds) pending.add(folderId);
+              this.pendingWatchedLinkedRefreshes.set(libraryId, pending);
+            }
+            if (this.watchedRefreshTasks.get(libraryId) === task) this.watchedRefreshTasks.delete(libraryId);
+          }
+        })();
+        try { await task.promise; }
+        catch (error) {
+          if (!task.controller.signal.aborted) this.diagnose('asset-watcher.refresh', error, { libraryId });
+        }
+      }
+    }).catch((error) => this.diagnose('asset-watcher.refresh', error, { libraryId })).finally(() => {
+      if (this.watchedRefreshDrains.get(libraryId) !== promise) return;
+      this.watchedRefreshDrains.delete(libraryId);
+      if (this.pendingWatchedAssetRefreshes.has(libraryId)
+        || this.pendingWatchedLinkedRefreshes.get(libraryId)?.size) this.startWatchedRefreshDrain(libraryId);
+    });
+    this.watchedRefreshDrains.set(libraryId, promise);
   }
 
   /**
@@ -6318,21 +6511,7 @@ export class LibraryService {
       libraryWatch.timer = scheduler.schedule(() => {
         libraryWatch.timer = undefined;
         if (!this.watchByLibraryId.has(libraryId) || !this.openById.has(libraryId)) return;
-        try {
-          const refresh = this.refreshManagedAssets(libraryId);
-          if (refresh.changedCount > 0 && this.shouldEmitWatcherAssetChange()) {
-            this.options.onAssetsChanged?.({
-              type: 'asset.changed',
-              libraryId,
-              changedCount: refresh.changedCount,
-              missingCount: refresh.missingCount,
-              source: 'watcher',
-            });
-          }
-        } catch (error) {
-          this.diagnose('asset-watcher.refresh', error, { libraryId });
-          // A watcher-triggered refresh is best effort and must never terminate the Worker.
-        }
+        this.queueWatchedRefresh(libraryId);
       }, this.options.debounceMs ?? 250);
     } catch (error) {
       libraryWatch.timer = undefined;
@@ -6412,20 +6591,7 @@ export class LibraryService {
       linkedWatch.timer = scheduler.schedule(() => {
         linkedWatch.timer = undefined;
         if (!this.linkedWatchByKey.has(key) || !this.openById.has(libraryId)) return;
-        try {
-          const refresh = this.refreshManagedAssets(libraryId);
-          if (refresh.changedCount > 0 && this.shouldEmitWatcherAssetChange()) {
-            this.options.onAssetsChanged?.({
-              type: 'asset.changed',
-              libraryId,
-              changedCount: refresh.changedCount,
-              missingCount: refresh.missingCount,
-              source: 'watcher',
-            });
-          }
-        } catch (error) {
-          this.diagnose('linked-watcher.refresh', error, { libraryId, linkedFolderId: folderId });
-        }
+        this.queueWatchedRefresh(libraryId, folderId);
       }, this.options.debounceMs ?? 250);
     } catch (error) {
       linkedWatch.timer = undefined;
@@ -7685,6 +7851,44 @@ export class LibraryService {
   /** Super-2cc492: open-state probe for the worker-runtime startup gate. */
   hasOpenLibrary(libraryId: string): boolean {
     return this.openById.has(libraryId);
+  }
+
+  /** Open library ids only; persisted recent libraries are intentionally excluded. */
+  openLibraryIds(): string[] {
+    return [...this.openById.keys()];
+  }
+
+  /**
+   * Pause only maintenance that can safely wait.  Watchers remain attached so
+   * filesystem changes are not missed; their actual refresh is coalesced.
+   */
+  setBackgroundMaintenancePaused(paused: boolean): void {
+    if (this.backgroundMaintenancePaused === paused) return;
+    this.backgroundMaintenancePaused = paused;
+    if (paused) {
+      for (const task of this.watchedRefreshTasks.values()) task.controller.abort();
+      for (const [libraryId, task] of this.reconciliationByLibrary) {
+        this.pendingReconciliationLibraries.add(libraryId);
+        task.controller.abort();
+      }
+      return;
+    }
+
+    for (const libraryId of new Set([
+      ...this.pendingWatchedAssetRefreshes, ...this.pendingWatchedLinkedRefreshes.keys(),
+    ])) this.startWatchedRefreshDrain(libraryId);
+
+    const reconciliations = [...this.pendingReconciliationLibraries];
+    this.pendingReconciliationLibraries.clear();
+    for (const libraryId of reconciliations) {
+      if (this.hasOpenLibrary(libraryId)) {
+        // Returning from tray must give the foreground browse a chance to
+        // arrive before a potentially large reconciliation touches SQLite.
+        // A later interactive request extends this window again.
+        this.noteInteractiveActivity(libraryId, 3_000);
+        void this.runOpenBackgroundReconciliation(libraryId);
+      }
+    }
   }
 
   private requireOpenLibrary(libraryId: string): OpenLibrary {
@@ -13284,6 +13488,13 @@ export class LibraryService {
     const directoryIndex = buildLinkedDirectoryIndex(paths, diskPrefixes);
     const children = directoryIndex.childrenOf(resolved.relativePath);
     if (children.length === 0) return [];
+    const { artifactIdsByPath, candidateIdsByPath } = this.linkedDirectoryCoverMaps(
+      openLibrary,
+      resolved.linkedFolderId,
+      resolved.relativePath,
+      children.map((child) => child.relativePath),
+      input.showIgnored === true,
+    );
 
     return children.map((child) => {
       const relativePath = child.relativePath;
@@ -13298,22 +13509,12 @@ export class LibraryService {
         directAssetCount: child.directAssetCount,
         recursiveAssetCount: child.assetCount,
         childFolderCount: child.childFolderCount,
-        coverArtifactIds: this.linkedDirectoryCoverArtifactIds(
-          openLibrary,
-          resolved.linkedFolderId,
-          relativePath,
-          input.showIgnored === true,
-        ),
+        coverArtifactIds: artifactIdsByPath.get(relativePath) ?? [],
         // Super-d0nv: cover candidates as asset ids (cover scene scheduling
         // + progressive refresh on thumbnail.ready). Candidates do NOT require
         // a ready thumbnail — ungenerated assets get enqueued by the cover
         // scene; display covers stay ready-gated in coverArtifactIds.
-        coverAssetIds: this.linkedDirectoryCoverCandidateAssetIds(
-          openLibrary,
-          resolved.linkedFolderId,
-          relativePath,
-          input.showIgnored === true,
-        ),
+        coverAssetIds: candidateIdsByPath.get(relativePath) ?? [],
         linkedFolderId: resolved.linkedFolderId,
       };
     });
@@ -13385,81 +13586,76 @@ export class LibraryService {
     return rows.map((row) => row.relative_file_path);
   }
 
-  private linkedDirectoryCoverArtifactIds(
+  /**
+   * Fetch direct-child linked-folder covers in one pass. The old approach ran
+   * two queries for every visible child, which turned a 100-folder directory
+   * into 200 synchronous SQLite statements and made thumbnail-ready refreshes
+   * visibly stall navigation.
+   */
+  private linkedDirectoryCoverMaps(
     openLibrary: OpenLibrary,
     linkedFolderId: string,
-    relativePath: string,
+    parentRelativePath: string,
+    childRelativePaths: readonly string[],
     showIgnored: boolean,
-  ): string[] {
-    if (!columnsFor(openLibrary.connection, 'revision_artifacts').has('status')) {
-      return [];
+  ): {
+    artifactIdsByPath: Map<string, string[]>;
+    candidateIdsByPath: Map<string, string[]>;
+  } {
+    const artifactIdsByPath = new Map<string, string[]>();
+    const candidateIdsByPath = new Map<string, string[]>();
+    if (childRelativePaths.length === 0) {
+      return { artifactIdsByPath, candidateIdsByPath };
     }
-    const prefix = relativePath === '' ? '' : `${relativePath}/`;
+    const childByPath = new Map(childRelativePaths.map((relativePath) => [relativePath, relativePath]));
+    const parentPrefix = parentRelativePath === '' ? '' : `${parentRelativePath}/`;
+    const hasArtifactStatus = columnsFor(openLibrary.connection, 'revision_artifacts').has('status');
     const rows = openLibrary.connection
       .prepare(
-        `SELECT ra.artifact_id
+        `SELECT a.asset_id, a.relative_file_path, ra.artifact_id
            FROM assets a
-           JOIN revision_artifacts ra
+      LEFT JOIN revision_artifacts ra
              ON ra.revision_id = a.current_revision_id
             AND ra.kind IN ('thumbnail', 'video_poster')
-            AND ra.status = 'ready'
-            AND ra.invalidated_at IS NULL
+            ${hasArtifactStatus ? "AND ra.status = 'ready' AND ra.invalidated_at IS NULL" : 'AND 0'}
           WHERE a.linked_folder_id = ?
             AND a.location_kind = 'linked'
             AND a.deleted_at IS NULL
             AND ${this.explicitIgnoreSql(openLibrary.connection, 'a', showIgnored)}
-            AND (
-              a.relative_file_path = ?
-              OR (? != '' AND substr(a.relative_file_path, 1, ?) = ?)
-            )
-          ORDER BY a.relative_file_path
-          LIMIT 3`,
+            AND (? = '' OR substr(a.relative_file_path, 1, ?) = ?)
+          ORDER BY a.relative_file_path`,
       )
-      .all(
-        linkedFolderId,
-        relativePath,
-        prefix,
-        [...prefix].length,
-        prefix,
-      ) as Array<{ artifact_id: string }>;
-    return rows.map((row) => row.artifact_id);
-  }
-
-  /**
-   * Super-d0nv: linked-directory cover scheduling candidates — the top-3
-   * direct linked assets by path, with NO ready-thumbnail requirement (see
-   * folderCoverCandidateAssetMap).
-   */
-  private linkedDirectoryCoverCandidateAssetIds(
-    openLibrary: OpenLibrary,
-    linkedFolderId: string,
-    relativePath: string,
-    showIgnored: boolean,
-  ): string[] {
-    const prefix = relativePath === '' ? '' : `${relativePath}/`;
-    const rows = openLibrary.connection
-      .prepare(
-        `SELECT a.asset_id
-           FROM assets a
-          WHERE a.linked_folder_id = ?
-            AND a.location_kind = 'linked'
-            AND a.deleted_at IS NULL
-            AND ${this.explicitIgnoreSql(openLibrary.connection, 'a', showIgnored)}
-            AND (
-              a.relative_file_path = ?
-              OR (? != '' AND substr(a.relative_file_path, 1, ?) = ?)
-            )
-          ORDER BY a.relative_file_path
-          LIMIT 3`,
-      )
-      .all(
-        linkedFolderId,
-        relativePath,
-        prefix,
-        [...prefix].length,
-        prefix,
-      ) as Array<{ asset_id: string }>;
-    return rows.map((row) => row.asset_id);
+      .all(linkedFolderId, parentPrefix, [...parentPrefix].length, parentPrefix) as Array<{
+        asset_id: string;
+        relative_file_path: string;
+        artifact_id: string | null;
+      }>;
+    const candidateSeenByPath = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const remainder = parentPrefix === ''
+        ? row.relative_file_path
+        : row.relative_file_path.slice(parentPrefix.length);
+      const segment = remainder.split('/', 1)[0];
+      if (!segment) continue;
+      const childPath = parentPrefix === '' ? segment : `${parentPrefix}${segment}`;
+      if (!childByPath.has(childPath)) continue;
+      const candidates = candidateIdsByPath.get(childPath) ?? [];
+      const candidateSeen = candidateSeenByPath.get(childPath) ?? new Set<string>();
+      if (!candidateSeen.has(row.asset_id) && candidates.length < 3) {
+        candidateSeen.add(row.asset_id);
+        candidates.push(row.asset_id);
+        candidateIdsByPath.set(childPath, candidates);
+        candidateSeenByPath.set(childPath, candidateSeen);
+      }
+      if (row.artifact_id) {
+        const artifacts = artifactIdsByPath.get(childPath) ?? [];
+        if (artifacts.length < 3) {
+          artifacts.push(row.artifact_id);
+          artifactIdsByPath.set(childPath, artifacts);
+        }
+      }
+    }
+    return { artifactIdsByPath, candidateIdsByPath };
   }
 
   /**
@@ -14394,15 +14590,20 @@ export class LibraryService {
   ): void {
     const uniqueIds = [...new Set(assetIds)];
     if (uniqueIds.length === 0) return;
-    const placeholders = uniqueIds.map(() => '?').join(',');
-    openLibrary.connection.prepare(
-      `DELETE FROM asset_sequences
-        WHERE sequence_id IN (
-          SELECT sequence_id
-            FROM asset_sequence_frames
-           WHERE asset_id IN (${placeholders})
-        )`,
-    ).run(...uniqueIds);
+    // Keep SQLite bindings below the platform-dependent variable limit. Bulk
+    // refresh/removal paths can legitimately contain tens of thousands of ids.
+    for (let offset = 0; offset < uniqueIds.length; offset += 500) {
+      const batch = uniqueIds.slice(offset, offset + 500);
+      const placeholders = batch.map(() => '?').join(',');
+      openLibrary.connection.prepare(
+        `DELETE FROM asset_sequences
+          WHERE sequence_id IN (
+            SELECT sequence_id
+              FROM asset_sequence_frames
+             WHERE asset_id IN (${placeholders})
+          )`,
+      ).run(...batch);
+    }
   }
 
   private createDetectedImageSequences(
@@ -14412,16 +14613,18 @@ export class LibraryService {
   ): string[] {
     const uniqueIds = [...new Set(assetIds)];
     if (uniqueIds.length === 0) return [];
-    const placeholders = uniqueIds.map(() => '?').join(',');
-    const triggerRows = openLibrary.connection.prepare(
-      `SELECT a.relative_file_path
-         FROM assets a
-        WHERE a.asset_id IN (${placeholders})
-          AND a.deleted_at IS NULL`,
-    ).all(...uniqueIds) as Array<{ relative_file_path: string }>;
-    const directories = new Set(
-      triggerRows.map((row) => path.posix.dirname(row.relative_file_path)),
-    );
+    const directories = new Set<string>();
+    for (let offset = 0; offset < uniqueIds.length; offset += 500) {
+      const batch = uniqueIds.slice(offset, offset + 500);
+      const placeholders = batch.map(() => '?').join(',');
+      const triggerRows = openLibrary.connection.prepare(
+        `SELECT a.relative_file_path
+           FROM assets a
+          WHERE a.asset_id IN (${placeholders})
+            AND a.deleted_at IS NULL`,
+      ).all(...batch) as Array<{ relative_file_path: string }>;
+      for (const row of triggerRows) directories.add(path.posix.dirname(row.relative_file_path));
+    }
     const rowsByDirectory = new Map<
       string,
       Array<{
@@ -14542,16 +14745,24 @@ export class LibraryService {
       return assets.map((asset) => ({ ...asset, sequence: null }));
     }
     const assetIds = assets.map((asset) => asset.assetId);
-    const membershipPlaceholders = assetIds.map(() => '?').join(',');
-    const memberships = openLibrary.connection.prepare(
-      `SELECT sf.asset_id, sf.position, sf.sequence_id
-         FROM asset_sequence_frames sf
-        WHERE sf.asset_id IN (${membershipPlaceholders})`,
-    ).all(...assetIds) as Array<{
+    const memberships: Array<{
       asset_id: string;
       position: number;
       sequence_id: string;
-    }>;
+    }> = [];
+    for (let offset = 0; offset < assetIds.length; offset += 500) {
+      const batch = assetIds.slice(offset, offset + 500);
+      const membershipPlaceholders = batch.map(() => '?').join(',');
+      memberships.push(...openLibrary.connection.prepare(
+        `SELECT sf.asset_id, sf.position, sf.sequence_id
+           FROM asset_sequence_frames sf
+          WHERE sf.asset_id IN (${membershipPlaceholders})`,
+      ).all(...batch) as Array<{
+        asset_id: string;
+        position: number;
+        sequence_id: string;
+      }>);
+    }
     const hiddenIds = new Set(
       memberships
         .filter((membership) => membership.position > 0)
@@ -14569,18 +14780,7 @@ export class LibraryService {
     if (primaryIds.length === 0) {
       return visible.map((asset) => ({ ...asset, sequence: null }));
     }
-    const primaryPlaceholders = primaryIds.map(() => '?').join(',');
-    const frameRows = openLibrary.connection.prepare(
-      `SELECT s.sequence_id, s.primary_asset_id, s.fps,
-              sf.asset_id, sf.frame_number, sf.position,
-              a.relative_file_path, a.current_revision_id, r.byte_size
-         FROM asset_sequences s
-         JOIN asset_sequence_frames sf ON sf.sequence_id = s.sequence_id
-         JOIN assets a ON a.asset_id = sf.asset_id
-         JOIN revisions r ON r.revision_id = a.current_revision_id
-        WHERE s.primary_asset_id IN (${primaryPlaceholders})
-        ORDER BY s.sequence_id, sf.position`,
-    ).all(...primaryIds) as Array<{
+    const frameRows: Array<{
       sequence_id: string;
       primary_asset_id: string;
       fps: number;
@@ -14590,7 +14790,32 @@ export class LibraryService {
       relative_file_path: string;
       current_revision_id: string;
       byte_size: number;
-    }>;
+    }> = [];
+    for (let offset = 0; offset < primaryIds.length; offset += 500) {
+      const batch = primaryIds.slice(offset, offset + 500);
+      const primaryPlaceholders = batch.map(() => '?').join(',');
+      frameRows.push(...openLibrary.connection.prepare(
+        `SELECT s.sequence_id, s.primary_asset_id, s.fps,
+                sf.asset_id, sf.frame_number, sf.position,
+                a.relative_file_path, a.current_revision_id, r.byte_size
+           FROM asset_sequences s
+           JOIN asset_sequence_frames sf ON sf.sequence_id = s.sequence_id
+           JOIN assets a ON a.asset_id = sf.asset_id
+           JOIN revisions r ON r.revision_id = a.current_revision_id
+          WHERE s.primary_asset_id IN (${primaryPlaceholders})
+          ORDER BY s.sequence_id, sf.position`,
+      ).all(...batch) as Array<{
+        sequence_id: string;
+        primary_asset_id: string;
+        fps: number;
+        asset_id: string;
+        frame_number: number;
+        position: number;
+        relative_file_path: string;
+        current_revision_id: string;
+        byte_size: number;
+      }>);
+    }
     const artifacts = this.thumbnailArtifactMap(
       openLibrary.summary.libraryId,
       frameRows.map((row) => row.asset_id),
@@ -16794,6 +17019,94 @@ export class LibraryService {
       };
     }
     return { automaticPalette: [], effectivePalette: [], paletteSource: null };
+  }
+
+  /** Replace every queryable colour for one current palette revision. */
+  private replacePaletteColorIndex(
+    openLibrary: OpenLibrary,
+    revisionId: string,
+    palette: readonly RepresentativeColor[],
+  ): void {
+    if (!hasTable(openLibrary.connection, 'palette_color_index')) return;
+    const remove = openLibrary.connection.prepare(
+      'DELETE FROM palette_color_index WHERE revision_id = ?',
+    );
+    const insert = openLibrary.connection.prepare(
+      `INSERT INTO palette_color_index
+        (revision_id, color_position, hex, ratio, hue, saturation, lightness)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+    openLibrary.connection.transaction(() => {
+      remove.run(revisionId);
+      palette.forEach((color, colorPosition) => {
+        const metrics = colorMetrics(color.hex);
+        insert.run(
+          revisionId,
+          colorPosition,
+          color.hex,
+          color.ratio,
+          metrics.hue,
+          metrics.saturation,
+          metrics.lightness,
+        );
+      });
+    })();
+  }
+
+  /**
+   * Expand a small wave of v48 compatibility rows from their palette JSON.
+   * This deliberately reads at most `limit` files so opening a large library
+   * never turns a schema upgrade into a blocking full-library scan.
+   */
+  private backfillPaletteColorIndex(openLibrary: OpenLibrary, limit = 50): number {
+    if (!hasTable(openLibrary.connection, 'palette_color_index')) return 0;
+    const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const rows = openLibrary.connection.prepare(
+      `SELECT ra.artifact_id, ra.revision_id
+         FROM revision_artifacts ra
+         JOIN assets a ON a.current_revision_id = ra.revision_id
+         JOIN palette_color_index compatibility
+           ON compatibility.revision_id = ra.revision_id
+          AND compatibility.color_position = 0
+          AND compatibility.hex IS NULL
+        WHERE a.deleted_at IS NULL
+          AND ra.kind = 'extracted_palette'
+          AND ra.status = 'ready'
+          AND ra.invalidated_at IS NULL
+        ORDER BY a.relative_file_path
+        LIMIT ?`,
+    ).all(boundedLimit) as Array<{ artifact_id: string; revision_id: string }>;
+    if (rows.length === 0) return 0;
+
+    let updated = 0;
+    for (const row of rows) {
+      try {
+        const parsed = JSON.parse(readFileSync(
+          this.getArtifactAbsolutePath(openLibrary.summary.libraryId, row.artifact_id),
+          'utf-8',
+        )) as unknown;
+        if (!Array.isArray(parsed)) throw new Error('Palette artifact must contain an array.');
+        const palette = parsed.map((entry) => {
+          if (
+            typeof entry !== 'object' || entry === null
+            || !('hex' in entry) || typeof entry.hex !== 'string'
+            || !/^#[0-9A-F]{6}$/u.test(entry.hex)
+            || !('ratio' in entry) || typeof entry.ratio !== 'number'
+            || !Number.isFinite(entry.ratio) || entry.ratio < 0 || entry.ratio > 1
+          ) throw new Error('Palette artifact contains an invalid colour entry.');
+          return { hex: entry.hex, ratio: entry.ratio };
+        }) as RepresentativeColor[];
+        if (palette.length === 0) throw new Error('Palette artifact contains no colours.');
+        this.replacePaletteColorIndex(openLibrary, row.revision_id, palette);
+        updated += 1;
+      } catch (error) {
+        this.diagnose('palette.index-backfill', error, {
+          artifactId: row.artifact_id,
+          revisionId: row.revision_id,
+        });
+      }
+    }
+    return updated;
   }
 
   /**
@@ -21685,6 +21998,11 @@ export class LibraryService {
       `UPDATE revision_artifacts SET invalidated_at = ?
         WHERE revision_id = ? AND kind = 'extracted_palette' AND invalidated_at IS NULL`,
     ).run(new Date().toISOString(), queuedRevisionId);
+    if (hasTable(openLibrary.connection, 'palette_color_index')) {
+      openLibrary.connection.prepare(
+        'DELETE FROM palette_color_index WHERE revision_id = ?',
+      ).run(queuedRevisionId);
+    }
 
     try {
       const palette = await sharpDecoderSemaphore.run(execution.signal, async () => {
@@ -21711,21 +22029,24 @@ export class LibraryService {
         throw new DOMException('Media job cancelled after palette serialization.', 'AbortError');
       }
       const outputStat = statSync(artifactAbsPath);
-      openLibrary.connection.prepare(
-        `INSERT INTO revision_artifacts
-           (artifact_id, revision_id, kind, mime_type, byte_size, file_path,
-            generator_version, status, generated_at, dominant_hue, dominant_lightness)
-         VALUES (?, ?, 'extracted_palette', 'application/json', ?, ?, ?, 'ready', ?, ?, ?)`,
-      ).run(
-        artifactId,
-        queuedRevisionId,
-        outputStat.size,
-        artifactRelPath,
-        `super-palette@1;sharp@${SHARP_VERSION}`,
-        new Date().toISOString(),
-        dominant.hue,
-        dominant.lightness,
-      );
+      openLibrary.connection.transaction(() => {
+        openLibrary.connection.prepare(
+          `INSERT INTO revision_artifacts
+             (artifact_id, revision_id, kind, mime_type, byte_size, file_path,
+              generator_version, status, generated_at, dominant_hue, dominant_lightness)
+           VALUES (?, ?, 'extracted_palette', 'application/json', ?, ?, ?, 'ready', ?, ?, ?)`,
+        ).run(
+          artifactId,
+          queuedRevisionId,
+          outputStat.size,
+          artifactRelPath,
+          `super-palette@2;sharp@${SHARP_VERSION}`,
+          new Date().toISOString(),
+          dominant.hue,
+          dominant.lightness,
+        );
+        this.replacePaletteColorIndex(openLibrary, queuedRevisionId, palette);
+      })();
       return true;
     } catch (error) {
       rmSync(artifactAbsPath, { force: true });
@@ -24635,6 +24956,10 @@ export class LibraryService {
   async runOpenBackgroundReconciliation(libraryId: string): Promise<void> {
     const openLibrary = this.openById.get(libraryId);
     if (!openLibrary || openLibrary.readOnly) return;
+    if (this.backgroundMaintenancePaused) {
+      this.pendingReconciliationLibraries.add(libraryId);
+      return;
+    }
     const previous = this.reconciliationByLibrary.get(libraryId);
     previous?.controller.abort();
     const generation = (this.reconciliationGenerationByLibrary.get(libraryId) ?? 0) + 1;
@@ -24667,6 +24992,7 @@ export class LibraryService {
       try {
         // Establish the pre-reconciliation safety point before any background
         // write. Every subsequent stage is owned by this open generation.
+        await this.watchedRefreshTasks.get(libraryId)?.promise;
         await this.yieldReconciliation(task);
         this.assertReconciliationActive(task);
         // Schema/identity validation already ran in the synchronous open.
@@ -26097,6 +26423,11 @@ export class LibraryService {
     };
     await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
 
+    // Piggyback historical palette expansion on an already-running worker
+    // wave. It performs at most fifty tiny JSON reads and never competes with
+    // preview decoding or blocks the renderer's initial browse query.
+    if (!options.signal?.aborted) this.backfillPaletteColorIndex(openLibrary);
+
     return processed;
   }
 
@@ -26364,15 +26695,23 @@ export class LibraryService {
         case 'color': {
           const ids = parseColorFilterIds(filter.values.join(','));
           const built = colorFilterSql(
-            'palette_meta.dominant_hue',
+            'palette_color.hue',
             ids,
-            filter.exclude,
+            false,
+            'palette_color.lightness',
+            'palette_color.saturation',
           );
           if (!built) {
             conditions.push('1 = 0');
             break;
           }
-          conditions.push(built.sql);
+          const matchesAnyPaletteColor = `EXISTS (
+            SELECT 1
+              FROM palette_color_index palette_color
+             WHERE palette_color.revision_id = a.current_revision_id
+               AND ${built.sql}
+          )`;
+          conditions.push(filter.exclude ? `NOT ${matchesAnyPaletteColor}` : matchesAnyPaletteColor);
           params.push(...built.params);
           break;
         }
@@ -26403,10 +26742,16 @@ export class LibraryService {
     idsOnly?: boolean | null;
     /** Compact full-scope real-asset geometry for virtualized layout. */
     layoutOnly?: boolean | null;
+    /**
+     * Serve the visible page before calculating an exact COUNT(*). This is
+     * limited to paged browsing; layout and selection requests stay exact.
+     */
+    deferTotal?: boolean | null;
     showIgnored?: boolean;
   }): {
     items: AssetSummary[];
     total: number;
+    totalIsExact?: boolean;
     offset: number;
     snippets?: Array<{ assetId: string; text: string }>;
     assetIds?: string[];
@@ -26414,6 +26759,11 @@ export class LibraryService {
   } {
     const openLibrary = this.requireOpenLibrary(input.libraryId);
     const connection = openLibrary.connection;
+    if (input.filters?.some((filter) => filter.field === 'color')) {
+      // A bounded compatibility upgrade makes historical palettes increasingly
+      // complete while preserving a responsive first colour-filter request.
+      this.backfillPaletteColorIndex(openLibrary);
+    }
     // Super-verg.2 — lenient read (0031 §1): display/derived columns and
     // auxiliary tables added after the earliest supported schema are
     // whitelisted; missing ones degrade the query instead of failing.
@@ -26428,6 +26778,10 @@ export class LibraryService {
     const scopeMode = input.scopeMode === true;
     const idsOnly = input.idsOnly === true;
     const layoutOnly = input.layoutOnly === true;
+    const deferTotal = input.deferTotal === true
+      && !scopeMode
+      && !idsOnly
+      && !layoutOnly;
     const defaultBrowseIndexRequest = this.isDefaultBrowseIndexRequest(input);
     const browseIndexSequenceBefore = defaultBrowseIndexRequest
       ? this.getChangeSequence(input.libraryId)
@@ -26442,10 +26796,12 @@ export class LibraryService {
     ) {
       cachedBrowseAssetIds = browseIndexCache.assetIds;
     }
-    const limit = scopeMode || idsOnly || layoutOnly
+    const limit = scopeMode || idsOnly
       ? BROWSE_SCOPE_MAX_ASSETS
-      : (input.limit ?? 50);
-    const offset = scopeMode || idsOnly || layoutOnly ? 0 : (input.offset ?? 0);
+      : layoutOnly
+        ? Math.min(input.limit ?? BROWSE_LAYOUT_CHUNK_SIZE, BROWSE_SCOPE_MAX_ASSETS)
+        : (input.limit ?? 50);
+    const offset = scopeMode || idsOnly ? 0 : (input.offset ?? 0);
 
     const searchGroups = input.query ? normalizedSearchGroups(input.query) : [];
     const hasQuery = searchGroups.length > 0;
@@ -26646,8 +27002,7 @@ export class LibraryService {
       filterFields.has('aspect_ratio') ||
       input.sort?.field === 'duration' ||
       input.sort?.field === 'long_edge';
-    const needsPaletteMeta =
-      filterFields.has('color') || input.sort?.field === 'color';
+    const needsPaletteMeta = input.sort?.field === 'color';
     const needsTechnicalThumbnail =
       filterFields.has('width') ||
       filterFields.has('height') ||
@@ -26813,7 +27168,9 @@ export class LibraryService {
           if (!linkedScope && !linked) throw new LibraryServiceError('FOLDER_NOT_FOUND');
           const linkedFolderId = linkedScope?.linkedFolderId ?? folderId;
           const relativePath = linkedScope?.relativePath ?? '';
-          whereParts.push('a.linked_folder_id = ?');
+          // Keep the predicate explicit so SQLite can use the partial linked
+          // folder/path index introduced in v49.
+          whereParts.push("a.location_kind = 'linked' AND a.linked_folder_id = ?");
           allParams.push(linkedFolderId);
           if (!input.scope.recursive) {
             if (relativePath === '') {
@@ -26892,19 +27249,6 @@ export class LibraryService {
         : []),
     ].join(',\n');
 
-    // Total count query.
-    const total = cachedBrowseAssetIds !== undefined
-      ? cachedBrowseAssetIds.length
-      : (() => {
-          const countSql = `${collectionScope?.queryPrefix ?? ''}SELECT COUNT(*) AS total ${countFrom} ${whereClause}`;
-          const countRow = connection
-            .prepare(countSql)
-            .get(...(collectionScope?.params ?? []), ...allParams) as {
-            total: number;
-          };
-          return countRow.total;
-        })();
-
     // Data query. ids-only mode (Super-ws4k) fetches just the stable id
     // column so select-all/invert can cover the whole scope without shipping
     // AssetSummary rows over three process hops.
@@ -26924,6 +27268,9 @@ export class LibraryService {
         ? layoutColumns
         : dataColumns;
     const cachedPageAssetIds = cachedBrowseAssetIds?.slice(offset, offset + limit);
+    // A sentinel row proves that a full first page has another item. This
+    // turns the total into a safe lower bound without a synchronous count.
+    const dataLimit = deferTotal && cachedPageAssetIds === undefined ? limit + 1 : limit;
     const cachedPageWhereClause = cachedPageAssetIds === undefined
       ? whereClause
       : cachedPageAssetIds.length === 0
@@ -26942,7 +27289,7 @@ export class LibraryService {
           ...(collectionScope?.params ?? []),
           ...allParams,
           ...(cachedPageAssetIds ?? []),
-          ...(cachedPageAssetIds === undefined ? [...orderParams, limit, offset] : []),
+          ...(cachedPageAssetIds === undefined ? [...orderParams, dataLimit, offset] : []),
         ) as Array<{
       asset_id: string;
       location_kind: 'managed' | 'linked';
@@ -26974,10 +27321,31 @@ export class LibraryService {
       });
     }
 
+    let totalIsExact = true;
+    const total = cachedBrowseAssetIds !== undefined
+      ? cachedBrowseAssetIds.length
+      : deferTotal
+        ? (() => {
+            const hasMore = rows.length > limit;
+            if (hasMore) rows = rows.slice(0, limit);
+            totalIsExact = !hasMore;
+            return offset + rows.length + (hasMore ? 1 : 0);
+          })()
+        : (() => {
+            const countSql = `${collectionScope?.queryPrefix ?? ''}SELECT COUNT(*) AS total ${countFrom} ${whereClause}`;
+            const countRow = connection
+              .prepare(countSql)
+              .get(...(collectionScope?.params ?? []), ...allParams) as {
+              total: number;
+            };
+            return countRow.total;
+          })();
+
     if (idsOnly) {
       return {
         items: [],
         total,
+        ...(totalIsExact ? {} : { totalIsExact: false }),
         offset: 0,
         assetIds: rows.map((row) => row.asset_id),
       };
@@ -27012,7 +27380,11 @@ export class LibraryService {
         // a reusable ordered index when it covers the complete visible scope;
         // otherwise a library above the cap would report the truncated length
         // as its total and deep pages beyond the cap would disappear.
-        if (browseIndexSequenceAfter === browseIndexSequenceBefore && rows.length === total) {
+        if (
+          browseIndexSequenceAfter === browseIndexSequenceBefore
+          && offset === 0
+          && rows.length === total
+        ) {
           openLibrary.browseIndexCache = {
             changeSequence: browseIndexSequenceAfter,
             assetIds: rows.map((row) => row.asset_id),
@@ -27026,7 +27398,8 @@ export class LibraryService {
       return {
         items: [],
         total,
-        offset: 0,
+        ...(totalIsExact ? {} : { totalIsExact: false }),
+        offset,
         layout: layout as BrowseLayoutEntry[],
       };
     }
@@ -27069,7 +27442,13 @@ export class LibraryService {
             .map((r) => ({ assetId: r.asset_id, text: r.snippet_text! }))
         : undefined;
 
-    return { items, total, offset, snippets };
+    return {
+      items,
+      total,
+      ...(totalIsExact ? {} : { totalIsExact: false }),
+      offset,
+      snippets,
+    };
   }
 
   // ── Smart Collections (v6) ──────────────────────────────────────────
@@ -27161,26 +27540,41 @@ export class LibraryService {
         query_definition_json?: string;
         position?: number;
       }>;
-    // Batch counts inside one list call so the renderer avoids N+1 execute RPCs (CU-M6).
-    return rows.map((row) => {
-      let assetCount: number;
-      try {
-        const definition = this.parseSmartCollectionDefinition(
-          row.query_definition_json ?? '{}',
-          'LIBRARY_CORRUPT',
-        );
-        assetCount = this.countSmartCollectionMatches(libraryId, definition);
-      } catch {
-        assetCount = 0;
+    const changeSequence = this.getChangeSequence(libraryId);
+    const cachedCounts = openLibrary.smartCollectionCountCache;
+    const counts = cachedCounts?.changeSequence === changeSequence
+      ? cachedCounts.counts
+      : new Map<string, number>();
+    const needsCountRefresh = cachedCounts?.changeSequence !== changeSequence;
+    // Keep the renderer to one RPC, and keep repeated sidebar hydration from
+    // re-running every collection's complete search when no data changed.
+    const summaries = rows.map((row) => {
+      const collectionId = row.collection_id ?? '';
+      let assetCount = counts.get(collectionId);
+      if (assetCount === undefined || needsCountRefresh) {
+        try {
+          const definition = this.parseSmartCollectionDefinition(
+            row.query_definition_json ?? '{}',
+            'LIBRARY_CORRUPT',
+          );
+          assetCount = this.countSmartCollectionMatches(libraryId, definition);
+        } catch {
+          assetCount = 0;
+        }
+        counts.set(collectionId, assetCount);
       }
       return {
-        collectionId: row.collection_id ?? '',
+        collectionId,
         name: row.name ?? '',
         queryDefinition: row.query_definition_json ?? '',
         position: row.position ?? 0,
         assetCount,
       };
     });
+    if (needsCountRefresh) {
+      openLibrary.smartCollectionCountCache = { changeSequence, counts };
+    }
+    return summaries;
   }
 
   updateSmartCollection(input: {
@@ -36423,22 +36817,34 @@ export class LibraryService {
     return hash.digest('hex');
   }
 
-  private collectManagedAssetDiscovery(openLibrary: OpenLibrary): RefreshManagedAssetsDiscovery {
+  private collectManagedAssetDiscovery(
+    openLibrary: OpenLibrary,
+    linkedFolderIds?: readonly string[],
+  ): RefreshManagedAssetsDiscovery {
     this.reconcileLinkedFolderStatuses(openLibrary);
     const libraryId = openLibrary.summary.libraryId;
     const linkedEntriesByFolder = new Map<string, DiscoveredSourceEntry[]>();
+    const uniqueLinkedFolderIds = linkedFolderIds === undefined
+      ? undefined
+      : [...new Set(linkedFolderIds)];
+    const linkedFolderFilter = uniqueLinkedFolderIds === undefined
+      ? ''
+      : uniqueLinkedFolderIds.length === 0
+        ? ' AND 1 = 0'
+        : ` AND folder_id IN (${uniqueLinkedFolderIds.map(() => '?').join(',')})`;
     const linkedFolderRows = openLibrary.connection
       .prepare(
         `SELECT folder_id, absolute_root_path, status
            FROM linked_folders
           WHERE library_id = ?
+            ${linkedFolderFilter}
             AND NOT EXISTS (
               SELECT 1 FROM linked_folder_index_jobs j
                WHERE j.linked_folder_id = linked_folders.folder_id
                  AND j.status IN ('queued', 'running', 'paused')
             )`,
       )
-      .all(libraryId) as Array<{
+      .all(libraryId, ...(uniqueLinkedFolderIds ?? [])) as Array<{
         folder_id: string;
         absolute_root_path: string;
         status: 'available' | 'offline';
@@ -36469,7 +36875,10 @@ export class LibraryService {
 
     return {
       linkedEntriesByFolder,
-      managedEntries: this.enumerateManagedSources(
+      // A linked-root watcher must not walk managed storage merely because an
+      // external source changed. Explicit/manual refreshes retain the full
+      // reconciliation behaviour by leaving linkedFolderIds undefined.
+      managedEntries: uniqueLinkedFolderIds === undefined ? this.enumerateManagedSources(
         this.assetsPath(openLibrary),
         (relativePath, pathKind) => this.isExplicitlyIgnored(
           openLibrary,
@@ -36478,7 +36887,7 @@ export class LibraryService {
           relativePath,
           pathKind,
         ),
-      ),
+      ) : [],
     };
   }
 
@@ -36491,7 +36900,8 @@ export class LibraryService {
   private assertReconciliationActive(task: OpenReconciliationTask): void {
     if (
       task.controller.signal.aborted
-      || this.reconciliationByLibrary.get(task.libraryId) !== task
+      || (this.reconciliationByLibrary.get(task.libraryId) !== task
+        && this.watchedRefreshTasks.get(task.libraryId) !== task)
       || !this.openById.has(task.libraryId)
     ) {
       throw this.reconciliationAbortError();
@@ -36522,6 +36932,7 @@ export class LibraryService {
     isDirectoryIgnored?: (relativePath: string) => boolean;
     libraryId: string;
     locationKind: 'managed' | 'linked';
+    linkedFolderId?: string;
     rootPath: string;
     task: OpenReconciliationTask;
   }): Promise<DiscoveredSourceEntry[]> {
@@ -36567,7 +36978,7 @@ export class LibraryService {
             new LibraryServiceError('INVALID_IMPORT_SOURCE', {
               reason: 'SYMBOLIC_LINK_NOT_ALLOWED',
             }),
-            { libraryId: input.libraryId, relativePath },
+            { libraryId: input.libraryId, relativePath, linkedFolderId: input.linkedFolderId },
           );
           continue;
         }
@@ -36631,16 +37042,16 @@ export class LibraryService {
 
   private async collectManagedAssetDiscoveryAsync(
     task: OpenReconciliationTask,
+    scope?: WatchedRefreshScope,
   ): Promise<RefreshManagedAssetsDiscovery> {
     const openLibrary = this.openById.get(task.libraryId);
     if (!openLibrary) throw this.reconciliationAbortError();
     this.assertReconciliationActive(task);
-    this.reconcileLinkedFolderStatuses(openLibrary);
     const linkedEntriesByFolder = new Map<string, DiscoveredSourceEntry[]>();
     const existingLinkedAssetIdsByFolder = new Map<string, Map<string, string>>();
     const existingManagedAssetIdsByIdentity = new Map<string, string>();
     for (const row of openLibrary.connection
-      .prepare("SELECT asset_id, path_identity FROM assets WHERE location_kind = 'managed'")
+      .prepare(`SELECT asset_id, path_identity FROM assets WHERE location_kind = 'managed'${scope && !scope.managed ? ' AND 1 = 0' : ''}`)
       .all() as Array<{ asset_id: string; path_identity: string }>) {
       existingManagedAssetIdsByIdentity.set(row.path_identity, row.asset_id);
     }
@@ -36657,8 +37068,20 @@ export class LibraryService {
       }>;
 
     for (const folder of linkedFolderRows) {
+      if (scope && !scope.linkedFolderIds.includes(folder.folder_id)) continue;
       this.assertReconciliationActive(task);
-      if (this.linkedRootIsGone(folder.absolute_root_path)) continue;
+      let rootGone = true;
+      try {
+        const rootEntry = await lstatAsync(folder.absolute_root_path);
+        await accessAsync(folder.absolute_root_path, constants.F_OK);
+        rootGone = rootEntry.isSymbolicLink() || !rootEntry.isDirectory();
+      } catch { /* Offline/deleted sources retain their indexed assets. */ }
+      this.assertReconciliationActive(task);
+      const status = rootGone ? 'offline' : 'available';
+      if (folder.status !== status) openLibrary.connection.prepare(
+        'UPDATE linked_folders SET status = ?, updated_at = ? WHERE folder_id = ?',
+      ).run(status, new Date().toISOString(), folder.folder_id);
+      if (rootGone) continue;
       const rules = this.getLinkedFolderRules({
         libraryId: task.libraryId,
         folderId: folder.folder_id,
@@ -36692,6 +37115,7 @@ export class LibraryService {
         libraryId: task.libraryId,
         locationKind: 'linked',
         rootPath: folder.absolute_root_path,
+        linkedFolderId: folder.folder_id,
         task,
       });
       for (const entry of entries) {
@@ -36701,7 +37125,7 @@ export class LibraryService {
       await this.yieldReconciliation(task);
     }
 
-    const managedEntries = await this.enumerateSourcesAsync({
+    const managedEntries = scope && !scope.managed ? [] : await this.enumerateSourcesAsync({
       errorCode: 'IMPORT_APPLY_FAILED',
       explicitlyIgnored: (relativePath, pathKind) => this.isExplicitlyIgnored(
         openLibrary,
@@ -36774,14 +37198,22 @@ export class LibraryService {
     // 对账已有资产。discoverSources=false 跳过文件系统枚举（仅缺失资产
     // 批次走 fallback lstat）。
     const assetIds = options?.assetIds;
+    const linkedFolderIds = options?.linkedFolderIds === undefined
+      ? undefined
+      : [...new Set(options.linkedFolderIds)];
     const assetFilter = assetIds === undefined
       ? ''
       : assetIds.length === 0
         ? ' AND 1 = 0'
         : ` AND a.asset_id IN (${assetIds.map(() => '?').join(',')})`;
+    const linkedFolderFilter = linkedFolderIds === undefined
+      ? ''
+      : linkedFolderIds.length === 0
+        ? ' AND 1 = 0'
+        : ` AND a.location_kind = 'linked' AND a.linked_folder_id IN (${linkedFolderIds.map(() => '?').join(',')})`;
     const discoverSources = options?.discoverSources ?? true;
     const discovery = discoverSources
-      ? options?.discovery ?? this.collectManagedAssetDiscovery(openLibrary)
+      ? options?.discovery ?? this.collectManagedAssetDiscovery(openLibrary, linkedFolderIds)
       : undefined;
     // Super-onch 风格分阶段计时：SUPER_REFRESH_STAGE_LOG=1 时输出各阶段耗时，
     // 用于大库全量对账的归因（Super-4bdd26）。生产默认关闭。
@@ -36807,10 +37239,10 @@ export class LibraryService {
                 r.content_fingerprint
           FROM assets a
            LEFT JOIN revisions r ON r.revision_id = a.current_revision_id
-          WHERE a.deleted_at IS NULL${assetFilter}
+          WHERE a.deleted_at IS NULL${assetFilter}${linkedFolderFilter}
           ORDER BY a.relative_file_path`,
       )
-      .all(...(assetIds ?? [])) as Array<{
+      .all(...(assetIds ?? []), ...(linkedFolderIds ?? [])) as Array<{
         asset_id: string;
         location_kind: 'managed' | 'linked';
         linked_folder_id: string | null;
@@ -39878,9 +40310,14 @@ export class LibraryService {
   async closeLibraryAsync(libraryId: string): Promise<void> {
     const openLibrary = this.openById.get(libraryId);
     if (!openLibrary) throw new LibraryServiceError('LIBRARY_NOT_OPEN');
+    this.closingWatchedLibraries.add(openLibrary);
     const reconciliation = this.reconciliationByLibrary.get(libraryId);
     reconciliation?.controller.abort();
+    this.watchedRefreshTasks.get(libraryId)?.controller.abort();
+    this.pendingWatchedAssetRefreshes.delete(libraryId);
+    this.pendingWatchedLinkedRefreshes.delete(libraryId);
     if (reconciliation) await reconciliation.promise;
+    await this.waitForWatchedRefreshes(libraryId);
     if (!openLibrary.readOnly) {
       await this.createDatabaseBackupForOpenLibrary(openLibrary, 'close');
     }
@@ -39890,7 +40327,11 @@ export class LibraryService {
   closeLibrary(libraryId: string): void {
     const openLibrary = this.openById.get(libraryId);
     if (!openLibrary) throw new LibraryServiceError('LIBRARY_NOT_OPEN');
+    this.closingWatchedLibraries.add(openLibrary);
     this.reconciliationByLibrary.get(libraryId)?.controller.abort();
+    this.watchedRefreshTasks.get(libraryId)?.controller.abort();
+    this.pendingWatchedAssetRefreshes.delete(libraryId);
+    this.pendingWatchedLinkedRefreshes.delete(libraryId);
 
     const backupTimer = this.databaseBackupTimers.get(libraryId);
     if (backupTimer) {

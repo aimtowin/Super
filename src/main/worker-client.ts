@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { utilityProcess, type UtilityProcess } from 'electron';
 
 import type { WorkerCommand, WorkerHistoryContext } from '../shared/protocol/requests';
+import { WORKER_BACKGROUND_MODE_MESSAGE_TYPE } from '../shared/protocol/channels';
 import type { AppLogger } from './app-logger';
 import { mediaBinaryWorkerEnv } from './media-binary-env';
 import {
@@ -140,7 +141,15 @@ export function requestTimeoutForCommand(
   if (commandType === 'asset.analyze') {
     return AI_QUEUE_TIMEOUT_MS;
   }
-  if (commandType === 'asset.search' || commandType === 'smart-collection.execute' || commandType === 'media.get-asset-drag-infos') {
+  if (
+    commandType === 'asset.search'
+    || commandType === 'asset.list'
+    || commandType === 'folder.browse-entries'
+    || commandType === 'collection.assets.list'
+    || commandType === 'collection.source-browse-entries'
+    || commandType === 'smart-collection.execute'
+    || commandType === 'media.get-asset-drag-infos'
+  ) {
     // Large-library searches, smart-collection pages, and drag-info hydration
     // can wait behind one unavoidable synchronous SQLite call. Superseded
     // searches are discarded by the Worker before they enter SQLite; the
@@ -170,7 +179,7 @@ export class LibraryWorkerClient {
   #child: UtilityProcess | undefined;
   #ready = false;
   #pending = new Map<string, PendingRequest>();
-  #expiredRequestIds = new Set<string>();
+  #expiredRequestIds = new Map<string, { commandType: string; sentAt: number }>();
   // Super-2cc492（真实 NAS 生产库事故，2026-08-23）：开库后的第一批元数据
   // 查询在 SMB 冷缓存下实测单条 20-35s（assets 表每页一次网络往返），远超
   // 15s 默认超时；响应迟到即被丢弃、UI 呈现「空资源库」且无法自愈。开库
@@ -189,6 +198,18 @@ export class LibraryWorkerClient {
   #aiClearedListeners = new Set<(event: AiContentClearedEvent) => void>();
   #pluginMediaProviderListener:
     ((request: PluginMediaProviderRequest) => Promise<PluginMediaProviderResult>) | undefined;
+
+  /**
+   * Tray standby must not tear down the Worker (watchers need to survive), but
+   * it may stop work that competes with the next foreground browse request.
+   * This is intentionally fire-and-forget: a hidden window must never wait on
+   * a busy Worker merely to announce that it is hidden.
+   */
+  setBackgroundMode(mode: 'active' | 'paused'): void {
+    const child = this.#child;
+    if (!child || !this.#ready || this.#shuttingDown) return;
+    child.postMessage({ type: WORKER_BACKGROUND_MODE_MESSAGE_TYPE, mode });
+  }
   #modelThumbnailRenderListener:
     ((
       request: ModelThumbnailRenderRequest,
@@ -313,6 +334,7 @@ export class LibraryWorkerClient {
       this.#openGraceUntil = Date.now() + OPEN_STARTUP_GRACE_WINDOW_MS;
     }
     return new Promise<WorkerResult>((resolve, reject) => {
+      const sentAt = Date.now();
       const baseTimeout = requestTimeoutForCommand(command);
       const inOpenGrace = Date.now() < this.#openGraceUntil;
       const timeout = baseTimeout == null
@@ -324,7 +346,11 @@ export class LibraryWorkerClient {
         ? undefined
         : setTimeout(() => {
           this.#pending.delete(requestId);
-          this.#expiredRequestIds.add(requestId);
+          this.#expiredRequestIds.set(requestId, { commandType: command.type, sentAt });
+          this.logger.info('worker.request.timeout', 'Library Worker command exceeded its deadline.', {
+            requestId, commandType: command.type, totalMs: Date.now() - sentAt,
+            timeoutMs: timeout, pendingCount: this.#pending.size,
+          });
           const cleanupTimer = setTimeout(
             () => this.#expiredRequestIds.delete(requestId),
             10 * 60_000,
@@ -333,7 +359,6 @@ export class LibraryWorkerClient {
           reject(new WorkerRequestTimeoutError(requestId, command.type));
         }, timeout);
 
-      const sentAt = WORKER_CMD_LOG ? Date.now() : undefined;
       this.#pending.set(requestId, {
         commandType: command.type,
         resolve,
@@ -728,11 +753,13 @@ export class LibraryWorkerClient {
 
     const pending = this.#pending.get(response.requestId);
     if (!pending) {
-      if (this.#expiredRequestIds.delete(response.requestId)) {
+      const expired = this.#expiredRequestIds.get(response.requestId);
+      if (expired) {
+        this.#expiredRequestIds.delete(response.requestId);
         this.logger.info(
           'worker.response.late',
           'Ignored a valid response for a timed-out request.',
-          { requestId: response.requestId },
+          { requestId: response.requestId, commandType: expired.commandType, totalMs: Date.now() - expired.sentAt },
         );
         return;
       }
@@ -742,7 +769,7 @@ export class LibraryWorkerClient {
 
     clearTimeout(pending.timer);
     this.#pending.delete(response.requestId);
-    if (WORKER_CMD_LOG && pending.sentAt !== undefined) {
+    if (pending.sentAt !== undefined && (WORKER_CMD_LOG || Date.now() - pending.sentAt >= 1_000)) {
       this.logger.info(
         'worker.cmd.roundtrip',
         'Library Worker command roundtrip completed.',

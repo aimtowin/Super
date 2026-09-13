@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -9,8 +8,6 @@ import {
   verifyReleaseProvenance,
 } from './media-binaries-lib.mjs';
 
-const require = createRequire(import.meta.url);
-const asar = require('@electron/asar');
 // fileURLToPath（而非 URL.pathname）保证 Windows 上盘符不丢失：
 // file:///E:/repo/scripts/verify-package.mjs → E:\repo\scripts\verify-package.mjs
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,12 +18,12 @@ const resourcesPath =
   process.platform === 'darwin'
     ? path.join(packageRoot, 'Super.app', 'Contents', 'Resources')
     : path.join(packageRoot, 'resources');
+const appPath = path.join(resourcesPath, 'app');
 
 const requiredPaths = [
-  path.join(resourcesPath, 'app.asar'),
+  appPath,
   path.join(
-    resourcesPath,
-    'app.asar.unpacked',
+    appPath,
     'node_modules',
     'better-sqlite3',
     'build',
@@ -46,8 +43,7 @@ if (!systemTrashBinary) {
 }
 
 requiredPaths.push(path.join(
-  resourcesPath,
-  'app.asar.unpacked',
+  appPath,
   'node_modules',
   'trash',
   'lib',
@@ -65,8 +61,7 @@ if (missingPaths.length > 0) {
 // 1) .node 体积下限（受控静态编译产物 ~1.9MB，坏编译产物仅 ~230KB）；
 // 2) PE 导入表不得包含 sqlite3.dll（二进制扫描导入名）。
 const sqliteNodePath = path.join(
-  resourcesPath,
-  'app.asar.unpacked',
+  appPath,
   'node_modules',
   'better-sqlite3',
   'build',
@@ -91,23 +86,15 @@ if (existsSync(sqliteNodePath)) {
   }
 }
 
-const asarPath = path.join(resourcesPath, 'app.asar');
-const asarFiles = asar.listPackage(asarPath);
 const requiredAsarEntries = [
-  'plugin_standard_host.js',
-  'plugin_trusted_host.js',
-  'script_runtime_utility.js',
+  '.vite/build/plugin_standard_host.js',
+  '.vite/build/plugin_trusted_host.js',
+  '.vite/build/script_runtime_utility.js',
 ];
-const missingAsarEntries = requiredAsarEntries.filter((entry) => {
-  const normalized = entry.replaceAll('\\', '/');
-  return !asarFiles.some((candidate) => {
-    const file = String(candidate).replaceAll('\\', '/').replace(/^\.\//u, '');
-    return file === normalized || file.endsWith(`/${normalized}`);
-  });
-});
-if (missingAsarEntries.length > 0) {
+const missingRuntimeEntries = requiredAsarEntries.filter((entry) => !existsSync(path.join(appPath, entry)));
+if (missingRuntimeEntries.length > 0) {
   throw new Error(
-    `Package ASAR is missing plugin/script Host utilities:\n${missingAsarEntries.join('\n')}`,
+    `Package app directory is missing plugin/script Host utilities:\n${missingRuntimeEntries.join('\n')}`,
   );
 }
 
@@ -154,19 +141,9 @@ if (missingDeclarationCommands.length > 0) {
   );
 }
 
-const mainEntry = asarFiles.find((entry) => {
-  const normalized = String(entry).replaceAll('\\', '/').replace(/^\.\//u, '');
-  return normalized.endsWith('/main.js') || normalized === 'main.js';
-});
-if (!mainEntry) {
-  throw new Error('Package ASAR is missing the Main process entry.');
-}
-// @electron/asar 的 listPackage 返回 path.join 风格的条目：Windows 上为
-// `\.vite\build\main.js`（反斜杠+前导分隔符），macOS 上为 `/.vite/build/main.js`；
-// 其内部遍历按 path.sep 分割，因此 extractFile 需要去掉前导分隔符、保留平台分隔符。
-const mainSource = asar
-  .extractFile(asarPath, mainEntry.replace(/^[\\/]+/u, ''))
-  .toString('utf8');
+const mainPath = path.join(appPath, '.vite', 'build', 'main.js');
+if (!existsSync(mainPath)) throw new Error('Package app directory is missing the Main process entry.');
+const mainSource = readFileSync(mainPath, 'utf8');
 if (!mainSource.includes(`AUTOMATION_API_VERSION`) || !mainSource.includes(String(apiVersion))) {
   throw new Error(
     `Packaged Main does not contain the Registry API version marker (expected ${apiVersion}).`,
@@ -186,4 +163,4 @@ if (process.env.SUPER_MEDIA_SKIP_PROVENANCE === '1') {
 }
 
 console.log(`Verified packaged runtime files in ${resourcesPath}`);
-console.log(`Verified Host utilities in ASAR: ${requiredAsarEntries.join(', ')}`);
+console.log(`Verified Host utilities in app directory: ${requiredAsarEntries.join(', ')}`);

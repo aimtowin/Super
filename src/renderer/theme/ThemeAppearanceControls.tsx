@@ -177,6 +177,7 @@ export function BackgroundSettings(): ReactNode {
       }
       const saved = setBackgroundPreferences({
         ...backgroundPreferences,
+        imageKind: 'custom',
         imageDataUrl: result.dataUrl,
         imageSource: {
           fileName: file.name,
@@ -220,12 +221,17 @@ export function BackgroundSettings(): ReactNode {
     <div className="app-settings-background-settings">
       <BackgroundImagePanel
         busy={busy}
+        imageKind={backgroundPreferences.imageKind}
         error={error}
-        imageDataUrl={backgroundPreferences.imageDataUrl}
         imageSource={backgroundPreferences.imageSource}
         notices={notices}
-        onRemove={() => update({ imageDataUrl: null, imageSource: null })}
+        onRemove={() =>
+          update({ imageKind: 'none', imageDataUrl: null, imageSource: null })
+        }
         onSelectFile={(file) => void handleSelectFile(file)}
+        onUseDefault={() =>
+          update({ imageKind: 'default', imageDataUrl: null, imageSource: null })
+        }
         previewStyle={previewStyle}
       />
       <div className="app-settings-background-row">

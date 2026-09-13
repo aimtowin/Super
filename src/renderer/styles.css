@@ -45,6 +45,11 @@
   --accent-soft-fg: var(--ui-content-accent, color-mix(in srgb, var(--accent) 55%, white));
   --accent-ring: color-mix(in srgb, var(--ui-action-accent, var(--accent)) 42%, transparent);
   --rating-star: #d9b54b;
+  --file-type-accent-violet: #9d7cff;
+  --file-type-accent-amber: #e1a34b;
+  --file-type-accent-teal: #35b7a0;
+  --file-type-accent-rose: #df7193;
+  --file-type-accent-blue: #5b9cff;
   /* Semantic status / ink tokens for themeable surfaces (REQ-THEME-002). */
   --success: var(--ui-status-success, #6db85d);
   --danger: var(--ui-status-danger, #e76b7a);
@@ -108,7 +113,7 @@
   --menu-danger-color: color-mix(in srgb, var(--danger) 78%, var(--text));
   --menu-danger-hover-background: color-mix(in srgb, var(--danger) 14%, var(--menu-item-hover-background));
   --menu-item-padding: 6px 10px;
-  --menu-item-font-size: 12.5px;
+  --menu-item-font-size: calc(12.5px * var(--app-font-scale));
   --menu-item-line-height: 1.4;
   --shadow-elevated: 0 24px 70px rgb(0 0 0 / 42%);
   --shadow-panel: 0 16px 40px rgb(0 0 0 / 42%);
@@ -164,6 +169,11 @@
   --accent-soft-fg: var(--ui-content-accent, color-mix(in srgb, var(--accent) 68%, black));
   --accent-ring: color-mix(in srgb, var(--ui-action-accent, var(--accent)) 38%, transparent);
   --rating-star: #ecc83a;
+  --file-type-accent-violet: #7656c8;
+  --file-type-accent-amber: #ad711c;
+  --file-type-accent-teal: #16816e;
+  --file-type-accent-rose: #b84f70;
+  --file-type-accent-blue: #3975c7;
   --success: var(--ui-status-success, #16a34a);
   --danger: var(--ui-status-danger, #dc2626);
   --danger-muted: var(--ui-status-danger-surface, #fde8e8);
@@ -682,7 +692,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 6px;
   color: var(--secondary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   list-style: none;
   transition:
     background-color 120ms ease,
@@ -728,7 +738,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   flex-direction: column;
   gap: 4px;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   letter-spacing: 0.04em;
 }
 .discovery-filter-panel label > span {
@@ -736,13 +746,13 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   align-items: center;
   gap: 4px;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   letter-spacing: 0;
 }
 .discovery-filter-panel .text-field {
   width: 100%;
   height: var(--shell-control-height);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 /* REQ-FILTER-001: Eagle-style dimension filter bar */
@@ -780,7 +790,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 6px;
   background: transparent;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   cursor: pointer;
 }
 
@@ -839,7 +849,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   color: var(--secondary);
 }
 
@@ -861,7 +871,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 6px;
   background: transparent;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   cursor: pointer;
 }
 
@@ -914,7 +924,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   margin-top: 4px;
   padding: 4px 8px 2px;
   color: var(--secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
@@ -936,7 +946,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 6px;
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   text-align: left;
   cursor: pointer;
 }
@@ -967,7 +977,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
   line-height: 1;
   opacity: 0.85;
 }
@@ -983,7 +993,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 999px;
   background: color-mix(in srgb, var(--canvas) 80%, var(--pane));
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1;
   cursor: pointer;
 }
@@ -1053,7 +1063,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 4px;
   background: var(--raised-2);
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 450;
   line-height: 1.35;
   letter-spacing: 0;
@@ -1078,7 +1088,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 7px;
   background: color-mix(in srgb, var(--raised-2) 84%, white);
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.55;
   white-space: normal;
   text-align: left;
@@ -1193,7 +1203,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 6px;
   background: transparent;
   color: var(--text);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--app-font-scale));
   font-weight: 620;
   letter-spacing: 0.02em;
 }
@@ -1373,7 +1383,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .library-switcher-section-label {
   padding: 4px 9px 2px;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   letter-spacing: 0.02em;
 }
 
@@ -1392,9 +1402,12 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   gap: 8px;
   overflow: hidden;
   padding: 0;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   color: var(--tertiary);
   user-select: none;
+  /* Keep the passive breadcrumb rail inside the parent's native drag region.
+     Its buttons remain no-drag via the shared toolbar control rule, while
+     labels and every unused middle pixel of the top bar move the window. */
 }
 
 .scope-history {
@@ -1445,7 +1458,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 
 .scope-sep {
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   user-select: none;
 }
 
@@ -1459,7 +1472,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 3px;
   background: transparent;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: var(--shell-control-height);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1548,7 +1561,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   color: var(--tertiary);
   cursor: pointer;
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 650;
   line-height: 1;
   transform: translateY(-50%);
@@ -1597,16 +1610,36 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   cursor: not-allowed;
 }
 
-.dimension-color-row {
+.dimension-palette-heading {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: calc(11px * var(--app-font-scale));
+  font-weight: 650;
+}
+
+.dimension-palette-selection {
+  color: var(--tertiary);
+  font-size: calc(10px * var(--app-font-scale));
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* A compact chromatic field rather than a line of isolated colour dots. */
+.dimension-color-palette {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(20px, 1fr));
+  gap: 4px;
+  min-width: 246px;
 }
 
 .dimension-filter-hint {
   margin: 6px 0 0;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   line-height: 1.3;
 }
 
@@ -1623,17 +1656,25 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 }
 
 .dimension-color-swatch {
-  width: 22px;
-  height: 22px;
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 21px;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
-  border-radius: 999px;
+  border-radius: 5px;
   cursor: pointer;
-  box-shadow: none;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 15%);
   transition:
-    transform 100ms ease,
+    transform 120ms ease,
     box-shadow 100ms ease,
     outline-color 100ms ease;
+}
+
+.dimension-color-swatch:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 24%),
+    0 3px 7px rgb(0 0 0 / 24%);
 }
 
 .dimension-color-swatch.is-neutral {
@@ -1644,9 +1685,9 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .dimension-color-swatch.is-active:not(:disabled) {
   border-color: transparent;
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
-  transform: none;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--canvas) 80%, transparent);
+  outline-offset: 2px;
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--canvas) 88%, transparent);
 }
 
 .dimension-color-swatch:disabled {
@@ -1662,7 +1703,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 6px;
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   text-align: left;
   cursor: pointer;
 }
@@ -1679,11 +1720,11 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .dimension-folder-empty {
   margin: 0;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .search-control {
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.2;
   text-align: left;
 }
@@ -1776,7 +1817,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   justify-content: space-between;
   padding: 0 3px 0 6px;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   font-weight: 650;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1820,7 +1861,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 6px;
   background: transparent;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   text-align: left;
   cursor: pointer;
   overflow: hidden;
@@ -1937,7 +1978,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border: 1px solid var(--divider);
   border-radius: 999px;
   background: var(--raised);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1;
 }
 
@@ -1974,7 +2015,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .filter-tag-section-label {
   padding: 0 4px;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -2004,7 +2045,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 999px;
   background: var(--pane);
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.3;
   text-align: left;
   cursor: pointer;
@@ -2023,7 +2064,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 
 .filter-tag-count {
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 
 /* REQ-FILTER-009/010: dimension preset chips beside the custom range inputs. */
@@ -2034,7 +2075,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .filter-preset-group-label {
   display: block;
   margin: 2px 0 4px;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -2065,7 +2106,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   align-items: center;
   gap: 8px !important;
   margin: 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 500;
   line-height: 1.2;
   color: var(--text-secondary);
@@ -2101,7 +2142,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 999px;
   background: transparent;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1;
   cursor: pointer;
 }
@@ -2124,7 +2165,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 
 .nav-count {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   color: var(--tertiary);
   white-space: nowrap;
 }
@@ -2241,7 +2282,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .main-menu-chevron,
 .context-menu-submenu-chevron {
   color: var(--tertiary);
-  font-size: 18px;
+  font-size: calc(18px * var(--app-font-scale));
   line-height: 12px;
 }
 
@@ -2271,7 +2312,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .main-menu-item-shortcut {
   margin-left: auto;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 .main-menu-item.is-disabled,
@@ -2294,7 +2335,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .nav-empty {
   margin: 2px 6px 0 29px;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.55;
 }
 
@@ -2366,7 +2407,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-bottom: 1px solid var(--divider);
   background: var(--raised);
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 520;
 }
 
@@ -2419,7 +2460,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 6px;
   background: var(--pane);
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 520;
   line-height: 1;
   white-space: nowrap;
@@ -2457,7 +2498,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .ai-batch-review-section h3 {
   margin: 0 0 8px;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 650;
 }
 
@@ -2478,7 +2519,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   gap: 2px;
   min-width: 0;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .ai-batch-review-section li > span,
@@ -2490,7 +2531,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 
 .ai-batch-review-section li > small {
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 .ai-batch-review-section.is-failed {
@@ -2525,7 +2566,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 7px;
   background: color-mix(in srgb, var(--raised) 52%, transparent);
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.5;
   backdrop-filter: blur(12px) saturate(125%);
 }
@@ -2562,7 +2603,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 
 .ai-smart-collection-result-panel > span {
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   font-weight: 600;
   letter-spacing: 0.12em;
 }
@@ -2570,14 +2611,14 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .ai-smart-collection-result-panel > strong {
   overflow-wrap: anywhere;
   color: var(--text);
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
   font-weight: 590;
   line-height: 1.45;
 }
 
 .ai-smart-collection-result-panel > small {
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.45;
 }
 
@@ -2740,7 +2781,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .plugin-job-activity-plugin {
   flex: 0 1 auto;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 620;
 }
 
@@ -2753,7 +2794,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .plugin-job-activity-progress-summary {
   flex: 0 0 auto;
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-variant-numeric: tabular-nums;
   font-weight: 620;
   line-height: 1;
@@ -2778,7 +2819,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .plugin-job-activity-error {
   overflow: hidden;
   color: var(--danger);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2801,7 +2842,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   border-radius: 7px;
   background: var(--pane);
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 560;
   line-height: 1;
   white-space: nowrap;
@@ -2825,7 +2866,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   background: transparent;
   color: var(--tertiary);
   cursor: pointer;
-  font-size: 18px;
+  font-size: calc(18px * var(--app-font-scale));
   line-height: 1;
 }
 
@@ -2895,7 +2936,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   flex: 0 0 auto;
   align-items: center;
   gap: 9px;
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
   font-weight: 580;
   white-space: nowrap;
 }
@@ -2943,7 +2984,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   background: var(--hover);
   color: var(--secondary);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   font-weight: 400;
   line-height: 1;
 }
@@ -2951,7 +2992,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .zoom-label {
   color: var(--tertiary);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   font-weight: 400;
 }
 
@@ -2979,7 +3020,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   align-items: center;
   gap: 5px;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   white-space: nowrap;
   cursor: pointer;
 }
@@ -3117,7 +3158,7 @@ input[type="range"] {
 
 .tag-management-title {
   margin: 0;
-  font-size: 18px;
+  font-size: calc(18px * var(--app-font-scale));
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -3161,13 +3202,13 @@ input[type="range"] {
   gap: 8px;
   margin-left: auto;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .tag-management-empty {
   margin: 24px 0;
   color: var(--tertiary);
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
 }
 
 /* Chip flow grid (REQ-TAG-010): management chips stay larger than
@@ -3190,7 +3231,7 @@ input[type="range"] {
   border-radius: 999px;
   background: var(--pane);
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.5;
   white-space: nowrap;
   cursor: default;
@@ -3222,7 +3263,7 @@ input[type="range"] {
 
 .tag-management-chip-count {
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 .tag-management-chip.is-selected .tag-management-chip-count {
@@ -3232,7 +3273,7 @@ input[type="range"] {
 .tag-management-chip-rename {
   width: 140px;
   padding: 1px 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .trash-folder-group {
@@ -3243,7 +3284,7 @@ input[type="range"] {
   grid-column: 1 / -1;
   margin: 12px 4px 4px;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -3307,7 +3348,7 @@ input[type="range"] {
 .micro-label {
   color: var(--accent);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
   font-weight: 500;
   letter-spacing: 0.13em;
 }
@@ -3316,7 +3357,11 @@ input[type="range"] {
 .library-state h1 {
   margin: 9px 0 11px;
   color: var(--text);
-  font-size: clamp(22px, 3vw, 30px);
+  font-size: clamp(
+    calc(22px * var(--app-font-scale)),
+    calc(3vw * var(--app-font-scale)),
+    calc(30px * var(--app-font-scale))
+  );
   font-weight: 590;
   letter-spacing: -0.025em;
 }
@@ -3326,7 +3371,7 @@ input[type="range"] {
   max-width: 440px;
   margin: 0;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.72;
 }
 
@@ -3351,7 +3396,7 @@ input[type="range"] {
 .create-dialog-existing-label {
   margin-bottom: 8px;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 560;
   letter-spacing: 0.02em;
 }
@@ -3435,7 +3480,7 @@ input[type="range"] {
 .create-dialog-recent-name {
   overflow: hidden;
   max-width: 100%;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 560;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3447,7 +3492,7 @@ input[type="range"] {
   max-width: 100%;
   color: var(--tertiary);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3498,7 +3543,7 @@ input[type="range"] {
   gap: 7px;
   padding: 0 14px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 560;
   cursor: pointer;
 }
@@ -3536,7 +3581,7 @@ input[type="range"] {
   border-radius: 6px;
   background: color-mix(in srgb, var(--warning) 8%, var(--pane));
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 .inline-error > .icon {
@@ -3560,7 +3605,7 @@ input[type="range"] {
   border: 0;
   background: transparent;
   color: var(--warning-fg);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   cursor: pointer;
 }
 
@@ -3574,14 +3619,14 @@ input[type="range"] {
 }
 
 .loading-state strong {
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
   font-weight: 560;
 }
 
 .loading-state p {
   margin: 3px 0 0;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 .loading-mark {
@@ -3639,7 +3684,7 @@ input[type="range"] {
     linear-gradient(145deg, color-mix(in srgb, var(--accent) 17%, transparent), transparent 55%), var(--pane);
   color: color-mix(in srgb, var(--accent) 72%, white);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 18px;
+  font-size: calc(18px * var(--app-font-scale));
 }
 
 .path-text,
@@ -3653,7 +3698,7 @@ input[type="range"] {
   max-width: 450px;
   margin: 0 0 17px;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3697,14 +3742,14 @@ input[type="range"] {
   background: color-mix(in srgb, var(--accent) 9%, var(--pane));
   color: var(--accent-soft-fg);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
 }
 
 .inspector-identity strong {
   display: block;
   overflow: hidden;
   margin-top: 4px;
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
   font-weight: 560;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3721,7 +3766,7 @@ input[type="range"] {
   min-height: 23px;
   grid-template-columns: 56px minmax(0, 1fr);
   align-items: center;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 
 .metadata-list dt {
@@ -3751,7 +3796,7 @@ input[type="range"] {
 .inspector-section h2 {
   margin: 0 0 6px;
   color: var(--secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   font-weight: 650;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -3765,7 +3810,7 @@ input[type="range"] {
   border-radius: 6px;
   background: var(--pane);
   color: var(--secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   line-height: 1.55;
 }
 
@@ -3779,7 +3824,7 @@ input[type="range"] {
 .inspector-hint p {
   margin: 0;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.6;
 }
 
@@ -3806,7 +3851,7 @@ input[type="range"] {
 }
 
 .inspector-empty strong {
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 560;
 }
 
@@ -3814,7 +3859,7 @@ input[type="range"] {
   max-width: 190px;
   margin: 7px 0 0;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.6;
 }
 
@@ -4041,7 +4086,7 @@ body.super-modal-open .app-shell {
 .context-menu-item-shortcut {
   margin-left: auto;
   color: var(--tertiary, var(--tertiary));
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 .context-menu-submenu-trigger {
@@ -4057,7 +4102,7 @@ body.super-modal-open .app-shell {
 .context-menu-selection-summary {
   padding: 7px 10px 6px;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 650;
   letter-spacing: 0.01em;
 }
@@ -4070,7 +4115,7 @@ body.super-modal-open .app-shell {
   border-radius: 5px;
   background: color-mix(in srgb, var(--raised-2, var(--raised-2)) 72%, transparent);
   color: var(--secondary, var(--secondary));
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.5;
   white-space: normal;
 }
@@ -4087,7 +4132,7 @@ body.super-modal-open .app-shell {
 
 .context-menu-section-label {
   padding: 2px 10px 4px;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   color: var(--tertiary, var(--tertiary));
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -4115,7 +4160,7 @@ body.super-modal-open .app-shell {
   background: transparent;
   color: var(--secondary, var(--secondary));
   font-family: inherit;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   cursor: default;
 }
 
@@ -4128,7 +4173,7 @@ body.super-modal-open .app-shell {
 
 .tag-picker-title {
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 650;
   letter-spacing: 0.01em;
 }
@@ -4152,7 +4197,7 @@ body.super-modal-open .app-shell {
   background: transparent;
   color: var(--text);
   font-family: inherit;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .tag-picker-search-input:focus {
@@ -4182,7 +4227,7 @@ body.super-modal-open .app-shell {
   background: transparent;
   color: var(--text);
   font-family: inherit;
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
   line-height: 1.4;
   cursor: default;
   text-align: left;
@@ -4220,14 +4265,14 @@ body.super-modal-open .app-shell {
   margin-left: auto;
   color: var(--tertiary, var(--tertiary));
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   flex-shrink: 0;
 }
 
 .tag-picker-empty {
   padding: 10px 12px;
   color: var(--tertiary, var(--tertiary));
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   text-align: center;
 }
 
@@ -4247,7 +4292,7 @@ body.super-modal-open .app-shell {
   background: transparent;
   color: var(--secondary, var(--secondary));
   font: inherit;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   text-align: left;
 }
 
@@ -4261,7 +4306,7 @@ body.super-modal-open .app-shell {
 .color-space-picker-title {
   padding: 5px 8px 4px;
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 650;
 }
 
@@ -4310,7 +4355,7 @@ body.super-modal-open .app-shell {
   border-radius: 4px;
   background: var(--raised);
   color: var(--text);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   cursor: pointer;
 }
 .preview-state button:disabled,
@@ -4485,7 +4530,7 @@ body.super-modal-open .app-shell {
   align-items: center;
   gap: 10px;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 .preview-text-meta > span {
   flex: 0 0 auto;
@@ -4499,7 +4544,7 @@ body.super-modal-open .app-shell {
   border-radius: 6px;
   background: color-mix(in srgb, var(--warning) 14%, var(--viewer-stage));
   color: var(--warning-fg, var(--text));
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.4;
   text-align: left;
   text-overflow: ellipsis;
@@ -4526,7 +4571,7 @@ body.super-modal-open .app-shell {
   border-radius: 8px;
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   cursor: pointer;
   opacity: 0.85;
 }
@@ -4563,7 +4608,7 @@ body.super-modal-open .app-shell {
   background: var(--raised);
   color: var(--tertiary);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.55;
   text-align: right;
   user-select: none;
@@ -4582,7 +4627,7 @@ body.super-modal-open .app-shell {
   background: transparent;
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.55;
   white-space: pre;
   overflow-wrap: normal;
@@ -4620,7 +4665,7 @@ body.super-modal-open .app-shell {
   overflow: hidden;
   color: var(--secondary);
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -4641,7 +4686,7 @@ body.super-modal-open .app-shell {
 
 .asset-preview > .text-asset-preview .text-asset-preview-snippet {
   padding: 8px 9px;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   line-height: 1.4;
 }
 .preview-video {
@@ -4673,7 +4718,7 @@ body.super-modal-open .app-shell {
   background: var(--viewer-chrome-bg);
   box-shadow: 0 1px 6px rgb(0 0 0 / 10%);
   color: var(--secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   backdrop-filter: blur(10px);
 }
 .preview-speed-control select {
@@ -4700,7 +4745,7 @@ body.super-modal-open .app-shell {
   background: var(--viewer-chrome-bg);
   box-shadow: 0 1px 6px rgb(0 0 0 / 10%);
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   backdrop-filter: blur(10px);
 }
 .preview-video-playpause,
@@ -4716,7 +4761,7 @@ body.super-modal-open .app-shell {
   border-radius: 6px;
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   cursor: pointer;
 }
 .preview-video-playpause:hover,
@@ -4791,7 +4836,7 @@ body.super-modal-open .app-shell {
   border-radius: 6px;
   background: transparent;
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   cursor: pointer;
@@ -4914,7 +4959,7 @@ body.super-modal-open .app-shell {
   max-width: min(520px, 100%);
   overflow: hidden;
   color: var(--tertiary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4970,7 +5015,7 @@ body.super-modal-open .app-shell {
   border-radius: 4px;
   background: var(--raised);
   color: var(--text);
-  font-size: 14px;
+  font-size: calc(14px * var(--app-font-scale));
   line-height: 1;
   cursor: pointer;
 }
@@ -4983,7 +5028,7 @@ body.super-modal-open .app-shell {
 .pdf-viewer-zoom-label {
   min-width: 52px;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -4992,7 +5037,7 @@ body.super-modal-open .app-shell {
   flex: 0 0 auto;
   padding: 6px 12px;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   text-align: center;
 }
 
@@ -5059,7 +5104,7 @@ body.super-modal-open .app-shell {
 .pdf-viewer-error {
   padding: 16px;
   color: var(--warning);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   text-align: center;
 }
 
@@ -5091,13 +5136,13 @@ body.super-modal-open .app-shell {
   justify-content: center;
   background: var(--viewer-stage);
   color: var(--tertiary);
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
 }
 
 .html-viewer-error {
   padding: 16px;
   color: var(--warning);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   text-align: center;
 }
 .preview-image-full {
@@ -5171,7 +5216,7 @@ body.super-modal-open .app-shell {
   align-items: center;
   gap: 5px;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   white-space: nowrap;
 }
 .preview-color-space-control select {
@@ -5196,7 +5241,7 @@ body.super-modal-open .app-shell {
   border-radius: 5px;
   background: transparent;
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.2;
   cursor: pointer;
   white-space: nowrap;
@@ -5230,7 +5275,7 @@ body.super-modal-open .app-shell {
   border-radius: 6px;
   background: var(--raised);
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   cursor: pointer;
 }
 .plugin-inspector-section-action:hover,
@@ -5337,7 +5382,7 @@ body.super-modal-open .app-shell {
   border-radius: 8px;
   background: var(--viewer-chrome-bg);
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   cursor: pointer;
   box-shadow: 0 1px 6px rgb(0 0 0 / 10%);
   backdrop-filter: blur(10px);
@@ -5408,7 +5453,7 @@ body.super-modal-open .app-shell {
   border-radius: 6px;
   background: transparent;
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   cursor: pointer;
 }
 .preview-plugin-actions button:hover,
@@ -5474,7 +5519,7 @@ body.super-modal-open .app-shell {
   background: var(--viewer-chrome-bg);
   box-shadow: 0 1px 6px rgb(0 0 0 / 10%);
   color: var(--secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   font-variant-numeric: tabular-nums;
   backdrop-filter: blur(10px);
   transform: translateX(-50%);
@@ -5518,7 +5563,7 @@ body.super-modal-open .app-shell {
   background: var(--viewer-chrome-bg);
   box-shadow: 0 1px 6px rgb(0 0 0 / 10%);
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   backdrop-filter: blur(10px);
 }
 .preview-exr-plane-selector select {
@@ -5575,7 +5620,7 @@ body.super-modal-open .app-shell {
   background: var(--viewer-chrome-bg);
   box-shadow: 0 1px 6px rgb(0 0 0 / 10%);
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   cursor: pointer;
   backdrop-filter: blur(10px);
 }
@@ -5643,12 +5688,12 @@ body.super-modal-open .app-shell {
 }
 .preview-state strong {
   color: var(--text);
-  font-size: 15px;
+  font-size: calc(15px * var(--app-font-scale));
 }
 .preview-state p {
   margin: 0;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.65;
 }
 .preview-state.is-error strong,
@@ -5670,7 +5715,7 @@ body.super-modal-open .app-shell {
   border-radius: 5px;
   background: color-mix(in srgb, var(--warning-muted) 88%, var(--pane));
   color: var(--warning-fg);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 /* Super-cljb: the fallback explanation is intentionally quiet. It stays
@@ -5690,7 +5735,7 @@ body.super-modal-open .app-shell {
   border-radius: 5px;
   background: color-mix(in srgb, var(--pane) 92%, transparent);
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   transform: translateX(-50%);
 }
 
@@ -5700,7 +5745,7 @@ body.super-modal-open .app-shell {
   border: 0;
   background: transparent;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   cursor: pointer;
 }
 
@@ -5730,7 +5775,7 @@ body.super-modal-open .app-shell {
   border-radius: 5px;
   background: color-mix(in srgb, var(--pane) 92%, transparent);
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   transform: translateX(-50%);
 }
 
@@ -5756,7 +5801,7 @@ body.super-modal-open .app-shell {
   max-width: 36em;
   margin: 8px 0 0;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.65;
 }
 
@@ -5783,7 +5828,7 @@ body.super-modal-open .app-shell {
 .app-log-subtitle {
   margin: 7px 0 0;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.5;
 }
 
@@ -5818,7 +5863,7 @@ body.super-modal-open .app-shell {
 .app-log-entry {
   padding: 10px 12px;
   border-bottom: 1px solid var(--divider);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.45;
 }
 
@@ -5908,7 +5953,7 @@ body.super-modal-open .app-shell {
 .script-sandbox-preview-result-title {
   margin: 0 0 7px;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 600;
 }
 
@@ -5961,7 +6006,7 @@ body.super-modal-open .app-shell {
   border-radius: 8px;
   background: color-mix(in srgb, var(--raised) 72%, var(--pane));
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.5;
 }
 
@@ -6046,7 +6091,7 @@ body.super-modal-open .app-shell {
   background: transparent;
   color: var(--secondary);
   cursor: pointer;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 .script-sandbox-preview-history-action:hover {
@@ -6065,7 +6110,7 @@ body.super-modal-open .app-shell {
 .script-sandbox-preview-dialog .dialog-actions > button {
   min-height: 32px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .dialog-actions-start {
@@ -6082,7 +6127,7 @@ body.super-modal-open .app-shell {
 
 .media-jobs-section-title {
   margin: 0 0 5px;
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
   font-weight: 590;
 }
 
@@ -6102,7 +6147,7 @@ body.super-modal-open .app-shell {
 
 .dialog-heading h2 {
   margin: 5px 0 0;
-  font-size: 19px;
+  font-size: calc(19px * var(--app-font-scale));
   font-weight: 590;
 }
 
@@ -6110,14 +6155,14 @@ body.super-modal-open .app-shell {
    满屏 accent 标签会稀释真正的行动点。 */
 .create-dialog .micro-label {
   color: var(--tertiary);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--app-font-scale));
   letter-spacing: 0.1em;
 }
 
 .ai-config-note {
   margin: -4px 0 0;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.55;
 }
 
@@ -6162,7 +6207,7 @@ body.super-modal-open .app-shell {
   gap: 6px;
   min-width: 0;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.25;
 }
 
@@ -6220,7 +6265,7 @@ body.super-modal-open .app-shell {
   min-width: 0;
   flex: 0 0 auto;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.25;
 }
 
@@ -6304,7 +6349,7 @@ body.super-modal-open .app-shell {
   border-radius: 6px;
   background: var(--pane);
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .open-sync-library-open:hover {
@@ -6378,7 +6423,7 @@ body.super-modal-open .app-shell {
 
 .ai-config-input {
   height: 28px;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 /* F1 (Super-lqof): eye toggle overlaid inside a credential input's right
@@ -6431,7 +6476,7 @@ body.super-modal-open .app-shell {
 .ai-config-hint {
   margin: 4px 0 0;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.45;
 }
 
@@ -6520,7 +6565,7 @@ body.super-modal-open .app-shell {
   color: var(--text);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   text-align: left;
 }
 
@@ -6532,7 +6577,7 @@ body.super-modal-open .app-shell {
 .ai-config-model-picker-empty {
   padding: 8px;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.45;
 }
 
@@ -6582,7 +6627,7 @@ select.ai-config-input.ai-config-languages {
   gap: 8px;
   padding: 3px 0;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   cursor: pointer;
 }
 
@@ -6619,7 +6664,7 @@ select.ai-config-input.ai-config-languages {
   cursor: pointer;
   list-style: none;
   padding: 8px 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 500;
   color: var(--secondary);
   user-select: none;
@@ -6678,7 +6723,7 @@ select.ai-config-input.ai-config-languages {
 }
 
 .ai-config-test-inline {
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.35;
   max-width: 280px;
 }
@@ -6693,7 +6738,7 @@ select.ai-config-input.ai-config-languages {
 
 .ai-config-save-wait {
   margin: 0 16px 12px;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   color: var(--secondary);
 }
 
@@ -6703,7 +6748,7 @@ select.ai-config-input.ai-config-languages {
   gap: 4px;
   margin-left: 8px;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .inspector-ai-rating-stars {
@@ -6739,7 +6784,7 @@ select.ai-config-input.ai-config-languages {
   margin: 0;
   padding: 0 6px;
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.3;
   color: var(--text);
   user-select: text;
@@ -6755,7 +6800,7 @@ select.ai-config-input.ai-config-languages {
 .asset-inline-rename-error {
   grid-column: 1;
   color: var(--danger);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 
 .asset-card.is-renaming {
@@ -6863,7 +6908,7 @@ select.ai-config-input.ai-config-languages {
   margin: 0;
   padding: 6px 10px;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
@@ -6882,7 +6927,7 @@ select.ai-config-input.ai-config-languages {
   background: transparent;
   color: var(--secondary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 540;
   text-align: left;
   transition:
@@ -6897,7 +6942,7 @@ select.ai-config-input.ai-config-languages {
 
 .app-settings-nav-item.app-settings-nav-plugin-settings-item {
   grid-template-columns: minmax(0, 1fr);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 500;
 }
 
@@ -6947,14 +6992,14 @@ select.ai-config-input.ai-config-languages {
 .app-settings-page-heading p {
   margin: 6px 0 0;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.45;
 }
 
 .app-settings-page-heading h3 {
   margin: 0;
   color: var(--text);
-  font-size: 19px;
+  font-size: calc(19px * var(--app-font-scale));
   font-weight: 590;
   letter-spacing: -0.025em;
   line-height: 1.2;
@@ -6988,14 +7033,14 @@ select.ai-config-input.ai-config-languages {
   margin: 0;
   padding-left: 1.2rem;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.55;
 }
 
 .app-settings-help-note {
   margin: 0;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.5;
 }
 
@@ -7018,7 +7063,7 @@ select.ai-config-input.ai-config-languages {
   margin: 0;
   padding: 5px 0 2px;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.5;
 }
 
@@ -7047,7 +7092,7 @@ select.ai-config-input.ai-config-languages {
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
   font-weight: 590;
   line-height: 1.4;
 }
@@ -7148,7 +7193,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: var(--ui-radius-pill);
   background: var(--pane);
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.45;
 }
 
@@ -7206,19 +7251,19 @@ select.ai-config-input.ai-config-languages {
   display: block;
   margin-top: 12px;
   color: var(--tertiary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .app-settings-row-copy strong {
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 590;
   line-height: 1.35;
 }
 
 .app-settings-row-copy > span {
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.45;
 }
 
@@ -7321,7 +7366,7 @@ select.ai-config-input.ai-config-languages {
 }
 
 .plugin-settings-package-name {
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
   font-weight: 600;
   color: var(--text);
   line-height: 1.35;
@@ -7335,7 +7380,7 @@ select.ai-config-input.ai-config-languages {
 .plugin-settings-package-description {
   margin: 0;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.45;
 }
 
@@ -7345,7 +7390,7 @@ select.ai-config-input.ai-config-languages {
   gap: 5px;
   margin: 0;
   color: var(--warning-fg);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.4;
 }
 
@@ -7512,7 +7557,7 @@ select.ai-config-input.ai-config-languages {
 }
 
 .plugin-install-choice-copy strong {
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
   font-weight: 620;
 }
 
@@ -7520,7 +7565,7 @@ select.ai-config-input.ai-config-languages {
 .plugin-install-github-intro p {
   margin: 0;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.4;
 }
 
@@ -7538,7 +7583,7 @@ select.ai-config-input.ai-config-languages {
   border: 0;
   background: transparent;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   cursor: pointer;
 }
 
@@ -7553,7 +7598,7 @@ select.ai-config-input.ai-config-languages {
 }
 
 .plugin-install-github-intro strong {
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
   font-weight: 620;
 }
 
@@ -7576,7 +7621,7 @@ select.ai-config-input.ai-config-languages {
   justify-content: space-between;
   gap: 12px;
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 560;
 }
 
@@ -7613,7 +7658,7 @@ select.ai-config-input.ai-config-languages {
 .plugin-settings-error {
   margin: 0;
   color: var(--danger);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.45;
 }
 
@@ -7645,7 +7690,7 @@ select.ai-config-input.ai-config-languages {
   justify-content: flex-start;
   padding-top: 2px;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.4;
 }
 
@@ -7741,7 +7786,7 @@ select.ai-config-input.ai-config-languages {
   gap: 6px;
   color: var(--text);
   cursor: pointer;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 @media (max-width: 680px) {
@@ -7786,7 +7831,7 @@ select.ai-config-input.ai-config-languages {
 .app-settings-hint {
   margin: 4px 0 0;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   line-height: 1.35;
 }
 
@@ -7810,7 +7855,7 @@ select.ai-config-input.ai-config-languages {
 .app-settings-slider-value {
   color: var(--secondary);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -7928,7 +7973,7 @@ select.ai-config-input.ai-config-languages {
 
 .app-settings-elevation-tick-label {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-variant-numeric: tabular-nums;
   line-height: 1;
   white-space: nowrap;
@@ -7939,7 +7984,7 @@ select.ai-config-input.ai-config-languages {
   justify-content: space-between;
   padding: 2px var(--elev-inset) 0;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   line-height: 1.2;
 }
 
@@ -7956,7 +8001,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: 6px;
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   cursor: pointer;
 }
 
@@ -7984,13 +8029,13 @@ select.ai-config-input.ai-config-languages {
   background: var(--pane);
   color: var(--text);
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .settings-error-message,
 .settings-success-message {
   margin: 12px 0 0;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.45;
 }
 
@@ -8008,7 +8053,7 @@ select.ai-config-input.ai-config-languages {
   color: var(--accent);
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 .text-button:disabled {
@@ -8137,6 +8182,10 @@ select.ai-config-input.ai-config-languages {
 .app-settings-background-image {
   display: grid;
   gap: var(--ui-space-2);
+}
+
+.app-settings-background-restore-default {
+  justify-self: start;
 }
 
 .app-settings-background-stage {
@@ -8309,7 +8358,7 @@ select.ai-config-input.ai-config-languages {
   gap: 2px;
   min-width: 0;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .dialog-close {
@@ -8333,7 +8382,7 @@ select.ai-config-input.ai-config-languages {
   display: block;
   margin-bottom: 7px;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 560;
 }
 
@@ -8349,7 +8398,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: 6px;
   background: var(--canvas);
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   transition:
     border-color 120ms ease,
     box-shadow 120ms ease;
@@ -8375,13 +8424,13 @@ select.ai-config-input.ai-config-languages {
 .field-help {
   margin: 7px 0 0;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 
 .dialog-body-copy {
   margin: 0;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.6;
 }
 
@@ -8389,7 +8438,7 @@ select.ai-config-input.ai-config-languages {
   margin: 0;
   padding-left: 1.25rem;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.6;
 }
 
@@ -8416,7 +8465,7 @@ select.ai-config-input.ai-config-languages {
 }
 
 .plugin-trust-prompt-list strong {
-  font-size: 0.95rem;
+  font-size: calc(0.95rem * var(--app-font-scale));
 }
 
 .dialog-checkbox-row {
@@ -8425,7 +8474,7 @@ select.ai-config-input.ai-config-languages {
   gap: 8px;
   margin-top: 12px;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.5;
   cursor: pointer;
 }
@@ -8441,19 +8490,19 @@ select.ai-config-input.ai-config-languages {
 .dialog-checkbox-row.field-help {
   margin-top: 12px;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 
 .dialog-alert-warning {
   margin: 8px 0 0;
   color: var(--warning);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.5;
 }
 
 .text-field-mono {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 .rename-file-field {
@@ -8471,7 +8520,7 @@ select.ai-config-input.ai-config-languages {
   flex: 0 0 auto;
   color: var(--tertiary);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .dialog-actions {
@@ -8521,7 +8570,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: 6px;
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   white-space: nowrap;
   cursor: pointer;
 }
@@ -8654,55 +8703,110 @@ select.ai-config-input.ai-config-languages {
 
 /* A verified update waits for explicit user approval; unlike transient
    workspace notices this prompt remains in the lower-left corner. */
-.app-update-ready-prompt {
+.app-update-ready-prompt,
+.app-update-completed-prompt {
   position: fixed;
   z-index: var(--ui-layer-notice);
   bottom: 20px;
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 40px));
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--divider) 80%, transparent);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--raised);
+  box-shadow: 0 4px 8px rgb(0 0 0 / 14%);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .app-update-ready-prompt,
+  .app-update-completed-prompt {
+    background: color-mix(in srgb, var(--raised) 88%, transparent);
+    backdrop-filter: blur(24px) saturate(120%);
+  }
+}
+
+.app-update-ready-prompt {
   left: 20px;
   display: flex;
-  align-items: center;
-  gap: 14px;
-  width: min(430px, calc(100vw - 40px));
-  padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--divider));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--raised) 94%, var(--accent-soft));
-  box-shadow: 0 14px 36px rgb(0 0 0 / 28%);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
 }
 
 .app-update-ready-copy {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 10px;
 }
 
-.app-update-ready-copy strong {
+.app-update-ready-copy strong,
+.app-update-completed-prompt strong {
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(14px * var(--app-font-scale));
+  font-weight: 600;
+  line-height: 1.5;
 }
 
-.app-update-ready-copy span {
+.app-update-ready-copy span,
+.app-update-completed-prompt > span {
   color: var(--secondary);
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: calc(12px * var(--app-font-scale));
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.app-update-ready-copy > span,
+.app-update-completed-prompt > span {
+  max-height: min(180px, 35dvh);
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.app-update-download-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-update-download-meta .app-update-download-percent {
+  color: var(--text);
 }
 
 .app-update-ready-action {
   flex: 0 0 auto;
+  align-self: flex-end;
+  min-height: 36px;
+  padding: 8px 16px;
+  border-radius: 6px;
   white-space: nowrap;
 }
 
 .app-update-ready-actions {
   display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.app-update-ready-prompt .primary-button {
+  background: var(--accent-dark);
+  color: #fff;
+}
+
+.app-update-ready-prompt .primary-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-dark) 90%, white);
 }
 
 .app-update-mini-progress {
   width: 100%;
-  height: 4px;
+  height: 5px;
   overflow: hidden;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-strong) 78%, transparent);
+  background: color-mix(in srgb, var(--secondary) 20%, transparent);
 }
 
 .app-update-mini-progress > span {
@@ -8713,47 +8817,54 @@ select.ai-config-input.ai-config-languages {
   transition: width 160ms ease-out;
 }
 
-.app-update-completed-prompt {
-  position: fixed;
-  z-index: 10020;
-  right: 24px;
-  bottom: 24px;
-  display: grid;
-  gap: 7px;
-  min-width: 280px;
-  max-width: 420px;
-  padding: 16px 38px 16px 16px;
-  border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--border));
-  border-radius: 12px;
-  background: var(--surface-overlay);
-  box-shadow: 0 16px 42px rgb(0 0 0 / 28%);
+.app-update-mini-progress[data-indeterminate] > span {
+  width: 35%;
+  animation: app-update-progress-sweep 1.5s ease-in-out infinite alternate;
 }
 
-.app-update-completed-prompt span {
-  color: var(--text-muted);
-  white-space: pre-wrap;
+@keyframes app-update-progress-sweep {
+  from { transform: translateX(0); }
+  to { transform: translateX(185%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-update-mini-progress > span,
+  .app-update-mini-progress[data-indeterminate] > span {
+    transition: none;
+    animation: none;
+  }
+}
+
+.app-update-completed-prompt {
+  right: 20px;
+  display: grid;
+  gap: 10px;
+  padding-right: 52px;
 }
 
 .app-update-completed-close {
   position: absolute;
-  top: 8px;
-  right: 10px;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
   border: 0;
-  color: var(--text-muted);
+  border-radius: 6px;
+  color: var(--secondary);
   background: transparent;
   cursor: pointer;
-  font-size: 18px;
+  font-size: calc(18px * var(--app-font-scale));
 }
 
-@media (max-width: 620px) {
-  .app-update-ready-prompt {
-    align-items: stretch;
-    flex-direction: column;
-  }
+.app-update-completed-close:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--secondary) 12%, transparent);
+}
 
-  .app-update-ready-action {
-    width: 100%;
-  }
+.app-update-ready-action:focus-visible,
+.app-update-completed-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .workspace-notice-item {
@@ -8808,7 +8919,7 @@ select.ai-config-input.ai-config-languages {
   height: 18px;
   margin: 0;
   border-radius: 0;
-  font-size: 14px;
+  font-size: calc(14px * var(--app-font-scale));
 }
 
 .workspace-notice-item.is-closing {
@@ -8888,7 +8999,7 @@ select.ai-config-input.ai-config-languages {
 
 .ignored-path-row span {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .library-settings-dialog {
@@ -8944,7 +9055,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: 50%;
   background: var(--raised);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 700;
   cursor: pointer;
 }
@@ -8961,7 +9072,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: 8px;
   background: var(--hover);
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.5;
   white-space: pre-line;
 }
@@ -8976,7 +9087,7 @@ select.ai-config-input.ai-config-languages {
   background: var(--canvas);
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.55;
 }
 
@@ -8988,7 +9099,7 @@ select.ai-config-input.ai-config-languages {
 
 .library-settings-gitignore-actions {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .about-dialog {
@@ -9049,7 +9160,7 @@ select.ai-config-input.ai-config-languages {
 .about-dialog-brand h2 {
   margin: 0;
   color: var(--text);
-  font-size: 24px;
+  font-size: calc(24px * var(--app-font-scale));
   font-weight: 700;
   letter-spacing: -0.03em;
 }
@@ -9057,7 +9168,7 @@ select.ai-config-input.ai-config-languages {
 .about-dialog-brand p {
   margin: 0;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .about-dialog-version-row {
@@ -9070,7 +9181,7 @@ select.ai-config-input.ai-config-languages {
 
 .about-dialog-version {
   color: var(--accent);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 600;
 }
 
@@ -9116,7 +9227,7 @@ select.ai-config-input.ai-config-languages {
   gap: 6px;
   margin-top: 2px;
   color: var(--accent);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 650;
 }
 
@@ -9129,7 +9240,7 @@ select.ai-config-input.ai-config-languages {
 .about-dialog-update-status {
   max-width: 270px;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   line-height: 1.45;
   text-align: center;
 }
@@ -9212,7 +9323,7 @@ select.ai-config-input.ai-config-languages {
 .about-dialog-copy p {
   margin: 0;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.65;
 }
 
@@ -9220,7 +9331,7 @@ select.ai-config-input.ai-config-languages {
   margin-top: 12px !important;
   color: var(--tertiary) !important;
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px !important;
+  font-size: calc(10px * var(--app-font-scale)) !important;
   letter-spacing: 0.01em;
 }
 
@@ -9258,12 +9369,12 @@ select.ai-config-input.ai-config-languages {
 
 .open-source-dialog-content li strong {
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .open-source-dialog-content li span {
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 /* Super-2wu4 / fvto: dismiss is a glyph, vertically centered with text. */
@@ -9316,7 +9427,7 @@ select.ai-config-input.ai-config-languages {
   background: color-mix(in srgb, var(--accent) 10%, var(--raised));
   box-shadow: 0 8px 28px rgb(0 0 0 / 18%);
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   white-space: nowrap;
 }
 
@@ -9360,7 +9471,7 @@ select.ai-config-input.ai-config-languages {
   border-color: var(--divider);
   background: var(--pane);
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 520;
   white-space: nowrap;
 }
@@ -9465,7 +9576,7 @@ select.ai-config-input.ai-config-languages {
   min-height: 1px;
   padding: 0;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   user-select: none;
 }
 .browse-load-more.is-loading {
@@ -9537,7 +9648,7 @@ select.ai-config-input.ai-config-languages {
 
 .justified-card-slot .asset-caption .asset-dimensions {
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-variant-numeric: tabular-nums;
   line-height: 14px;
 }
@@ -9766,7 +9877,7 @@ select.ai-config-input.ai-config-languages {
   width: 100%;
   overflow: hidden;
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 500;
   letter-spacing: 0.01em;
   text-overflow: ellipsis;
@@ -9776,7 +9887,7 @@ select.ai-config-input.ai-config-languages {
 .folder-card-count {
   color: var(--tertiary);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
 }
 
 .asset-loading-more {
@@ -9786,7 +9897,7 @@ select.ai-config-input.ai-config-languages {
   justify-content: center;
   gap: 8px;
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   break-inside: avoid;
 }
 .asset-size-control {
@@ -9794,7 +9905,7 @@ select.ai-config-input.ai-config-languages {
   align-items: center;
   gap: 6px;
   color: var(--tertiary);
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
   white-space: nowrap;
 }
 /* REQ-CANVAS-007: compact card-size slider — 3px track, 10px thumb, neutral
@@ -9866,11 +9977,11 @@ select.ai-config-input.ai-config-languages {
 }
 .external-drop-overlay strong {
   color: var(--text);
-  font-size: 16px;
+  font-size: calc(16px * var(--app-font-scale));
 }
 .external-drop-overlay span {
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   text-align: center;
 }
 
@@ -9984,7 +10095,7 @@ select.ai-config-input.ai-config-languages {
   padding: 0 8px;
   overflow: hidden;
   color: var(--text);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -9999,7 +10110,7 @@ select.ai-config-input.ai-config-languages {
   background: var(--accent);
   color: var(--text);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
   text-align: center;
 }
 
@@ -10016,7 +10127,7 @@ select.ai-config-input.ai-config-languages {
   background: var(--accent);
   color: var(--text);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-weight: 600;
   line-height: 1;
 }
@@ -10038,6 +10149,84 @@ select.ai-config-input.ai-config-languages {
      read as quiet negative space instead of a patterned placeholder. */
   background: var(--pane);
   color: var(--tertiary);
+}
+
+/* Files without a raster preview (ZIP, EXE, APK…) still deserve a useful
+   visual anchor. These are DOM/CSS tiles rather than generated thumbnails:
+   no asset IO, no thumbnail queue work, and the active theme supplies every
+   surface/contrast token automatically. */
+.file-type-thumbnail {
+  --file-type-accent: var(--accent);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--file-type-accent) 28%, var(--divider));
+  border-radius: inherit;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--file-type-accent) 16%, var(--pane)), var(--pane) 72%);
+  color: color-mix(in srgb, var(--file-type-accent) 72%, var(--text));
+}
+
+.file-type-thumbnail[data-tone="violet"] { --file-type-accent: var(--file-type-accent-violet); }
+.file-type-thumbnail[data-tone="amber"] { --file-type-accent: var(--file-type-accent-amber); }
+.file-type-thumbnail[data-tone="teal"] { --file-type-accent: var(--file-type-accent-teal); }
+.file-type-thumbnail[data-tone="rose"] { --file-type-accent: var(--file-type-accent-rose); }
+.file-type-thumbnail[data-tone="blue"] { --file-type-accent: var(--file-type-accent-blue); }
+
+/* The light theme keeps the tile paper-like instead of carrying dark-theme
+   contrast across unchanged. Custom themes still inherit their surface text. */
+[data-theme="light"] .file-type-thumbnail {
+  border-color: color-mix(in srgb, var(--file-type-accent) 34%, var(--divider));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--file-type-accent) 12%, white), color-mix(in srgb, var(--file-type-accent) 3%, var(--pane)) 72%);
+  color: color-mix(in srgb, var(--file-type-accent) 82%, var(--text));
+}
+
+.file-type-thumbnail::before {
+  position: absolute;
+  width: clamp(44px, 42%, 92px);
+  aspect-ratio: 0.76;
+  content: "";
+  border: 1px solid color-mix(in srgb, currentColor 46%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--file-type-accent) 9%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 28%, transparent);
+}
+
+.file-type-thumbnail-fold {
+  position: absolute;
+  width: clamp(13px, 12%, 25px);
+  height: clamp(13px, 12%, 25px);
+  margin: clamp(-40px, -30%, -16px) 0 0 clamp(31px, 29%, 56px);
+  border-top: 1px solid color-mix(in srgb, currentColor 46%, transparent);
+  border-right: 1px solid color-mix(in srgb, currentColor 46%, transparent);
+  border-radius: 0 7px 0 0;
+  background: color-mix(in srgb, var(--file-type-accent) 20%, var(--pane));
+  clip-path: polygon(0 0, 100% 100%, 0 100%);
+}
+
+.file-type-thumbnail-label {
+  z-index: 1;
+  max-width: 74%;
+  overflow: hidden;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--pane) 54%, transparent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: clamp(
+    calc(11px * var(--app-font-scale)),
+    calc(10% * var(--app-font-scale)),
+    calc(20px * var(--app-font-scale))
+  );
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .asset-thumbnail {
@@ -10275,7 +10464,7 @@ select.ai-config-input.ai-config-languages {
   backdrop-filter: blur(6px);
   color: var(--secondary);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
   letter-spacing: 0.06em;
   line-height: 1.45;
   pointer-events: none;
@@ -10292,7 +10481,7 @@ select.ai-config-input.ai-config-languages {
   backdrop-filter: blur(6px);
   color: var(--text);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
   line-height: 1.45;
   pointer-events: none;
 }
@@ -10308,7 +10497,7 @@ select.ai-config-input.ai-config-languages {
   backdrop-filter: blur(6px);
   color: var(--text);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
   letter-spacing: 0.04em;
   line-height: 1.45;
   pointer-events: none;
@@ -10326,7 +10515,7 @@ select.ai-config-input.ai-config-languages {
   background: rgb(15 17 18 / 62%);
   backdrop-filter: blur(6px);
   color: var(--secondary);
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
   line-height: 1.45;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -10362,7 +10551,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: 5px;
   background: var(--warning-muted);
   color: var(--warning-fg);
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
 }
 .asset-caption {
   position: relative;
@@ -10401,7 +10590,7 @@ select.ai-config-input.ai-config-languages {
 .asset-caption strong {
   overflow: hidden;
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   font-weight: 500;
   letter-spacing: 0.01em;
   text-overflow: ellipsis;
@@ -10433,7 +10622,7 @@ select.ai-config-input.ai-config-languages {
 .asset-caption span {
   color: var(--tertiary);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
 }
 .asset-caption strong.asset-caption-filename span {
   color: inherit;
@@ -10469,7 +10658,7 @@ select.ai-config-input.ai-config-languages {
   padding: 12px 0 4px;
   color: var(--tertiary);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 /* Palette as an even strip: segments share width equally and keep the
    extraction order (importance left → right). Clicking a segment copies its
@@ -10512,14 +10701,22 @@ select.ai-config-input.ai-config-languages {
 }
 .empty-library h1 {
   margin: 8px 0 7px;
-  font-size: 23px;
+  font-size: calc(23px * var(--app-font-scale));
   font-weight: 570;
+}
+.library-content-loading-progress {
+  width: min(240px, calc(100% - 48px));
+  margin-top: 8px;
+}
+.library-content-loading-progress .ui-progress__track {
+  height: 4px;
+  border-radius: 999px;
 }
 .empty-library p {
   max-width: 410px;
   margin: 0;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   line-height: 1.65;
 }
 .empty-orbit {
@@ -10553,7 +10750,7 @@ select.ai-config-input.ai-config-languages {
   background: var(--raised);
   box-shadow: var(--shadow-toast);
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   /* REQ-SHELL-010: dismissal adds .is-closing and unmounts only after this
      exit transition ends (see toast-notifications.ts). */
   transition:
@@ -10816,7 +11013,7 @@ select.ai-config-input.ai-config-languages {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--app-font-scale));
   font-weight: 600;
   line-height: 1.7;
   padding-block: 0.1em 0.2em;
@@ -10934,13 +11131,13 @@ select.ai-config-input.ai-config-languages {
   padding: 10px 12px;
   border-top: 1px solid var(--divider-soft);
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.35;
 }
 
 .inspector-tech-part {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   color: var(--tertiary);
 }
 
@@ -11020,7 +11217,7 @@ select.ai-config-input.ai-config-languages {
   row-gap: 2px;
   color: var(--tertiary);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   line-height: 1.5;
 }
 
@@ -11040,7 +11237,7 @@ select.ai-config-input.ai-config-languages {
   gap: 7px;
   margin-top: 10px;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 .inspector-status-label {
@@ -11050,13 +11247,13 @@ select.ai-config-input.ai-config-languages {
 .inspector-recovery-probe {
   min-width: 0;
   color: var(--secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 
 .inspector-status-action {
   margin-left: auto;
   padding: 3px 7px;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   white-space: nowrap;
 }
 
@@ -11112,7 +11309,7 @@ select.ai-config-input.ai-config-languages {
 .inspector-mixed-value,
 .inspector-mixed-field {
   color: var(--muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   font-style: italic;
   user-select: none;
 }
@@ -11169,7 +11366,7 @@ select.ai-config-input.ai-config-languages {
   background: transparent;
   color: var(--tertiary);
   cursor: pointer;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   transition: color 120ms ease;
 }
 
@@ -11218,7 +11415,7 @@ select.ai-config-input.ai-config-languages {
 /* Inspector 内的小标签统一使用次要色；accent 留给真正可点的控件。 */
 .inspector-content .micro-label {
   color: var(--secondary);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--app-font-scale));
   letter-spacing: 0.1em;
 }
 
@@ -11232,7 +11429,7 @@ select.ai-config-input.ai-config-languages {
   padding-bottom: 6px;
   overflow-y: auto;
   resize: none;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--app-font-scale));
   line-height: 1.35;
 }
 
@@ -11276,13 +11473,13 @@ select.ai-config-input.ai-config-languages {
 
 .inspector-input {
   height: 28px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--app-font-scale));
 }
 
 .inspector-palette-input {
   margin-top: 7px;
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--app-font-scale));
 }
 
 .inspector-version-conflict {
@@ -11295,7 +11492,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: 3px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
   font-weight: 700;
   line-height: 14px;
   letter-spacing: 0.02em;
@@ -11323,7 +11520,7 @@ select.ai-config-input.ai-config-languages {
   color: var(--accent);
   cursor: pointer;
   font: inherit;
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 14px;
@@ -11345,7 +11542,7 @@ select.ai-config-input.ai-config-languages {
   border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--divider));
   border-radius: 6px;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 .inspector-ai-reanalysis-review p { margin: 5px 0; white-space: pre-wrap; }
@@ -11365,7 +11562,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: 8px;
   background: color-mix(in srgb, var(--accent) 8%, var(--pane));
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 .inspector-textarea.is-ai-sourced {
@@ -11384,7 +11581,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: 6px;
   background: var(--pane);
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.6;
 }
 
@@ -11401,7 +11598,7 @@ select.ai-config-input.ai-config-languages {
   gap: 4px;
   margin: 0 0 6px;
   color: var(--secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   font-weight: 650;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -11426,7 +11623,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: 999px;
   background: var(--pane);
   color: var(--secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   line-height: 1.5;
   white-space: nowrap;
   cursor: default;
@@ -11463,7 +11660,7 @@ select.ai-config-input.ai-config-languages {
   background: transparent;
   color: var(--tertiary);
   cursor: pointer;
-  font-size: 8px;
+  font-size: calc(8px * var(--app-font-scale));
   line-height: 1;
   transition: background 120ms ease, color 120ms ease;
 }
@@ -11476,7 +11673,7 @@ select.ai-config-input.ai-config-languages {
 /* Tag chip placeholder */
 .tag-chip-placeholder {
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   font-style: italic;
 }
 
@@ -11513,7 +11710,7 @@ select.ai-config-input.ai-config-languages {
   border: 0;
   background: transparent;
   color: var(--text);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   outline: none;
   box-sizing: border-box;
 }
@@ -11524,7 +11721,7 @@ select.ai-config-input.ai-config-languages {
 
 .tag-add-input::placeholder {
   color: var(--tertiary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 
 /* Tag suggestions dropdown */
@@ -11554,7 +11751,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: 5px;
   background: transparent;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   cursor: pointer;
   text-align: left;
 }
@@ -11574,7 +11771,7 @@ select.ai-config-input.ai-config-languages {
 .tag-suggestion-count {
   color: var(--tertiary);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   flex-shrink: 0;
   margin-left: 8px;
 }
@@ -11614,7 +11811,7 @@ select.ai-config-input.ai-config-languages {
 .conflict-summary-line {
   margin: 0 0 14px;
   color: var(--secondary);
-  font-size: 13px;
+  font-size: calc(13px * var(--app-font-scale));
   line-height: 1.45;
 }
 .conflict-remember-row {
@@ -11623,7 +11820,7 @@ select.ai-config-input.ai-config-languages {
   gap: 8px;
   margin: 10px 0 4px;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.4;
 }
 .conflict-remember-row input {
@@ -11633,7 +11830,7 @@ select.ai-config-input.ai-config-languages {
   margin: 8px 0 0;
   overflow: hidden;
   color: var(--tertiary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -11687,7 +11884,7 @@ select.ai-config-input.ai-config-languages {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.35;
 }
 
@@ -11723,12 +11920,12 @@ select.ai-config-input.ai-config-languages {
 .conflict-summary strong {
   color: var(--text);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 17px;
+  font-size: calc(17px * var(--app-font-scale));
   font-weight: 500;
 }
 .conflict-summary span {
   color: var(--tertiary);
-  font-size: 9px;
+  font-size: calc(9px * var(--app-font-scale));
 }
 .decision-field {
   display: grid;
@@ -11737,7 +11934,7 @@ select.ai-config-input.ai-config-languages {
   gap: 10px;
   margin: 9px 0;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 .decision-field select {
   /* Super-4ojz / Super-p1rm: shell rhythm + de-native chrome (no OS
@@ -11755,7 +11952,7 @@ select.ai-config-input.ai-config-languages {
   background-position: right 8px center;
   background-size: 12px 12px;
   color: var(--text);
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
   cursor: pointer;
   transition:
     border-color 120ms ease,
@@ -11790,7 +11987,7 @@ select.ai-config-input.ai-config-languages {
   gap: 7px;
   min-width: 0;
   color: var(--secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 
 @media (max-width: 1020px) {
@@ -11893,7 +12090,7 @@ select.ai-config-input.ai-config-languages {
 .nav-inline-edit .text-field {
   height: 23px;
   padding: 0 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 /* 类型化失败（非法名/同名冲突）内联呈现在编辑行下方，行保持打开供修正。 */
@@ -11902,7 +12099,7 @@ select.ai-config-input.ai-config-languages {
   margin: 0 0 2px;
   padding-left: 24px;
   color: var(--warning);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
   line-height: 1.5;
 }
 
@@ -11926,7 +12123,7 @@ select.ai-config-input.ai-config-languages {
     .filter-tag-options button,
     .filter-tag-count
   ) {
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 :root[data-platform="windows"] :where(
@@ -11952,7 +12149,7 @@ select.ai-config-input.ai-config-languages {
 }
 
 :root[data-platform="windows"] .metadata-list div {
-  font-size: 12px;
+  font-size: calc(12px * var(--app-font-scale));
 }
 
 :root[data-platform="windows"] .metadata-list dt {
@@ -12055,7 +12252,7 @@ select.ai-config-input.ai-config-languages {
 .plugin-job-progress-message {
   margin-top: 4px;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
   line-height: 1.4;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -12339,7 +12536,7 @@ select.ai-config-input.ai-config-languages {
 
 .theme-preview-asset-caption span {
   color: var(--ui-content-secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 
 .theme-preview-inspector-panel {
@@ -12376,7 +12573,7 @@ select.ai-config-input.ai-config-languages {
 
 .theme-preview-inspector-heading span {
   color: var(--ui-content-secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 
 .theme-preview-inspector-selected {
@@ -12384,7 +12581,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: var(--ui-radius-control);
   background: var(--ui-surface-selected);
   color: var(--ui-content-primary);
-  font-size: 11px;
+  font-size: calc(11px * var(--app-font-scale));
 }
 
 .theme-preview-inspector-fields {
@@ -12398,7 +12595,7 @@ select.ai-config-input.ai-config-languages {
   align-items: baseline;
   gap: 6px;
   min-width: 0;
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 
 .theme-preview-inspector-field-label {
@@ -12419,7 +12616,7 @@ select.ai-config-input.ai-config-languages {
   border-radius: var(--ui-radius-pill);
   background: var(--ui-surface-pane);
   color: var(--ui-content-secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--app-font-scale));
 }
 
 .theme-preview-inspector-actions {

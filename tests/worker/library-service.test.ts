@@ -185,8 +185,13 @@ function removeWriteCoordinationSchema(database: TestDatabaseConnection): void {
 
 function downgradeLibraryToV1(libraryPath: string, createMigrationBlocker = false): void {
   const database = new TestDatabase(path.join(libraryPath, '.super', 'library.db'));
-  removeWriteCoordinationSchema(database);
-  database.exec(`
+  // Newer schemas add tables that reference the historical jobs table. This
+  // fixture intentionally dismantles migrations in reverse, so disable FK
+  // enforcement while constructing the old v1 shape.
+  database.pragma('foreign_keys = OFF');
+  try {
+    removeWriteCoordinationSchema(database);
+    database.exec(`
     -- Reverse v6: drop FTS5 tables and triggers.
     DROP TABLE IF EXISTS asset_search;
     DROP TABLE IF EXISTS asset_search_index;
@@ -220,7 +225,10 @@ function downgradeLibraryToV1(libraryPath: string, createMigrationBlocker = fals
     PRAGMA user_version = 1;
     ${createMigrationBlocker ? 'CREATE TABLE managed_folders (blocker TEXT);' : ''}
   `);
-  database.close();
+  } finally {
+    database.pragma('foreign_keys = ON');
+    database.close();
+  }
 }
 
 function downgradeLibraryToV2(libraryPath: string): void {

@@ -11,7 +11,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createPackage } from '@electron/asar';
 
 import { afterEach, describe, expect, it } from 'vitest';
 import forgeConfig from '../../forge.config';
@@ -201,10 +200,10 @@ describe.skipIf(process.platform === 'win32')('media binary release gate', () =>
         'Contents',
         'Resources',
       );
-      const asarSource = path.join(packageRoot, 'asar-source');
-      writeFixtureFile(path.join(asarSource, 'package.json'), '{"name":"fixture"}\n');
+      const appDirectory = path.join(packagedResources, 'app');
+      writeFixtureFile(path.join(appDirectory, 'package.json'), '{"name":"fixture"}\n');
       writeFixtureFile(
-        path.join(asarSource, '.vite', 'build', 'main.js'),
+        path.join(appDirectory, '.vite', 'build', 'main.js'),
         'const AUTOMATION_API_VERSION = 1;\n',
       );
       for (const utility of [
@@ -212,16 +211,15 @@ describe.skipIf(process.platform === 'win32')('media binary release gate', () =>
         'plugin_trusted_host.js',
         'script_runtime_utility.js',
       ]) {
-        writeFixtureFile(path.join(asarSource, utility), '// packaged utility fixture\n');
+        writeFixtureFile(path.join(appDirectory, '.vite', 'build', utility), '// packaged utility fixture\n');
       }
-      await createPackage(asarSource, path.join(packagedResources, 'app.asar'));
       writeFixtureFile(path.join(
         packagedResources,
-        'app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node',
+        'app/node_modules/better-sqlite3/build/Release/better_sqlite3.node',
       ));
       writeFixtureFile(path.join(
         packagedResources,
-        'app.asar.unpacked/node_modules/trash/lib/macos-trash',
+        'app/node_modules/trash/lib/macos-trash',
       ));
       cpSync(root, path.join(packagedResources, 'resources'), { recursive: true });
 

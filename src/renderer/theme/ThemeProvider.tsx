@@ -43,6 +43,12 @@ import {
   type ThemePreference,
   type ThemePreferencesStorage,
 } from './theme-preferences';
+import {
+  applyAppFontSizeLevel,
+  loadAppFontSizePreferences,
+  saveAppFontSizeLevel,
+  type AppFontSizeLevel,
+} from './font-size-preferences';
 
 type ThemeContextValue = {
   readonly preference: ThemePreference;
@@ -50,12 +56,14 @@ type ThemeContextValue = {
   readonly customTheme: CustomTheme;
   readonly themeProfile: ThemeProfile;
   readonly backgroundPreferences: BackgroundPreferences;
+  readonly fontSizeLevel: AppFontSizeLevel;
   readonly themeRevision: number;
   readonly setTheme: (theme: ThemePreference) => void;
   readonly setCustomTheme: (theme: CustomTheme) => void;
   readonly resetCustomTheme: () => void;
   readonly setThemeProfile: (profile: ThemeProfileId) => void;
   readonly setBackgroundPreferences: (preferences: BackgroundPreferences) => boolean;
+  readonly setFontSizeLevel: (level: AppFontSizeLevel) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -81,6 +89,9 @@ export function ThemeProvider({
   );
   const [themeProfile, setThemeProfileState] = useState<ThemeProfile>(() => loadThemeProfile(storage));
   const [backgroundPreferences, setBackgroundPreferencesState] = useState<BackgroundPreferences>(() => loadBackgroundPreferences(storage));
+  const [fontSizeLevel, setFontSizeLevelState] = useState<AppFontSizeLevel>(
+    () => loadAppFontSizePreferences(storage).level,
+  );
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() =>
     readSystemTheme(),
   );
@@ -116,6 +127,10 @@ export function ThemeProvider({
   useEffect(() => {
     applyBackgroundPreferences(backgroundPreferences);
   }, [backgroundPreferences]);
+
+  useEffect(() => {
+    applyAppFontSizeLevel(fontSizeLevel);
+  }, [fontSizeLevel]);
 
   useEffect(() => {
     const signature = `${resolved}:${JSON.stringify(customTheme)}:${JSON.stringify(themeProfile)}:${JSON.stringify(backgroundPreferences)}`;
@@ -165,6 +180,11 @@ export function ThemeProvider({
     return saved;
   }, [storage]);
 
+  const setFontSizeLevel = useCallback((next: AppFontSizeLevel) => {
+    saveAppFontSizeLevel(next, storage);
+    setFontSizeLevelState(next);
+  }, [storage]);
+
   const value = useMemo(
     () => ({
       preference,
@@ -172,14 +192,16 @@ export function ThemeProvider({
       customTheme,
       themeProfile,
       backgroundPreferences,
+      fontSizeLevel,
       themeRevision,
       setTheme,
       setCustomTheme,
       resetCustomTheme,
       setThemeProfile,
       setBackgroundPreferences,
+      setFontSizeLevel,
     }),
-    [backgroundPreferences, customTheme, preference, resetCustomTheme, resolved, setBackgroundPreferences, setCustomTheme, setTheme, setThemeProfile, themeProfile, themeRevision],
+    [backgroundPreferences, customTheme, fontSizeLevel, preference, resetCustomTheme, resolved, setBackgroundPreferences, setCustomTheme, setFontSizeLevel, setTheme, setThemeProfile, themeProfile, themeRevision],
   );
 
   return (

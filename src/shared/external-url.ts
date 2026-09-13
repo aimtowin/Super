@@ -135,6 +135,8 @@ export interface SuperShellApi {
   onWindowMaximizedChanged(
     listener: (maximized: boolean) => void,
   ): () => void;
+  /** The user has started moving the native window from a draggable title-bar area. */
+  onWindowMoveStarted(listener: () => void): () => void;
   /** macOS 触控板三指轻扫（Electron webContents swipe）。 */
   onSwipe(listener: (direction: ShellSwipeDirection) => void): () => void;
   /** BrowserWindow 聚焦态（Super-oy07）；macOS 原生红绿灯失焦变灰由系统负责。 */

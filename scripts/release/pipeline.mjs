@@ -164,6 +164,10 @@ function phaseMake() {
   // macOS 不产安装器（dmg 已由 make 产出）。
   if (process.platform === 'win32') {
     runReleaseScript('make:inno');
+    // Deltas target only prior baselines. Capture this baseline afterward so
+    // it becomes a source candidate for the next release.
+    runReleaseScript('release:deltas');
+    runReleaseScript('release:baseline');
   }
 }
 

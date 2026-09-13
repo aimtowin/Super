@@ -52,7 +52,10 @@ function formatRangeDetail(range: { min: string; max: string }): string {
  */
 export function buildActiveFilterChips(
   snapshot: DiscoveryFilterSnapshot,
-  options?: { textFormatLabel?: string },
+  options?: {
+    textFormatLabel?: string;
+    colorLabel?: (colorId: string) => string;
+  },
 ): ActiveFilterChip[] {
   const chips: ActiveFilterChip[] = [];
 
@@ -64,7 +67,9 @@ export function buildActiveFilterChips(
     chips.push({
       id: "color",
       labelKey: "filter.dimColor",
-      detail: `${snapshot.excludeColorFilter ? "−" : ""}${colors.join(", ")}`,
+      detail: `${snapshot.excludeColorFilter ? "−" : ""}${colors
+        .map((color) => options?.colorLabel?.(color) ?? color)
+        .join(", ")}`,
     });
   }
 

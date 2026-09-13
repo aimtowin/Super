@@ -4,11 +4,31 @@ import path from 'node:path';
 import process from 'node:process';
 import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerZIP } from '@electron-forge/maker-zip';
-import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-natives';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 
 const projectRoot = import.meta.dirname;
 const appIconBase = path.join(projectRoot, 'assets', 'icons', 'app');
+
+/**
+ * Files copied by Electron Packager that are useful while developing native
+ * dependencies, but are never opened by the shipped application. Keeping
+ * this list deliberately narrow protects runtime assets such as .node,
+ * .wasm, fonts, and the media binaries in `resources/`.
+ */
+function isPackagedDebugOrBuildArtifact(file: string): boolean {
+  if (file.startsWith('/node_modules/.vite/')) return true;
+  if (file.startsWith('/node_modules/@types/')) return true;
+
+  // better-sqlite3 loads only build/Release/better_sqlite3.node at runtime.
+  // Its copied C/C++ sources and linker intermediates otherwise account for
+  // dozens of megabytes in every full update archive.
+  if (file.startsWith('/node_modules/better-sqlite3/bin/')) return true;
+  if (file.startsWith('/node_modules/better-sqlite3/deps/')) return true;
+  if (file.startsWith('/node_modules/better-sqlite3/build/deps/')) return true;
+  if (file.startsWith('/node_modules/better-sqlite3/build/Release/obj/')) return true;
+
+  return /\.(?:map|pdb|ipdb|iobj|lib|exp|obj)$/i.test(file);
+}
 
 function nativeMediaPlatform(platform: string, arch: string): string {
   const expectedHost = `${process.platform}-${process.arch}`;
@@ -78,15 +98,11 @@ const config: ForgeConfig = {
   },
   packagerConfig: {
     icon: appIconBase,
-    asar: {
-      unpack:
-        '**/node_modules/trash/lib/{macos-trash,windows-trash.exe},' +
-        '**/node_modules/libarchive-wasm/dist/libarchive.wasm,' +
-        // Sharp 0.35 ships prebuilt natives under @img/* (e.g.
-        // @img/sharp-darwin-arm64/lib/*.node); native modules cannot load
-        // from inside app.asar, so they must stay unpacked.
-        '**/node_modules/@img/**',
-    },
+    // File-level delta installers compare package paths by hash. A monolithic
+    // ASAR turns a one-line renderer change into a replacement of the entire
+    // archive, so keep the production app as individually verifiable files.
+    // Native modules still load normally from `resources/app/node_modules`.
+    asar: false,
     // Super 初版不购买签名证书（MarkText/VSCodium 先例：未签名发布 +
     // 文档引导）。但 Apple Silicon 上完全不签名会报"已损坏"无法启动，所以
     // 用 ad-hoc 签名（identity '-'）作为技术底线。拿到 Developer ID 后把
@@ -117,6 +133,7 @@ const config: ForgeConfig = {
     // module plugin can unpack better-sqlite3.
     ignore: (file) => {
       if (!file) return false;
+      if (isPackagedDebugOrBuildArtifact(file)) return true;
       return !file.startsWith('/.vite') && !file.startsWith('/node_modules');
     },
   },
@@ -130,7 +147,6 @@ const config: ForgeConfig = {
     new MakerDMG({}),
   ],
   plugins: [
-    new AutoUnpackNativesPlugin({}),
     new VitePlugin({
       build: [
         {

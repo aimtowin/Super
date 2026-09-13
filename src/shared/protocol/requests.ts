@@ -745,6 +745,12 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     idsOnly: z.boolean().optional(),
     /** Super-sa65: compact full-scope real-asset geometry index. */
     layoutOnly: z.boolean().optional(),
+    /**
+     * Return the first visible page before calculating an exact total.  The
+     * response then reports a lower bound and a later layout request resolves
+     * the precise count without delaying first paint.
+     */
+    deferTotal: z.boolean().optional(),
     limit: z.number().int().positive().max(500).optional(),
     offset: z.number().int().nonnegative().optional(),
     showIgnored: z.boolean().optional(),
@@ -1851,6 +1857,7 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
     scopeMode: z.boolean().optional(),
     idsOnly: z.boolean().optional(),
     layoutOnly: z.boolean().optional(),
+    deferTotal: z.boolean().optional(),
     limit: z.number().int().positive().max(500).optional(),
     offset: z.number().int().nonnegative().optional(),
     showIgnored: z.boolean().optional(),

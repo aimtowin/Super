@@ -110,6 +110,51 @@ describe('local extracted palette artifact', () => {
     service.closeAll();
   });
 
+  it('indexes every representative colour so a non-dominant palette colour filters', async () => {
+    const root = temporaryRoot();
+    const paletteSharpFn = () => ({
+      rotate() { return this; },
+      toColourspace() { return this; },
+      resize() { return this; },
+      ensureAlpha() { return this; },
+      raw() { return this; },
+      async toBuffer() {
+        return {
+          data: new Uint8Array([
+            0, 0, 255, 255,
+            0, 0, 255, 255,
+            0, 0, 255, 255,
+            255, 128, 0, 255,
+          ]),
+          info: { channels: 4 },
+        };
+      },
+    });
+    const service = newService({ paletteSharpFn });
+    const library = service.createLibrary({ displayName: 'Palette filter index', selectedParentPath: root });
+    const source = path.join(root, 'two-colours.png');
+    writeFileSync(source, VALID_1X1_PNG);
+    const assetId = importAsset(service, library.libraryId, source);
+    await service.generateThumbnail({ libraryId: library.libraryId, assetId });
+    service.enqueueThumbnailJobs(library.libraryId);
+    await service.processThumbnailQueue(library.libraryId, { maxJobs: 1 });
+
+    const results = service.searchAssets({
+      libraryId: library.libraryId,
+      filters: [{ field: 'color', values: ['orange'], exclude: false }],
+    });
+    expect(results.items.map((item) => item.assetId)).toEqual([assetId]);
+
+    const db = new TestDatabase(path.join(library.libraryPath, '.super', 'library.db'));
+    expect(db.prepare('SELECT hex, ratio FROM palette_color_index ORDER BY color_position').all())
+      .toEqual([
+        { hex: '#0000FF', ratio: 0.75 },
+        { hex: '#FF8000', ratio: 0.25 },
+      ]);
+    db.close();
+    service.closeAll();
+  });
+
   it('aggregates only already-extracted palettes for recently added assets', async () => {
     const root = temporaryRoot();
     const service = newService();

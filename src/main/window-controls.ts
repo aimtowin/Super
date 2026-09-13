@@ -3,6 +3,7 @@ import { BrowserWindow, ipcMain, type WebContents } from "electron";
 import {
   WINDOW_CONTROL_CHANNEL,
   WINDOW_MAXIMIZED_CHANNEL,
+  WINDOW_MOVE_STARTED_CHANNEL,
 } from "../shared/protocol/channels";
 import {
   parseWindowControlRequest,
@@ -110,4 +111,16 @@ export function bindWindowMaximizedEvents(window: BrowserWindow): void {
   };
   window.on("maximize", push);
   window.on("unmaximize", push);
+}
+
+/**
+ * Native Chromium title-bar drag regions do not deliver pointer events to the
+ * renderer. Forward the beginning of a real window move so renderer state can
+ * still react to a drag without turning the region back into a no-drag area.
+ */
+export function bindWindowMoveStartedEvents(window: BrowserWindow): void {
+  window.on("will-move", () => {
+    if (window.isDestroyed() || window.webContents.isDestroyed()) return;
+    window.webContents.send(WINDOW_MOVE_STARTED_CHANNEL);
+  });
 }

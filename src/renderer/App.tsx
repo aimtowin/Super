@@ -13,6 +13,7 @@ import { createPortal, flushSync } from "react-dom";
 
 import { Icon, type IconName } from "./Icons";
 import { iconActionAttrs } from "./icon-action-attrs";
+import { Progress } from "./ui/primitives";
 import { EditTextContextMenuHost } from "./edit-text-context-menu";
 import { HoverTipHost } from "./hover-tip";
 import {
@@ -50,6 +51,7 @@ import {
   isBenignThumbnailErrorCode,
 } from "../shared/thumbnail-support";
 import { AssetCardMedia } from "./AssetCardMedia";
+import { FileTypeThumbnail } from "./FileTypeThumbnail";
 import { useAssetCardHoverPreview } from "./use-asset-card-hover-preview";
 import { resolveSearchSnippetCaption } from "./search-snippet-caption";
 import { parseSearchExpression, splitSearchHighlights } from "./search-expression";
@@ -81,6 +83,7 @@ import {
   ScopeBreadcrumbs,
   buildScopeBreadcrumbSegments,
 } from "./ScopeBreadcrumbs";
+import { shouldClearFolderScopeFromToolbarDoubleClick } from "./toolbar-root-scope";
 import {
   buildLinkedFolderBreadcrumbTrail,
   buildManagedFolderBreadcrumbTrail,
@@ -284,7 +287,7 @@ import { useInlineSmartCollectionEdit } from "./use-inline-smart-collection-edit
 import { usePanelResize } from "./use-panel-resize";
 import { useToastNotifications } from "./useToastNotifications";
 import {
-  AI_CONNECTION_HEARTBEAT_MS,
+  aiConnectionHeartbeatDelay,
   aiAnalyzeConnectionReady,
   aiAnalyzeShowsDisconnectGlyph,
   shouldRunAiConnectionHeartbeat,
@@ -647,6 +650,11 @@ function AppInner() {
     ids: Map<string, string>;
   }>({ libraryId: "", ids: new Map() });
   const [assetScope, setAssetScope] = useState<AssetScope>("all");
+  // The highlighted sidebar folder is normally the browse scope. A deliberate
+  // toolbar double-click may instead reset only the create target to root while
+  // keeping the current folder's canvas and preview entirely intact.
+  const [sidebarFolderScope, setSidebarFolderScope] =
+    useState<AssetScope>("all");
   // REQ-FOLDER-001/002/003/010: direct child folder cards shown above assets
   // when the current browse parent is a managed folder or the managed root.
   const [folderBrowseEntries, setFolderBrowseEntries] = useState<FolderBrowseEntry[]>([]);
@@ -1161,6 +1169,9 @@ function AppInner() {
   const [preparedAppUpdate, setPreparedAppUpdate] = useState<{ version: string; releaseNotes: string } | null>(null);
   const [completedAppUpdate, setCompletedAppUpdate] = useState<{ version: string; releaseNotes: string } | null>(null);
   const [appUpdateRestarting, setAppUpdateRestarting] = useState(false);
+  const appUpdatePercent = appUpdateProgress?.totalBytes && appUpdateProgress.totalBytes > 0
+    ? Math.max(0, Math.min(100, Math.round(appUpdateProgress.downloadedBytes / appUpdateProgress.totalBytes * 100)))
+    : undefined;
   // Retained solely for the shared Escape-stack contract. The proprietary
   // Super UI no longer mounts an open-source licenses dialog.
   const [openSourceLicensesOpen, setOpenSourceLicensesOpen] = useState(false);
@@ -1322,6 +1333,7 @@ function AppInner() {
   const aiAutoConnectAttemptedRef = useRef(false);
   /** Fingerprint of credentials last proven by a successful probe. */
   const aiVerifiedFingerprintRef = useRef<string | null>(null);
+  const aiHeartbeatFailureCountRef = useRef(0);
   const aiConfigPersistDraftRef = useRef({
     apiFormat: "dashscope_native" as AiApiFormat,
     model: "qwen3-vl-plus",
@@ -1812,6 +1824,10 @@ function AppInner() {
 
   const selectedFolderId =
     assetScope === "all" || assetScope === "root" ? undefined : assetScope;
+  const selectedSidebarFolderId =
+    sidebarFolderScope === "all" || sidebarFolderScope === "root"
+      ? undefined
+      : sidebarFolderScope;
   const selectedFolder = folders.find(
     (folder) => folder.folderId === selectedFolderId,
   );
@@ -3078,11 +3094,9 @@ function AppInner() {
       try {
       const includeLibraryCounts =
         refreshSidebar || trashMode || scope === "all" || scope === "root";
-      // Post the primary browse request before sidebar/count hydration. The
-      // Worker is a single synchronous SQLite owner; constructing the sidebar
-      // Promise first used to put folders/tags/collections ahead of the page
-      // the user is actually waiting to see (several hundred ms on 20k
-      // libraries, and materially worse on network-backed libraries).
+      // The Worker is a single synchronous SQLite owner. Keep its only
+      // foreground request to the page the user can see; sidebar/count work
+      // is deliberately posted after that page has painted below.
       const primaryAssetPromise = api.searchAssets({
         ...libId,
         query: opts?.discovery?.search ?? null,
@@ -3092,97 +3106,19 @@ function AppInner() {
         // Super-87pd: first window only; scrollbar jumps fetch other offsets.
         limit: BROWSE_PAGE_SIZE,
         offset: 0,
+        // Folder pages should become interactive from their first card batch;
+        // exact totals are supplied by the already-scheduled layout request.
+        deferTotal: !trashMode && browseScope?.kind === "folder",
         showIgnored: includeIgnored,
       });
-      const allAssetsPromise = includeLibraryCounts && (trashMode || scope !== "all")
-        ? api.searchAssets({ ...libId, query: null, limit: 1, offset: 0, showIgnored: includeIgnored })
-        : Promise.resolve(undefined);
-      const rootCountPromise = includeLibraryCounts && (trashMode || scope !== "root")
-        ? api.searchAssets({
-            ...libId,
-            query: null,
-            limit: 1,
-            offset: 0,
-            scope: { kind: "folder", folderId: null, recursive: false },
-            showIgnored: includeIgnored,
-          })
-        : Promise.resolve(undefined);
-      const trashCountPromise = includeLibraryCounts
-        ? api.searchAssets({
-            ...libId,
-            query: null,
-            limit: 1,
-            offset: 0,
-            scope: { kind: "trash" },
-            showIgnored: includeIgnored,
-          })
-        : Promise.resolve(undefined);
-      // Sidebar hydration is intentionally started after the primary browse
-      // and its count requests have entered the Worker queue. This keeps the
-      // startup ordering deterministic without making sidebar state stale.
-      const sidebarPromise = refreshSidebar
-        ? Promise.all([
-            api.listFolders({ ...libId, showIgnored: includeIgnored }),
-            api.listLinkedFolders({ ...libId, showIgnored: includeIgnored }),
-            api.listTags(libId),
-            api.listCollections(libId),
-            api.listSmartCollections(libId),
-            trashMode
-              ? api.listTrashedFolders(libId)
-              : Promise.resolve(null),
-          ])
-        : Promise.resolve(null);
-      const results = await Promise.all([
-        primaryAssetPromise,
-        allAssetsPromise,
-        rootCountPromise,
-        trashCountPromise,
-        sidebarPromise,
-      ]).catch((caught: unknown) => {
+      const assetResult = await primaryAssetPromise.catch((caught: unknown) => {
         if (generation !== contentLoadGenerationRef.current) return null;
         throw caught;
       });
-      if (results === null || generation !== contentLoadGenerationRef.current) {
+      if (assetResult === null || generation !== contentLoadGenerationRef.current) {
         return;
       }
-      const [assetResult, allResult, rootCountResult, trashCountResult, sidebarResult] = results;
       if (!assetResult.ok) throw new LibraryOperationError(assetResult.error);
-      if (allResult && !allResult.ok)
-        throw new LibraryOperationError(allResult.error);
-      if (rootCountResult && !rootCountResult.ok)
-        throw new LibraryOperationError(rootCountResult.error);
-      if (trashCountResult && !trashCountResult.ok)
-        throw new LibraryOperationError(trashCountResult.error);
-      if (sidebarResult) {
-        const [
-          folderResult,
-          linkedResult,
-          tagResult,
-          collectionResult,
-          smartResult,
-          trashedFoldersResult,
-        ] = sidebarResult;
-        if (!folderResult.ok) throw new LibraryOperationError(folderResult.error);
-        if (!linkedResult.ok) throw new LibraryOperationError(linkedResult.error);
-        if (!tagResult.ok) throw new LibraryOperationError(tagResult.error);
-        if (!collectionResult.ok) {
-          throw new LibraryOperationError(collectionResult.error);
-        }
-        if (!smartResult.ok) throw new LibraryOperationError(smartResult.error);
-        setFolders(folderResult.value);
-        setLinkedFolders(linkedResult.value);
-        setTags(tagResult.value);
-        setCollections(collectionResult.value);
-        setSmartCollections(smartResult.value);
-        if (trashMode) {
-          if (trashedFoldersResult && !trashedFoldersResult.ok) {
-            throw new LibraryOperationError(trashedFoldersResult.error);
-          }
-          setTrashedFolders(trashedFoldersResult?.value ?? []);
-        } else {
-          setTrashedFolders([]);
-        }
-      }
       // Super-sa65: beginPage owns the first summaries and starts the compact
       // real-asset layout fetch that gives the virtual canvas full geometry.
       // Super-2oga: drop stale failure badges when the list already has ready thumbs.
@@ -3199,21 +3135,13 @@ function AppInner() {
         }
         return next.size === current.size ? current : next;
       });
-      // CU-B2: keep library-wide counts when this load actually fetched them.
-      // Folder-to-folder navigation skips the extra COUNT queries so a 7000-item
-      // search is not queued behind a whole-library scan.
-      if (allResult) {
-        setAllAssetCount(allResult.value.total);
-      } else if (!trashMode && scope === "all") {
+      // The current scope's total comes with the foreground page and can be
+      // painted now. Global/root/trash counters are non-critical hydration.
+      if (!trashMode && scope === "all" && assetResult.value.totalIsExact !== false) {
         setAllAssetCount(assetResult.value.total);
       }
-      if (!trashMode && scope === "root") {
+      if (!trashMode && scope === "root" && assetResult.value.totalIsExact !== false) {
         setRootAssetCount(assetResult.value.total);
-      } else if (rootCountResult) {
-        setRootAssetCount(rootCountResult.value.total);
-      }
-      if (trashCountResult) {
-        setTrashedAssetCount(trashCountResult.value.total);
       }
       setSearchTotal(assetResult.value.total);
       setSearchOffset(assetResult.value.offset);
@@ -3231,6 +3159,71 @@ function AppInner() {
         items: assetResult.value.items,
         total: assetResult.value.total,
         offset: assetResult.value.offset,
+      });
+      // Let cards become interactive before posting lower-priority count and
+      // sidebar work. All responses are generation guarded; a navigation in
+      // the meantime leaves its current sidebar untouched rather than showing
+      // stale folders or turning a successful browse into an error surface.
+      void (async () => {
+        const allAssetsPromise = includeLibraryCounts && (trashMode || scope !== "all")
+          ? api.searchAssets({ ...libId, query: null, limit: 1, offset: 0, showIgnored: includeIgnored })
+          : Promise.resolve(undefined);
+        const rootCountPromise = includeLibraryCounts && (trashMode || scope !== "root")
+          ? api.searchAssets({
+              ...libId,
+              query: null,
+              limit: 1,
+              offset: 0,
+              scope: { kind: "folder", folderId: null, recursive: false },
+              showIgnored: includeIgnored,
+            })
+          : Promise.resolve(undefined);
+        const trashCountPromise = includeLibraryCounts
+          ? api.searchAssets({
+              ...libId,
+              query: null,
+              limit: 1,
+              offset: 0,
+              scope: { kind: "trash" },
+              showIgnored: includeIgnored,
+            })
+          : Promise.resolve(undefined);
+        const sidebarPromise = refreshSidebar
+          ? Promise.all([
+              api.listFolders({ ...libId, showIgnored: includeIgnored }),
+              api.listLinkedFolders({ ...libId, showIgnored: includeIgnored }),
+              api.listTags(libId),
+              api.listCollections(libId),
+              api.listSmartCollections(libId),
+              trashMode
+                ? api.listTrashedFolders(libId)
+                : Promise.resolve(null),
+            ])
+          : Promise.resolve(null);
+        const [allResult, rootCountResult, trashCountResult, sidebarResult] = await Promise.all([
+          allAssetsPromise,
+          rootCountPromise,
+          trashCountPromise,
+          sidebarPromise,
+        ]);
+        if (generation !== contentLoadGenerationRef.current) return;
+        if (allResult?.ok) setAllAssetCount(allResult.value.total);
+        if (rootCountResult?.ok) setRootAssetCount(rootCountResult.value.total);
+        if (trashCountResult?.ok) setTrashedAssetCount(trashCountResult.value.total);
+        if (!sidebarResult) return;
+        const [folderResult, linkedResult, tagResult, collectionResult, smartResult, trashedFoldersResult] = sidebarResult;
+        if (folderResult.ok) setFolders(folderResult.value);
+        if (linkedResult.ok) setLinkedFolders(linkedResult.value);
+        if (tagResult.ok) setTags(tagResult.value);
+        if (collectionResult.ok) setCollections(collectionResult.value);
+        if (smartResult.ok) setSmartCollections(smartResult.value);
+        if (trashMode && trashedFoldersResult?.ok) {
+          setTrashedFolders(trashedFoldersResult.value);
+        } else if (!trashMode) {
+          setTrashedFolders([]);
+        }
+      })().catch(() => {
+        // Non-critical hydration must not blank an already usable asset page.
       });
       return assetResult.value.items;
       } finally {
@@ -3445,6 +3438,7 @@ function AppInner() {
           setLibrary(event.library);
           setPluginJobs(null);
           setHiddenPluginJobActivityId(null);
+          setSidebarFolderScope("all");
           setAssetScope("all");
           setActiveTagId(null);
           setActiveCollectionId(null);
@@ -3523,15 +3517,18 @@ function AppInner() {
       if (frame !== 0) return;
       frame = window.requestAnimationFrame(flush);
     };
-    // Super-d0nv: a burst of cover thumbnail.ready events collapses into a
-    // single folder-browse-entries re-fetch (one IPC for the current parent).
-    let folderBrowseRefreshFrame = 0;
+    // A long thumbnail wave can span many animation frames. Use a short
+    // trailing debounce instead of one refresh per frame; linked folders with
+    // many child cards would otherwise repeatedly rebuild their full index.
+    let folderBrowseRefreshTimer: number | undefined;
     const scheduleFolderBrowseRefresh = () => {
-      if (folderBrowseRefreshFrame !== 0) return;
-      folderBrowseRefreshFrame = window.requestAnimationFrame(() => {
-        folderBrowseRefreshFrame = 0;
+      if (folderBrowseRefreshTimer !== undefined) {
+        window.clearTimeout(folderBrowseRefreshTimer);
+      }
+      folderBrowseRefreshTimer = window.setTimeout(() => {
+        folderBrowseRefreshTimer = undefined;
         setFolderBrowseRefreshToken((token) => token + 1);
-      });
+      }, 240);
     };
     const unsubscribe = api.onThumbnailEvent((event) => {
       if (event.libraryId !== library?.libraryId) return;
@@ -3625,8 +3622,8 @@ function AppInner() {
     return () => {
       unsubscribe();
       if (frame !== 0) window.cancelAnimationFrame(frame);
-      if (folderBrowseRefreshFrame !== 0) {
-        window.cancelAnimationFrame(folderBrowseRefreshFrame);
+      if (folderBrowseRefreshTimer !== undefined) {
+        window.clearTimeout(folderBrowseRefreshTimer);
       }
     };
   }, [api, applyLoadedMetadata, library, library?.libraryId, t]);
@@ -3970,6 +3967,7 @@ function AppInner() {
       setLibrary(result.value);
       setPluginJobs(null);
       setHiddenPluginJobActivityId(null);
+      setSidebarFolderScope("all");
       setAssetScope("all");
       setActiveTagId(null);
       setActiveCollectionId(null);
@@ -4117,6 +4115,7 @@ function AppInner() {
     setShowTrash(false);
     setShowTagManagement(false);
     setActivePluginSidebarViewId(null);
+    setSidebarFolderScope(scope);
     setAssetScope(scope);
     if (scope !== "all" && scope !== "root") {
       const configured = folderRecursivePreference(
@@ -4225,6 +4224,7 @@ function AppInner() {
     resetBrowsePagination();
     setTrashedAssets([]);
     clearAssetSelection();
+    setSidebarFolderScope("all");
     setAssetScope("all");
     clearDiscoveryControls();
     api?.setActiveContext(library.libraryId);
@@ -4256,6 +4256,7 @@ function AppInner() {
     setActiveTagId(null);
     setActiveCollectionId(null);
     setActiveSmartCollectionId(null);
+    setSidebarFolderScope("all");
     setAssetScope("all");
     clearAssetSelection();
     clearDiscoveryControls();
@@ -4283,6 +4284,7 @@ function AppInner() {
     setShowTrash(false);
     setShowTagManagement(false);
     setActivePluginSidebarViewId(viewId);
+    setSidebarFolderScope("all");
     setAssetScope("all");
     clearAssetSelection();
     setActiveTagId(null);
@@ -4406,6 +4408,7 @@ function AppInner() {
     setActiveTagId(null);
     setActiveCollectionId(null);
     setActiveSmartCollectionId(null);
+    setSidebarFolderScope("all");
     setAssetScope("all");
     clearAssetSelection();
     setTagFilter(joined);
@@ -4464,6 +4467,7 @@ function AppInner() {
     setActiveTagId(tagId);
     setActiveCollectionId(null);
     setActiveSmartCollectionId(null);
+    setSidebarFolderScope("all");
     setAssetScope("all");
     clearAssetSelection();
     setTagFilter(tag.name);
@@ -4923,6 +4927,7 @@ function AppInner() {
     managedImportTargetFolderIdRef.current = undefined;
     setActiveTagId(null);
     setActiveSmartCollectionId(null);
+    setSidebarFolderScope("all");
     setAssetScope("all");
     clearAssetSelection();
     clearDiscoveryControls();
@@ -6153,6 +6158,7 @@ function AppInner() {
     setActiveTagId(null);
     setActiveCollectionId(null);
     setActiveSmartCollectionId(collectionId);
+    setSidebarFolderScope("all");
     setAssetScope("all");
     clearAssetSelection();
     clearDiscoveryControls();
@@ -6785,6 +6791,7 @@ function AppInner() {
     setLinkedFolders([]);
     setAssets([]);
     setAllAssetCount(0);
+    setSidebarFolderScope("all");
     setAssetScope("all");
     setShowTrash(false);
     setShowTagManagement(false);
@@ -7694,6 +7701,7 @@ function AppInner() {
       setActivePluginSidebarViewId(null);
       setTrashedAssets([]);
       setTrashedAssetCount(0);
+      setSidebarFolderScope("all");
       setAssetScope("all");
       setActiveTagId(null);
       setActiveCollectionId(null);
@@ -8571,6 +8579,7 @@ function AppInner() {
       setAiConnectionState("connected");
       setAiConnectionReason(undefined);
       aiVerifiedFingerprintRef.current = fingerprint;
+      aiHeartbeatFailureCountRef.current = 0;
       // Typed key is not on disk until save — only mark ready when stored.
       if (aiHasKey || !aiApiKey.trim()) {
         setAiHasKey(true);
@@ -8740,13 +8749,13 @@ function AppInner() {
     });
   }, [librarySettingsOpen, api, library]);
 
-  const probeStoredAiConnection = useCallback(async () => {
-    if (!api) return;
+  const probeStoredAiConnection = useCallback(async (): Promise<boolean> => {
+    if (!api) return false;
     if (!shouldRunAiConnectionHeartbeat(aiHasKey)) {
       setAiConnectionState("disconnected");
       setAiConnectionReason(undefined);
       aiVerifiedFingerprintRef.current = null;
-      return;
+      return false;
     }
     setAiConnectionState((prev) =>
       prev === "connected" || prev === "connecting" ? prev : "connecting",
@@ -8756,7 +8765,7 @@ function AppInner() {
       setAiConnectionState("disconnected");
       setAiConnectionReason(t("aiConfig.testFailed"));
       aiVerifiedFingerprintRef.current = null;
-      return;
+      return false;
     }
     const result = await api.testAiConnection({
       apiFormat: cfg.value.apiFormat,
@@ -8769,7 +8778,7 @@ function AppInner() {
         toMessage(result.error, t("aiConfig.testFailed"), locale),
       );
       aiVerifiedFingerprintRef.current = null;
-      return;
+      return false;
     }
     if (result.value.success) {
       setAiConnectionState("connected");
@@ -8780,30 +8789,55 @@ function AppInner() {
         cfg.value.baseUrl.trim(),
         "__stored__",
       ].join("\u0001");
-      return;
+      return true;
     }
     setAiConnectionState("error");
     setAiConnectionReason(result.value.reason ?? t("aiConfig.testFailed"));
     aiVerifiedFingerprintRef.current = null;
+    return false;
   }, [api, aiHasKey, locale, t]);
 
   useEffect(() => {
     if (!shouldRunAiConnectionHeartbeat(aiHasKey)) {
       return;
     }
-    queueMicrotask(() => {
-      void probeStoredAiConnection();
-    });
-    const timer = window.setInterval(() => {
-      void probeStoredAiConnection();
-    }, AI_CONNECTION_HEARTBEAT_MS);
-    const onFocus = () => {
-      void probeStoredAiConnection();
+    let timer: number | undefined;
+    let disposed = false;
+    const stop = () => {
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+        timer = undefined;
+      }
     };
-    window.addEventListener("focus", onFocus);
+    const schedule = (delay: number) => {
+      timer = window.setTimeout(() => {
+        timer = undefined;
+        void run();
+      }, delay);
+    };
+    const run = async () => {
+      if (!shouldRunAiConnectionHeartbeat(aiHasKey, document.hidden)) return;
+      const connected = await probeStoredAiConnection();
+      if (disposed || document.hidden) return;
+      aiHeartbeatFailureCountRef.current = connected
+        ? 0
+        : aiHeartbeatFailureCountRef.current + 1;
+      schedule(aiConnectionHeartbeatDelay(aiHeartbeatFailureCountRef.current));
+    };
+    const start = () => {
+      if (!shouldRunAiConnectionHeartbeat(aiHasKey, document.hidden)) return;
+      void run();
+    };
+    const onVisibilityChange = () => {
+      stop();
+      start();
+    };
+    start();
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
+      disposed = true;
+      stop();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [aiHasKey, probeStoredAiConnection]);
 
@@ -9598,7 +9632,21 @@ function AppInner() {
       className={`app-shell${leftOpen ? "" : " left-collapsed"}${rightOpen ? "" : " right-collapsed"}${panelResizing ? " is-resizing" : ""}`}
       style={panelResizeShellStyle as React.CSSProperties}
     >
-      <header className="app-toolbar">
+      <header
+        className="app-toolbar"
+        onDoubleClick={(event) => {
+          if (
+            sidebarFolderScope === "all" ||
+            sidebarFolderScope === "root" ||
+            !shouldClearFolderScopeFromToolbarDoubleClick(event.target)
+          ) {
+            return;
+          }
+          // Do not navigate or close the current preview: this action only
+          // changes the left-sidebar selection / next folder-create target.
+          setSidebarFolderScope("root");
+        }}
+      >
         <div className="toolbar-cluster toolbar-nav-cluster">
           <ToolButton
             icon={leftOpen ? "panel-left-close" : "panel-left"}
@@ -9763,7 +9811,7 @@ function AppInner() {
       </header>
       <NavigationSidebar
         library={library}
-        assetScope={assetScope}
+        assetScope={sidebarFolderScope}
         showTrash={showTrash}
         showTagManagement={showTagManagement}
         activePluginSidebarViewId={activePluginSidebarViewId}
@@ -9856,7 +9904,7 @@ function AppInner() {
         onInlineCollectionRenameCancel={cancelInlineCollectionRename}
         onAddFolder={() => {
           cancelInlineSmartCollectionEdit();
-          openInlineFolderCreate(selectedFolderId ?? null);
+          openInlineFolderCreate(selectedSidebarFolderId ?? null);
         }}
         onAddSmartCollection={() => {
           cancelInlineFolderEdit();
@@ -10336,11 +10384,22 @@ function AppInner() {
                         : t('dialog.about.updateAvailable', { version: availableAppUpdate?.latestVersion ?? '' })}</strong>
                     {appUpdateDownloading ? (
                       <>
-                        <span>{appUpdateProgress?.totalBytes === undefined
-                          ? t('dialog.about.updateDownloading')
-                          : `${formatBytes(appUpdateProgress.downloadedBytes)} / ${formatBytes(appUpdateProgress.totalBytes)}`}</span>
-                        <div className="app-update-mini-progress" aria-label={t('dialog.about.updateDownloading')}>
-                          <span style={{ width: `${Math.min(100, Math.round((appUpdateProgress?.downloadedBytes ?? 0) / Math.max(1, appUpdateProgress?.totalBytes ?? 1) * 100))}%` }} />
+                        <div className="app-update-download-meta">
+                          <span>{appUpdatePercent === undefined
+                            ? formatBytes(appUpdateProgress?.downloadedBytes ?? 0)
+                            : `${formatBytes(appUpdateProgress?.downloadedBytes ?? 0)} / ${formatBytes(appUpdateProgress?.totalBytes ?? 0)}`}</span>
+                          {appUpdatePercent !== undefined ? <span className="app-update-download-percent">{appUpdatePercent}%</span> : null}
+                        </div>
+                        <div
+                          className="app-update-mini-progress"
+                          role="progressbar"
+                          aria-label={t('dialog.about.updateDownloading')}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={appUpdatePercent}
+                          data-indeterminate={appUpdatePercent === undefined ? '' : undefined}
+                        >
+                          <span style={appUpdatePercent === undefined ? undefined : { width: `${appUpdatePercent}%` }} />
                         </div>
                       </>
                     ) : preparedAppUpdate !== null ? (
@@ -10556,6 +10615,11 @@ function AppInner() {
               <div aria-busy="true" className="empty-library" role="status">
                 <div className="empty-orbit"><Icon name="file" size={24} /></div>
                 <h1>{t("common.loading")}</h1>
+                <Progress
+                  aria-label={t("common.loading")}
+                  className="library-content-loading-progress"
+                  indeterminate
+                />
               </div>
             ) : browseCanvasBodyLayout.mode !== "empty" ? (
               <>
@@ -11054,6 +11118,9 @@ function AppInner() {
                                 preview={null}
                               />
                             );
+                          }
+                          if (!assetSupportsThumbnail(asset)) {
+                            return <FileTypeThumbnail fileName={asset.displayName} />;
                           }
                           return (
                             <>

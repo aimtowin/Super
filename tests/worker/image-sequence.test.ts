@@ -1,4 +1,5 @@
 import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -12,6 +13,15 @@ import {
 
 const roots: string[] = [];
 const services: LibraryService[] = [];
+const require = createRequire(import.meta.url);
+
+interface TestDatabaseConnection {
+  close(): void;
+  exec(sql: string): void;
+  prepare(source: string): { run(...parameters: unknown[]): unknown };
+}
+
+const TestDatabase = require("better-sqlite3") as new (filename: string) => TestDatabaseConnection;
 
 function fixture() {
   const root = mkdtempSync(path.join(tmpdir(), "super-sequence-"));
@@ -359,6 +369,41 @@ describe("image sequence persistence", () => {
     expect(assets).toHaveLength(1);
     expect(assets[0]!.sequence?.frames.map((frame) => frame.frameNumber))
       .toEqual([0, 1, 2]);
+  });
+
+  it("keeps large image-sequence summaries below SQLite binding limits", () => {
+    const { library, service } = fixture();
+    service.closeAll();
+    const database = new TestDatabase(path.join(library.libraryPath, ".super", "library.db"));
+    try {
+      const insertAsset = database.prepare(
+        `INSERT INTO assets
+           (asset_id, location_kind, managed_folder_id, linked_folder_id, relative_file_path,
+            path_identity, current_revision_id, availability, created_at, updated_at)
+         VALUES (?, 'managed', NULL, NULL, ?, ?, ?, 'available', ?, ?)`,
+      );
+      const insertRevision = database.prepare(
+        `INSERT INTO revisions
+           (revision_id, asset_id, parent_revision_id, byte_size, modified_at,
+            original_filename, origin, accepted_at)
+         VALUES (?, ?, NULL, ?, ?, ?, 'import', ?)`,
+      );
+      const now = new Date().toISOString();
+      database.exec("BEGIN");
+      for (let index = 0; index < 1_001; index += 1) {
+        const assetId = `asset-${index}`;
+        const revisionId = `revision-${index}`;
+        const relativePath = `bulk/asset-${index}.png`;
+        insertAsset.run(assetId, relativePath, relativePath, revisionId, now, now);
+        insertRevision.run(revisionId, assetId, 1, now, `asset-${index}.png`, now);
+      }
+      database.exec("COMMIT");
+    } finally {
+      database.close();
+    }
+
+    service.openLibrary(library.libraryPath);
+    expect(service.listAssets({ libraryId: library.libraryId, recursive: true })).toHaveLength(1_001);
   });
 
   it("creates and dissolves a manual sequence with a chosen fps", async () => {

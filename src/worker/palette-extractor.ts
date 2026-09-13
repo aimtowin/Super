@@ -8,6 +8,10 @@ export interface DominantColorMetrics {
   lightness: number;
 }
 
+export interface ColorMetrics extends DominantColorMetrics {
+  saturation: number;
+}
+
 interface HistogramBucket {
   key: number;
   count: number;
@@ -40,7 +44,7 @@ function byteHex(value: number): string {
     .toUpperCase();
 }
 
-export function dominantColorMetrics(hex: string): DominantColorMetrics {
+export function colorMetrics(hex: string): ColorMetrics {
   if (!/^#[0-9A-Fa-f]{6}$/u.test(hex)) throw new Error('Dominant colour must be a six-digit hex value.');
   const red = Number.parseInt(hex.slice(1, 3), 16) / 255;
   const green = Number.parseInt(hex.slice(3, 5), 16) / 255;
@@ -55,10 +59,21 @@ export function dominantColorMetrics(hex: string): DominantColorMetrics {
     else hue = 60 * ((red - green) / delta + 4);
   }
   if (hue < 0) hue += 360;
+  const lightness = (maximum + minimum) / 2;
+  const saturation = delta === 0
+    ? 0
+    : delta / (1 - Math.abs(2 * lightness - 1));
   return {
     hue: Number(hue.toFixed(6)),
-    lightness: Number(((maximum + minimum) / 2).toFixed(6)),
+    saturation: Number(saturation.toFixed(6)),
+    lightness: Number(lightness.toFixed(6)),
   };
+}
+
+/** Backward-compatible subset used by the legacy dominant-colour sort. */
+export function dominantColorMetrics(hex: string): DominantColorMetrics {
+  const { hue, lightness } = colorMetrics(hex);
+  return { hue, lightness };
 }
 
 /**

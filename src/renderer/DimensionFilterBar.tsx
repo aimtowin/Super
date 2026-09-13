@@ -433,6 +433,10 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
 
   const chips = buildActiveFilterChips(snapshot, {
     textFormatLabel: t("filter.formatText"),
+    colorLabel: (colorId) => {
+      const preset = COLOR_PRESETS.find((candidate) => candidate.id === colorId);
+      return preset ? t(`filter.color.${preset.id}`) : colorId;
+    },
   });
   const controlsDisabled = Boolean(disabled || interactionsLocked);
   const selectedTagNames = tagFilter
@@ -663,7 +667,15 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
               data-dimension="color"
               role="dialog"
             >
-              <div className="dimension-color-row" role="listbox" aria-label={t("filter.dimColor")}>
+              <div className="dimension-palette-heading">
+                <span>{t("filter.palette")}</span>
+                <span className="dimension-palette-selection">
+                  {selectedColors.size > 0
+                    ? t("filter.paletteSelected", { count: selectedColors.size })
+                    : t("filter.paletteSelectHint")}
+                </span>
+              </div>
+              <div className="dimension-color-palette" role="listbox" aria-label={t("filter.dimColor")}>
                 {COLOR_PRESETS.map((preset) => (
                   <button
                     aria-label={t(`filter.color.${preset.id}`)}
@@ -674,6 +686,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                     key={preset.id}
                     onClick={(event) => toggleColor(preset.id, event.shiftKey)}
                     style={{ background: preset.swatch }}
+                    title={t(`filter.color.${preset.id}`)}
                     type="button"
                   />
                 ))}

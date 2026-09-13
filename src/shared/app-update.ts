@@ -7,7 +7,7 @@ export const APP_UPDATE_DISTRIBUTIONS = [
 ] as const;
 export type AppUpdateDistribution = (typeof APP_UPDATE_DISTRIBUTIONS)[number];
 
-export const APP_UPDATE_ASSET_KINDS = ['installer', 'portable'] as const;
+export const APP_UPDATE_ASSET_KINDS = ['installer', 'delta-installer', 'portable'] as const;
 export type AppUpdateAssetKind = (typeof APP_UPDATE_ASSET_KINDS)[number];
 
 export const APP_UPDATE_ERROR_CODES = [

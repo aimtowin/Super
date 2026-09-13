@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "platform": "win32-x64",
-  "url": "https://github.com/aimtowin/Super/releases/download/media-v0.1.2/super-media-win32-x64.zip",
+  "url": "https://liuyangyang.me/downloads/super/media/media-v0.1.2/super-media-win32-x64.zip",
   "archiveSha256": "4afcbe880aa7acb9575e3718198fb950e217ed80d1301b3dd360d02e9847fd83",
   "manifestSha256": "bc0cf4777f308a86f080d7e896ae3cb3b46c7d6829b744fe5e5533e8429fe49b"
 }

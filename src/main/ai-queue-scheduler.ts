@@ -21,6 +21,7 @@ interface QueueState {
 export class AiQueueScheduler {
   private readonly stateByLibrary = new Map<string, QueueState>();
   private options: AiQueueSchedulerOptions;
+  private paused = false;
 
   constructor(
     private readonly processBatch: (libraryId: string, maxJobs: number) => Promise<AiQueueBatchResult>,
@@ -42,9 +43,34 @@ export class AiQueueScheduler {
     };
   }
 
+  /** Keep durable AI jobs queued while the app is in tray standby. */
+  setPaused(paused: boolean): void {
+    if (this.paused === paused) return;
+    this.paused = paused;
+    if (paused) {
+      for (const state of this.stateByLibrary.values()) {
+        if (state.timer) {
+          clearTimeout(state.timer);
+          // A retry timer represents durable work that must be re-triggered
+          // after foregrounding; clearing it without this marker loses it.
+          state.requested = true;
+        }
+        state.timer = undefined;
+      }
+      return;
+    }
+    for (const [libraryId, state] of this.stateByLibrary) {
+      if (state.requested) void this.trigger(libraryId);
+    }
+  }
+
   async trigger(libraryId: string): Promise<void> {
     const state = this.stateByLibrary.get(libraryId) ?? { running: false, requested: false, retryRound: 0 };
     this.stateByLibrary.set(libraryId, state);
+    if (this.paused) {
+      state.requested = true;
+      return;
+    }
     if (state.timer) {
       clearTimeout(state.timer);
       state.timer = undefined;
@@ -57,8 +83,16 @@ export class AiQueueScheduler {
     state.running = true;
     try {
       for (;;) {
+        if (this.paused) {
+          state.requested = true;
+          return;
+        }
         state.requested = false;
         const result = await this.processBatch(libraryId, this.options.batchSize);
+        if (this.paused) {
+          state.requested = true;
+          return;
+        }
         if (result.requeued > 0) {
           const baseDelay = Math.min(
             this.options.baseRetryDelayMs * (2 ** state.retryRound),

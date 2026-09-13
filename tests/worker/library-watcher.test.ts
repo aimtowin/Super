@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   LibraryService,
@@ -90,9 +90,138 @@ function watchClock(startMs = 1_000_000) {
   };
 }
 
-afterEach(() => {
+it('defers accumulated tray watcher refreshes until foreground browsing is idle', async () => {
+  const root = temporaryRoot();
+  const observers = observerHarness();
+  const scheduler = new ManualScheduler();
+  const service = newService({ observerFactory: observers.factory, scheduler });
+  const library = service.createLibrary({ displayName: 'Tray restore', selectedParentPath: root });
+  const refresh = vi.spyOn(service, 'refreshManagedAssets');
+  service.setBackgroundMaintenancePaused(true);
+  writeFileSync(path.join(library.libraryPath, 'Assets', 'while-hidden.txt'), 'new');
+  for (let index = 0; index < 50; index++) observers.callbacks[0]!();
+  scheduler.flush();
+  expect(refresh).not.toHaveBeenCalled();
+  service.noteInteractiveActivity(library.libraryId, 250);
+  service.setBackgroundMaintenancePaused(false);
+  scheduler.flush();
+  // A restored browse sees the existing index immediately, not a forced scan.
+  expect(refresh).not.toHaveBeenCalled();
+  expect(service.listAssets({ libraryId: library.libraryId, recursive: true })).toEqual([]);
+  await vi.waitFor(() => expect(service.listAssets({ libraryId: library.libraryId, recursive: true })).toHaveLength(1));
+  expect(refresh).toHaveBeenCalledTimes(1);
+});
+
+it('scans only the changed linked root and preserves unscanned managed/linked assets', async () => {
+  const root = temporaryRoot();
+  const linkedRoot = path.join(root, 'changed');
+  const otherRoot = path.join(root, 'unrelated');
+  mkdirSync(linkedRoot);
+  mkdirSync(otherRoot);
+  writeFileSync(path.join(linkedRoot, 'old.txt'), 'old');
+  writeFileSync(path.join(otherRoot, 'keep.txt'), 'keep');
+  const observers = observerHarness();
+  const scheduler = new ManualScheduler();
+  const scanned: string[] = [];
+  const service = newService({ observerFactory: observers.factory, scheduler,
+    assetLstat: (filePath) => { scanned.push(filePath); return lstatSync(filePath); } });
+  const library = service.createLibrary({ displayName: 'Scoped', selectedParentPath: root });
+  const linked = service.importFolderAsLinked({ libraryId: library.libraryId, sourceRootPath: linkedRoot });
+  service.importFolderAsLinked({ libraryId: library.libraryId, sourceRootPath: otherRoot });
+  scanned.length = 0;
+  writeFileSync(path.join(linkedRoot, 'added.txt'), 'added');
+  writeFileSync(path.join(library.libraryPath, 'Assets', 'not-notified.txt'), 'not scanned');
+  observers.callbacks[1]!();
+  scheduler.flush();
+  await service.waitForWatchedRefreshes(library.libraryId);
+  expect(scanned.length).toBeGreaterThan(0);
+  expect(scanned.every((entry) => entry.startsWith(linkedRoot + path.sep))).toBe(true);
+  expect(service.listAssets({ libraryId: library.libraryId, folderId: linked.folderId, recursive: true })).toHaveLength(2);
+  expect(service.listAssets({ libraryId: library.libraryId, recursive: true })).toHaveLength(3);
+});
+
+it('retains in-flight changes across a second pause and resumes without duplicate rows', async () => {
+  const root = temporaryRoot();
+  const observers = observerHarness();
+  const scheduler = new ManualScheduler();
+  let scanned = 0;
+  let pauseOnce = true;
+  const service = newService({ observerFactory: observers.factory, scheduler,
+    assetLstat: (filePath) => {
+      scanned++;
+      if (scanned === 20 && pauseOnce) { pauseOnce = false; service.setBackgroundMaintenancePaused(true); }
+      return lstatSync(filePath);
+    } });
+  const library = service.createLibrary({ displayName: 'Pause twice', selectedParentPath: root });
+  for (let index = 0; index < 150; index++) writeFileSync(path.join(library.libraryPath, 'Assets', `file-${index}.txt`), 'file');
+  observers.callbacks[0]!();
+  scheduler.flush();
+  await service.waitForWatchedRefreshes(library.libraryId);
+  expect(pauseOnce).toBe(false);
+  expect(service.listAssets({ libraryId: library.libraryId, recursive: true })).toHaveLength(0);
+  writeFileSync(path.join(library.libraryPath, 'Assets', 'during-second-pause.txt'), 'late');
+  observers.callbacks[0]!();
+  scheduler.flush();
+  service.setBackgroundMaintenancePaused(false);
+  await service.waitForWatchedRefreshes(library.libraryId);
+  expect(service.listAssets({ libraryId: library.libraryId, recursive: true })).toHaveLength(151);
+});
+
+it('yields between commit batches and drains events arriving while a scan is running', async () => {
+  const root = temporaryRoot();
+  const observers = observerHarness();
+  const scheduler = new ManualScheduler();
+  const service = newService({ observerFactory: observers.factory, scheduler });
+  const library = service.createLibrary({ displayName: 'Interleaved browse', selectedParentPath: root });
+  for (let index = 0; index < 180; index++) writeFileSync(path.join(library.libraryPath, 'Assets', `file-${index}.txt`), 'file');
+  const refresh = service.refreshManagedAssets.bind(service);
+  let largestBatch = 0;
+  let browsedBetweenBatches = false;
+  let commitCount = 0;
+  vi.spyOn(service, 'refreshManagedAssets').mockImplementation((id, options) => {
+    largestBatch = Math.max(largestBatch, options?.discovery?.managedEntries.length ?? 0);
+    const result = refresh(id, options);
+    if (++commitCount === 1) {
+      writeFileSync(path.join(library.libraryPath, 'Assets', 'arrived-mid-scan.txt'), 'late');
+      observers.callbacks[0]!();
+      scheduler.flush();
+      setImmediate(() => {
+        const items = service.listAssets({ libraryId: library.libraryId, recursive: true });
+        browsedBetweenBatches = items.length > 0 && items.length < 180;
+        service.noteInteractiveActivity(library.libraryId, 80);
+      });
+    }
+    return result;
+  });
+  observers.callbacks[0]!();
+  scheduler.flush();
+  await service.waitForWatchedRefreshes(library.libraryId);
+  expect(largestBatch).toBeLessThanOrEqual(64);
+  expect(browsedBetweenBatches).toBe(true);
+  expect(service.listAssets({ libraryId: library.libraryId, recursive: true })).toHaveLength(181);
+});
+
+it('cancels a pending watcher scan before closing its database', async () => {
+  const root = temporaryRoot();
+  const observers = observerHarness();
+  const scheduler = new ManualScheduler();
+  const service = newService({ observerFactory: observers.factory, scheduler });
+  const library = service.createLibrary({ displayName: 'Close pending', selectedParentPath: root });
+  const refresh = vi.spyOn(service, 'refreshManagedAssets');
+  service.noteInteractiveActivity(library.libraryId, 200);
+  writeFileSync(path.join(library.libraryPath, 'Assets', 'pending.txt'), 'pending');
+  observers.callbacks[0]!();
+  scheduler.flush();
+  await service.closeLibraryAsync(library.libraryId);
+  expect(refresh).not.toHaveBeenCalled();
+  expect(service.hasOpenLibrary(library.libraryId)).toBe(false);
+});
+
+afterEach(async () => {
   for (const service of services.splice(0)) {
+    const libraries = service.openLibraryIds();
     service.closeAll();
+    await Promise.all(libraries.map((libraryId) => service.waitForWatchedRefreshes(libraryId)));
   }
   for (const root of temporaryRoots.splice(0)) {
     rmSync(root, { force: true, recursive: true, maxRetries: 5, retryDelay: 200 });
@@ -120,7 +249,7 @@ describe('managed asset watcher', () => {
     expect(observers.closed).toEqual([0, 1]);
   });
 
-  it('coalesces event storms and derives deletion from a debounced stat refresh', () => {
+  it('coalesces event storms and derives deletion from a debounced stat refresh', async () => {
     const root = temporaryRoot();
     const source = path.join(root, 'watched.png');
     writeFileSync(source, 'watched');
@@ -139,12 +268,15 @@ describe('managed asset watcher', () => {
     expect(scheduler.cancelled).toHaveLength(2);
     expect(scheduler.pendingCount()).toBe(1);
     scheduler.flush();
+    await service.waitForWatchedRefreshes(library.libraryId);
 
-    expect(service.listAssets({ libraryId: library.libraryId, recursive: true })[0]?.availability).toBe('missing');
+    // Removed sources are now purged from the index rather than retained as
+    // broken placeholder cards (the user-facing deleted-resource policy).
+    expect(service.listAssets({ libraryId: library.libraryId, recursive: true })).toHaveLength(0);
     service.closeAll();
   });
 
-  it('ignores event payload meaning and derives overwrite from current stat', () => {
+  it('ignores event payload meaning and derives overwrite from current stat', async () => {
     const root = temporaryRoot();
     const source = path.join(root, 'watched.png');
     writeFileSync(source, 'first');
@@ -172,6 +304,7 @@ describe('managed asset watcher', () => {
 
     observers.callbacks[0]!();
     scheduler.flush();
+    await service.waitForWatchedRefreshes(library.libraryId);
 
     const after = service.listAssets({ libraryId: library.libraryId, recursive: true })[0]!;
     expect(after.assetId).toBe(before.assetId);
@@ -181,6 +314,7 @@ describe('managed asset watcher', () => {
     ]);
     observers.callbacks[0]!();
     scheduler.flush();
+    await service.waitForWatchedRefreshes(library.libraryId);
     expect(events).toHaveLength(1);
     service.closeAll();
   });
@@ -211,6 +345,7 @@ describe('managed asset watcher', () => {
     await service.runOpenBackgroundReconciliation(library.libraryId);
     observers.callbacks[0]!();
     expect(() => scheduler.flush()).not.toThrow();
+    await service.waitForWatchedRefreshes(library.libraryId);
     expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -283,7 +418,7 @@ describe('managed asset watcher', () => {
     service.closeAll();
   });
 
-  it('discovers new files in a managed folder after a debounced event', () => {
+  it('discovers new files in a managed folder after a debounced event', async () => {
     const root = temporaryRoot();
     const observers = observerHarness();
     const scheduler = new ManualScheduler();
@@ -305,6 +440,7 @@ describe('managed asset watcher', () => {
     observers.callbacks[0]!();
     expect(scheduler.pendingCount()).toBe(1);
     scheduler.flush();
+    await service.waitForWatchedRefreshes(library.libraryId);
 
     expect(service.listAssets({
       libraryId: library.libraryId,
@@ -322,7 +458,7 @@ describe('managed asset watcher', () => {
 });
 
 describe('linked folder watcher', () => {
-  it('starts one observer per available root and discovers new files after a debounced event', () => {
+  it('starts one observer per available root and discovers new files after a debounced event', async () => {
     const root = temporaryRoot();
     const linkedRoot = path.join(root, 'linked');
     mkdirSync(linkedRoot);
@@ -353,6 +489,7 @@ describe('linked folder watcher', () => {
     observers.callbacks[1]!();
     expect(scheduler.pendingCount()).toBe(1);
     scheduler.flush();
+    await service.waitForWatchedRefreshes(library.libraryId);
 
     expect(service.listAssets({
       libraryId: library.libraryId,
@@ -418,7 +555,7 @@ describe('linked folder watcher', () => {
     expect(observers.closed).toContain(observers.roots.length - 1);
   });
 
-  it('ignores default entries and symlinks discovered after import and emits a diagnostic', () => {
+  it('ignores default entries and symlinks discovered after import and emits a diagnostic', async () => {
     const root = temporaryRoot();
     const linkedRoot = path.join(root, 'linked');
     mkdirSync(linkedRoot);
@@ -441,6 +578,7 @@ describe('linked folder watcher', () => {
     symlinkSync(path.join(root, 'outside.png'), path.join(linkedRoot, 'link.png'));
     observers.callbacks[1]!();
     scheduler.flush();
+    await service.waitForWatchedRefreshes(library.libraryId);
 
     expect(service.listAssets({
       libraryId: library.libraryId,

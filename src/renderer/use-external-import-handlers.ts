@@ -123,18 +123,22 @@ export function useExternalImportHandlers({
   const [folderCardDropTarget, setFolderCardDropTarget] = useState<string | null>(
     null,
   );
+  const externalDragDepth = useRef(0);
+  const clearExternalDropState = useCallback(() => {
+    externalDragDepth.current = 0;
+    setExternalDropActive(false);
+    setFolderCardDropTarget(null);
+  }, []);
 
   useEffect(() => {
-    if (!folderCardDropTarget) return;
-    const clear = () => setFolderCardDropTarget(null);
+    const clear = () => clearExternalDropState();
     window.addEventListener("dragend", clear);
     window.addEventListener("drop", clear);
     return () => {
       window.removeEventListener("dragend", clear);
       window.removeEventListener("drop", clear);
     };
-  }, [folderCardDropTarget]);
-  const externalDragDepth = useRef(0);
+  }, [clearExternalDropState]);
 
   const applyDesktopImportResult = useCallback(
     async (
@@ -331,14 +335,12 @@ export function useExternalImportHandlers({
     (event: DragEvent<HTMLElement>) => {
       if (previewBlocksDrop) {
         event.preventDefault();
-        externalDragDepth.current = 0;
-        setExternalDropActive(false);
+        clearExternalDropState();
         return;
       }
       if (!supportsExternalImportTransfer(event.dataTransfer)) return;
       event.preventDefault();
-      externalDragDepth.current = 0;
-      setExternalDropActive(false);
+      clearExternalDropState();
       const payload = externalImportPayload(event.dataTransfer);
       if (payload.files.length > 0 && onResolveManagedAssetDrop) {
         // A native drag returning to the browse canvas is not an import. Its
@@ -352,7 +354,7 @@ export function useExternalImportHandlers({
       }
       void importDroppedFiles(payload.files, undefined, undefined, payload);
     },
-    [importDroppedFiles, onResolveManagedAssetDrop, previewBlocksDrop],
+    [clearExternalDropState, importDroppedFiles, onResolveManagedAssetDrop, previewBlocksDrop],
   );
 
   const handleTargetExternalDragOver = useCallback(
@@ -377,15 +379,13 @@ export function useExternalImportHandlers({
     ) => {
       if (previewBlocksDrop) {
         event.preventDefault();
-        externalDragDepth.current = 0;
-        setExternalDropActive(false);
-        setFolderCardDropTarget(null);
+        clearExternalDropState();
         return;
       }
       if (!supportsExternalImportTransfer(event.dataTransfer)) return;
       event.preventDefault();
       event.stopPropagation();
-      setFolderCardDropTarget(null);
+      clearExternalDropState();
       const payload = externalImportPayload(event.dataTransfer);
       if (payload.files.length > 0 && onResolveManagedAssetDrop) {
         void onResolveManagedAssetDrop(payload.files).then((assetIds) => {
@@ -408,7 +408,7 @@ export function useExternalImportHandlers({
         payload,
       );
     },
-    [importDroppedFiles, onResolveManagedAssetDrop, previewBlocksDrop],
+    [clearExternalDropState, importDroppedFiles, onResolveManagedAssetDrop, previewBlocksDrop],
   );
 
   const createFolderCardDropHandlers = useCallback(
@@ -465,7 +465,7 @@ export function useExternalImportHandlers({
           null;
         if (assetIds && assetIds.length > 0) {
           event.preventDefault();
-          setFolderCardDropTarget(null);
+          clearExternalDropState();
           onAssetsDroppedOnFolder?.(
             folderId,
             assetIds,
@@ -477,7 +477,7 @@ export function useExternalImportHandlers({
         if (files.length > 0 && onResolveManagedAssetDrop) {
           event.preventDefault();
           event.stopPropagation();
-          setFolderCardDropTarget(null);
+          clearExternalDropState();
           const payload = externalImportPayload(event.dataTransfer);
           void onResolveManagedAssetDrop(files).then((resolvedIds) => {
             if (resolvedIds.length > 0) {
@@ -495,7 +495,7 @@ export function useExternalImportHandlers({
         const draggedFolderIds = parseManagedFolderDrag(event.dataTransfer);
         if (draggedFolderIds && draggedFolderIds.length > 0) {
           event.preventDefault();
-          setFolderCardDropTarget(null);
+          clearExternalDropState();
           onFoldersDroppedOnFolder?.(folderId, draggedFolderIds);
           return;
         }
@@ -504,6 +504,7 @@ export function useExternalImportHandlers({
     }),
     [
       folderCardDropTarget,
+      clearExternalDropState,
       handleTargetExternalDragOver,
       handleTargetExternalDrop,
       importDroppedFiles,

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { OpenReconciliationGate } from './open-reconciliation-gate';
 import { randomUUID } from 'node:crypto';
 import {
   parseWorkerRequest,
@@ -116,6 +117,9 @@ const analysisControls = new Map<string, {
 }>();
 const activeThumbnailQueues = new Set<string>();
 const rescheduledThumbnailQueues = new Set<string>();
+// The tray keeps this process alive for filesystem watching, but it must not
+// keep burning CPU on whole-library maintenance while no Super window is shown.
+let backgroundWorkPaused = false;
 // Super-4bdd26 收编 codex/large-library-performance@15f3325c：视口抢占机制。
 const activeThumbnailQueueControllers = new Map<string, AbortController>();
 const deferredMediaResourceRetries = new Map<string, ReturnType<typeof setTimeout>>();
@@ -829,30 +833,36 @@ function scheduleThumbnailQueue(
   return enqueued;
 }
 
-const STARTUP_THUMBNAIL_DELAY_MS = 1_000;
-// Super-4bdd26 收编 codex/large-library-performance@15f3325c：等待首个真实视口。
-const STARTUP_THUMBNAIL_VISIBLE_WAIT_MS = 250;
-const STARTUP_THUMBNAIL_MAX_VISIBLE_WAIT_MS = 8_000;
-
 // Super-onch/9e1d8d: per-command timing log, off by default.
 const WORKER_CMD_LOG = process.env.SUPER_WORKER_CMD_LOG === '1';
 
-// Super-2cc492（真实 NAS 生产库事故，2026-08-23）：开库后台对账若与渲染端
-// startup 请求风暴同时运行，SMB 上 21,508 条目的 artifact 枚举实测 ~16.5s，
-// 加上各同步 SQL 步骤，startup 突发全部撞上主进程 15s 超时且 late 响应被
-// 丢弃（一次 E2E 记录到 462 条）——画布永远等不到第一页数据。因此对账必须
-// 等首个浏览查询真正服务完毕、且在飞命令清零后才启动；15s 硬上限防止
-// 「永远推迟」（Super-4bdd26 教训：无限等待同样是缺陷）。
-const OPEN_RECONCILIATION_MAX_STARTUP_WAIT_MS = 15_000;
+// The open-time maintenance must never begin before the first real browse
+// response.  A previous 15-second fallback was intended to avoid deferring
+// maintenance forever, but on a large local library it did the opposite: it
+// started whole-library SQL scans while the shell was still mounting, then
+// starved the user's first directory click.  A library that has not been
+// browsed has no foreground maintenance requirement; explicit refreshes and
+// the first browse both still arm the durable maintenance path.
+const STARTUP_MAINTENANCE_IDLE_MS = 3_000;
 let inFlightWorkerCommandCount = 0;
 let startupBrowseServed = false;
 const startupBurstDrainResolvers = new Set<() => void>();
+const deferredStartupMaintenance = new Map<string, ReturnType<typeof setTimeout>>();
+const deferredOpenReconciliation = new Map<string, ReturnType<typeof setTimeout>>();
+const openReconciliationGate = new OpenReconciliationGate();
+
+function isInteractiveBrowseCommand(commandType: string): boolean {
+  return commandType === 'asset.search'
+    || commandType === 'asset.list'
+    || commandType === 'folder.browse-entries'
+    || commandType === 'collection.assets.list'
+    || commandType === 'collection.source-browse-entries';
+}
 
 function settleStartupBurstGate(commandType: string): void {
   if (
     !startupBrowseServed
-    && (commandType === 'asset.search'
-      || commandType === 'folder.browse-entries')
+    && isInteractiveBrowseCommand(commandType)
   ) {
     startupBrowseServed = true;
   }
@@ -864,7 +874,7 @@ function settleStartupBurstGate(commandType: string): void {
 
 /**
  * Resolve once the renderer's first post-open browse response has been posted
- * and no command is in flight (or after the hard cap). The open background
+ * and no command is in flight. The open background
  * reconciliation chain must never start inside this window: its SMB I/O and
  * synchronous SQL steps are exactly what starved the startup burst into the
  * 15s request timeout on the real NAS library.
@@ -875,30 +885,70 @@ function waitForStartupBurstDrain(): Promise<void> {
   }
   return new Promise((resolve) => {
     startupBurstDrainResolvers.add(resolve);
-    setTimeout(
-      () => {
-        if (startupBurstDrainResolvers.delete(resolve)) resolve();
-      },
-      OPEN_RECONCILIATION_MAX_STARTUP_WAIT_MS,
-    );
   });
 }
 
-/** Run the open reconciliation only after the startup burst has drained. */
-function scheduleOpenBackgroundReconciliation(libraryId: string): void {
-  // Per-open-event gate: this runs synchronously inside the library.open
-  // handler, before any post-open command can settle, so resetting here is
-  // race-free with respect to THIS open's burst.
-  startupBrowseServed = false;
+/** Arm reconciliation only after foreground browsing has stayed idle. */
+function deferOpenBackgroundReconciliation(libraryId: string): void {
+  const ticket = openReconciliationGate.postpone(libraryId);
+  if (ticket === undefined) return;
+  const previous = deferredOpenReconciliation.get(libraryId);
+  if (previous !== undefined) clearTimeout(previous);
+  deferredOpenReconciliation.delete(libraryId);
   void waitForStartupBurstDrain().then(() => {
-    if (libraryService.hasOpenLibrary(libraryId)) {
-      return libraryService.runOpenBackgroundReconciliation(libraryId);
-    }
-    return undefined;
+    if (!libraryService.hasOpenLibrary(libraryId) || backgroundWorkPaused) return;
+    const timer = setTimeout(() => {
+      deferredOpenReconciliation.delete(libraryId);
+      if (!libraryService.hasOpenLibrary(libraryId) || backgroundWorkPaused) return;
+      if (!openReconciliationGate.claim(libraryId, ticket)) return;
+      void libraryService.runOpenBackgroundReconciliation(libraryId);
+    }, STARTUP_MAINTENANCE_IDLE_MS);
+    timer.unref?.();
+    deferredOpenReconciliation.set(libraryId, timer);
   }).catch(() => {
-    // runOpenBackgroundReconciliation diagnoses internally; a gate failure
-    // must never surface as an unhandled rejection.
+    // Maintenance is best-effort and must not surface as an unhandled rejection.
   });
+}
+
+/** Run the open reconciliation only after the first foreground browse. */
+function scheduleOpenBackgroundReconciliation(libraryId: string): void {
+  openReconciliationGate.open(libraryId);
+  // Per-open-event gate: this runs synchronously inside library.open, before
+  // any post-open command can settle, so the reset is race-free for this open.
+  startupBrowseServed = false;
+  deferOpenBackgroundReconciliation(libraryId);
+}
+
+function setBackgroundWorkMode(mode: 'active' | 'paused'): void {
+  const paused = mode === 'paused';
+  if (backgroundWorkPaused === paused) return;
+  backgroundWorkPaused = paused;
+  process.stdout.write(`${JSON.stringify({
+    timestamp: new Date().toISOString(),
+    scope: 'worker.background-mode',
+    message: paused ? 'Paused non-interactive maintenance for tray standby.' : 'Resumed non-interactive maintenance after foreground grace.',
+    context: { mode, openLibraryCount: libraryService.openLibraryIds().length },
+  })}\n`);
+  libraryService.setBackgroundMaintenancePaused(paused);
+  if (paused) {
+    const queueLibraries = new Set([
+      ...activeThumbnailQueues,
+      ...activeThumbnailQueueControllers.keys(),
+      ...activeSecondaryMediaQueueControllers.keys(),
+      ...deferredStartupThumbnailQueues.keys(),
+      ...deferredStartupMaintenance.keys(),
+      ...deferredOpenReconciliation.keys(),
+    ]);
+    for (const libraryId of queueLibraries) stopAutomaticMediaQueues(libraryId);
+    return;
+  }
+
+  // Jobs remain durable in SQLite.  Re-enqueue only after Main's foreground
+  // grace period, so this never overtakes the browse request that woke us.
+  for (const libraryId of libraryService.openLibraryIds()) {
+    deferStartupThumbnailScene(libraryId);
+    deferOpenBackgroundReconciliation(libraryId);
+  }
 }
 
 /**
@@ -910,54 +960,40 @@ function deferStartupThumbnailScene(libraryId: string): void {
   const previous = deferredStartupThumbnailQueues.get(libraryId);
   if (previous !== undefined) clearTimeout(previous);
   startupThumbnailVisibleWindows.delete(libraryId);
+  const maintenanceTimer = deferredStartupMaintenance.get(libraryId);
+  if (maintenanceTimer !== undefined) clearTimeout(maintenanceTimer);
+  deferredStartupMaintenance.delete(libraryId);
 
-  // Super-140fe2 direction (user, 2026-08-22): thumbnails must be queued
-  // for the WHOLE library right after open, not lazily per viewport. The
-  // queue itself provides ordering — visible-window waves boost the current
-  // viewport above the low-priority backfill — so interactive activity no
-  // longer postpones the enqueue (it only ever postponed it forever during
-  // continuous browsing).
-  // Super-4bdd26 收编：大库上开壳可能比固定延迟更久，旧回填会在首个
-  // visible-window 到达前抢占解码器。每 250ms 轮询视口标记（最多 8s），
-  // 看到视口后再启动 startup 场景。
-  const waitDeadline = Date.now() + STARTUP_THUMBNAIL_MAX_VISIBLE_WAIT_MS;
-  const attempt = () => {
-    deferredStartupThumbnailQueues.delete(libraryId);
-    if (
-      !startupThumbnailVisibleWindows.has(libraryId)
-      && Date.now() < waitDeadline
-    ) {
-      deferredStartupThumbnailQueues.set(
-        libraryId,
-        setTimeout(attempt, STARTUP_THUMBNAIL_VISIBLE_WAIT_MS),
-      );
-      return;
-    }
-    // Super-2cc492（真实 NAS 生产库事故第二轮归因，2026-08-23）：startup
-    // 全量入队与处理本身就是一个持续数十秒的 Worker 风暴源（大库上 stale
-    // repair 扫描 + 每个失败任务一次 journal 写事务），与开库对账同样会饿死
-    // 渲染端首屏请求。因此 startup 场景与后台对账共用同一个 startup-burst
-    // 门闩：首屏浏览响应投递且在飞清零之前不入队不处理；15s 上限兜底。
-    void waitForStartupBurstDrain().then(() => {
-      if (libraryService.hasOpenLibrary(libraryId)) {
-        scheduleThumbnailScene(libraryId, 'startup');
-      }
-      return undefined;
-    }).catch(() => {
-      // Never let automatic media work surface as an unhandled rejection.
-    });
-  };
-
-  deferredStartupThumbnailQueues.set(
-    libraryId,
-    setTimeout(attempt, STARTUP_THUMBNAIL_DELAY_MS),
-  );
+  // Do not use a fixed timer before the first browse.  It is safe, and much
+  // more useful, to wait for a concrete foreground request than to make an
+  // unopened library perform a full catalogue scan in the background.
+  void waitForStartupBurstDrain().then(() => {
+    if (!libraryService.hasOpenLibrary(libraryId) || backgroundWorkPaused) return;
+    const timer = setTimeout(() => {
+      deferredStartupMaintenance.delete(libraryId);
+      if (!libraryService.hasOpenLibrary(libraryId) || backgroundWorkPaused) return;
+      // Startup only fills missing preview rows.  Full failed-artifact repair
+      // remains an explicit refresh operation, because its global joins are
+      // not safely pre-emptible on a 20k+ asset database.
+      scheduleThumbnailScene(libraryId, 'startup', undefined, undefined, { light: true });
+    }, STARTUP_MAINTENANCE_IDLE_MS);
+    timer.unref?.();
+    deferredStartupMaintenance.set(libraryId, timer);
+  }).catch(() => {
+    // Automatic maintenance must never surface as an unhandled rejection.
+  });
 }
 
 function cancelDeferredStartupThumbnailScene(libraryId: string): void {
   const timer = deferredStartupThumbnailQueues.get(libraryId);
   if (timer !== undefined) clearTimeout(timer);
   deferredStartupThumbnailQueues.delete(libraryId);
+  const maintenanceTimer = deferredStartupMaintenance.get(libraryId);
+  if (maintenanceTimer !== undefined) clearTimeout(maintenanceTimer);
+  deferredStartupMaintenance.delete(libraryId);
+  const reconciliationTimer = deferredOpenReconciliation.get(libraryId);
+  if (reconciliationTimer !== undefined) clearTimeout(reconciliationTimer);
+  deferredOpenReconciliation.delete(libraryId);
   startupThumbnailVisibleWindows.delete(libraryId);
   pendingVisibleThumbnailWaves.delete(libraryId);
 }
@@ -1164,8 +1200,11 @@ function scheduleThumbnailScene(
   scene: ThumbnailScheduleScene,
   assetIds?: string[],
   maxIdsOverride?: number,
-  options: { light?: boolean } = {},
+  options: { light?: boolean; fullRepair?: boolean } = {},
 ): void {
+  // Visible cards and folder covers are user-facing work and retain priority
+  // immediately after restore. Every other scene is background maintenance.
+  if (backgroundWorkPaused && scene !== 'visible' && scene !== 'cover') return;
   const configs: Record<ThumbnailScheduleScene, { limit?: number; priority: number; maxIds?: number; processMaxJobs?: number }> = {
     // Super-4bdd26 回归修正：processMaxJobs 1→2。用户报告 Windows 上缩略图
     // 生成巨慢——单任务在飞让 startup 波在慢盘/杀毒环境下串行拖到数十秒。
@@ -1194,18 +1233,26 @@ function scheduleThumbnailScene(
   };
   const config = configs[scene];
   const maxIds = maxIdsOverride ?? config.maxIds ?? 500;
+  // A selected viewport/cover/mutation must be a bounded point lookup.  The
+  // earlier shared defaults ran failed-artifact repair and retry scans even
+  // for a three-item folder-cover request, which synchronously walked the
+  // entire assets/artifacts/jobs tables before returning the folder response.
+  // A complete repair is deliberately opt-in. Several normal mutations use
+  // the refresh scene to find newly eligible preview rows; tying a full scan
+  // to that scene made a small ignore/rule edit monopolise a large database.
+  const runsGlobalRepair = options.fullRepair === true
+    && scene === 'refresh'
+    && assetIds === undefined
+    && !options.light;
   try {
     scheduleThumbnailQueue(libraryId, {
       ...(assetIds ? { assetIds: assetIds.slice(0, maxIds) } : {}),
       ...(config.limit === undefined ? {} : { limit: config.limit }),
       priority: config.priority,
       ...(config.processMaxJobs === undefined ? {} : { processMaxJobs: config.processMaxJobs }),
-      repairFailed: !options.light,
-      // Super-5xbg: every browse/refresh wave re-opens retryable failed
-      // artifacts (throttled) — generation failures are healed in the
-      // background whenever the asset surfaces, no periodic scan needed.
-      retryFailed: true,
-      ...(options.light ? { skipStaleRepair: true } : {}),
+      repairFailed: runsGlobalRepair,
+      retryFailed: runsGlobalRepair,
+      ...(runsGlobalRepair ? {} : { skipStaleRepair: true }),
     });
   } catch {
     // scheduleThumbnailQueue already wrote the complete diagnostic. Automatic
@@ -1818,6 +1865,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
       return { ok: true, type: 'library.opened', library };
     }
     case 'library.close':
+      openReconciliationGate.close(request.command.libraryId);
       cancelDeferredStartupThumbnailScene(request.command.libraryId);
       cancelMediaResourceRetry(request.command.libraryId);
       cancelVisibleWindowDimensionProbes(request.command.libraryId);
@@ -1832,6 +1880,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
       return { ok: true, type: 'library.renamed', library: renamed };
     }
     case 'library.delete-from-disk': {
+      openReconciliationGate.close(request.command.libraryId);
       cancelDeferredStartupThumbnailScene(request.command.libraryId);
       cancelMediaResourceRetry(request.command.libraryId);
       cancelVisibleWindowDimensionProbes(request.command.libraryId);
@@ -2293,7 +2342,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
       const refresh = libraryService.refreshManagedAssets(request.command.libraryId, {
         includeAssets: true,
       });
-      scheduleThumbnailScene(request.command.libraryId, 'refresh');
+      scheduleThumbnailScene(request.command.libraryId, 'refresh', undefined, undefined, { fullRepair: true });
       return {
         ok: true,
         type: 'asset.refreshed',
@@ -2525,6 +2574,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
         scopeMode: request.command.scopeMode ?? false,
         idsOnly: request.command.idsOnly ?? false,
         layoutOnly: request.command.layoutOnly ?? false,
+        deferTotal: request.command.deferTotal ?? false,
         showIgnored: request.command.showIgnored === true,
         limit: request.command.scopeMode ? null : (request.command.limit ?? 50),
         offset: request.command.scopeMode ? 0 : (request.command.offset ?? 0),
@@ -2534,6 +2584,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
         type: 'asset.search.result',
         items: result.items,
         total: result.total,
+        ...(result.totalIsExact === false ? { totalIsExact: false } : {}),
         offset: result.offset,
         snippets: result.snippets,
         ...(result.assetIds ? { assetIds: result.assetIds } : {}),
@@ -4277,6 +4328,10 @@ parentPort.on('message', async (event) => {
       clearInterval(processLifetime);
       return;
     }
+    if (control.type === 'worker.background-mode') {
+      setBackgroundWorkMode(control.mode);
+      return;
+    }
   } catch {
     // A normal request is not a control message; validate it below.
   }
@@ -4288,7 +4343,7 @@ parentPort.on('message', async (event) => {
   // command with event-loop wait (message → dispatch) and service time, so
   // browse-latency attribution can see what the single Worker thread was
   // doing while the renderer waited.
-  const cmdLogReceivedAt = WORKER_CMD_LOG ? performance.now() : 0;
+  const cmdLogReceivedAt = performance.now();
 
   let response: WorkerResponse;
   // Super-2cc492: track in-flight commands so the open-reconciliation gate
@@ -4317,8 +4372,18 @@ parentPort.on('message', async (event) => {
         );
       }
     }
+    if (isInteractiveBrowseCommand(request.command.type) && 'libraryId' in request.command) {
+      const libraryId = request.command.libraryId;
+      noteInteractiveMediaRequest(libraryId);
+      // A foreground browse is a hard priority boundary. Abort the current
+      // automatic decode wave now and defer its next maintenance slice; jobs
+      // are durable, so no work is lost and the browse request can use the
+      // Worker immediately after the current native operation returns.
+      activeThumbnailQueueControllers.get(libraryId)?.abort();
+      deferStartupThumbnailScene(libraryId);
+      deferOpenBackgroundReconciliation(libraryId);
+    }
     if (request.command.type === 'asset.search') {
-      noteInteractiveMediaRequest(request.command.libraryId);
       latestAssetSearchRequests.mark(
         request.command.libraryId,
         searchRequestLaneKey(request.command),
@@ -4327,15 +4392,15 @@ parentPort.on('message', async (event) => {
     } else if (request.command.type === 'asset.thumbnail.visible-window') {
       noteInteractiveMediaRequest(request.command.libraryId);
     }
-    if (!WORKER_CMD_LOG) {
-      response = { requestId: request.requestId, result: await handleRequest(request) };
-    } else {
+    {
       const dispatchStartedAt = performance.now();
       try {
         const result = await handleRequest(request);
         response = { requestId: request.requestId, result };
       } finally {
-        console.error(JSON.stringify({
+        const runMs = Math.round((performance.now() - dispatchStartedAt) * 100) / 100;
+        const queueMs = request.sentAt === undefined ? 0 : Math.max(0, callbackAt - request.sentAt);
+        if (WORKER_CMD_LOG || runMs >= 1_000 || queueMs >= 1_000) console.error(JSON.stringify({
           timestamp: new Date().toISOString(),
           scope: 'worker.cmd',
           requestId: request.requestId,
@@ -4346,7 +4411,7 @@ parentPort.on('message', async (event) => {
             ? undefined
             : Math.max(0, callbackAt - request.sentAt),
           waitMs: Math.round((dispatchStartedAt - cmdLogReceivedAt) * 100) / 100,
-          runMs: Math.round((performance.now() - dispatchStartedAt) * 100) / 100,
+          runMs,
         }));
       }
     }

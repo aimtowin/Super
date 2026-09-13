@@ -453,6 +453,37 @@ test("creates under the selected folder from the sidebar plus entry, cancels wit
     await expect(window.locator(".scope-crumb-label.is-current")).toHaveText(
       "父级",
     );
+
+    // A plain click (including the click emitted after an Electron title-bar
+    // drag) must preserve the selected folder. A deliberate double-click only
+    // changes the sidebar's create target to root; the active folder canvas
+    // stays in place.
+    const passiveToolbarSurface = window.locator(".scope-trace");
+    await passiveToolbarSurface.click({ position: { x: 200, y: 16 } });
+    await expect(window.locator(".scope-crumb-label.is-current")).toHaveText(
+      "父级",
+    );
+    await passiveToolbarSurface.dblclick({ position: { x: 200, y: 16 } });
+    await expect(window.locator(".scope-crumb-label.is-current")).toHaveText(
+      "父级",
+    );
+    await expect(
+      window.getByRole("button", { name: "资源库根目录" }),
+    ).toHaveClass(/is-active/);
+    await window.getByRole("button", { name: "添加文件夹" }).click();
+    const rootEditRow = window.locator(".nav-inline-edit");
+    await expect(rootEditRow).toBeVisible({ timeout: 5_000 });
+    await rootEditRow.locator("input").fill("根级");
+    await window.locator(".workspace").click();
+    await expect(sidebarFolderRow(window, "根级")).toBeVisible({ timeout: 10_000 });
+    expect(existsSync(path.join(libraryPath, "Assets", "根级"))).toBe(true);
+    expect(existsSync(path.join(libraryPath, "Assets", "父级", "根级"))).toBe(false);
+
+    // Re-select the parent for the existing nested-folder checks below.
+    await sidebarFolderRow(window, "父级").click();
+    await expect(window.locator(".scope-crumb-label.is-current")).toHaveText(
+      "父级",
+    );
     // Give the parent a disclosure control, then collapse it. Starting a
     // second create must reveal the inline row without losing the persisted
     // collapse preference when that create is cancelled.

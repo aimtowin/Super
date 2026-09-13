@@ -31,6 +31,8 @@ import type {
 
 export const SUPER_UPDATE_PUBLIC_ORIGIN = 'https://liuyangyang.me';
 export const SUPER_UPDATE_MANIFEST_URL =
+  `${SUPER_UPDATE_PUBLIC_ORIGIN}/downloads/super/latest.json`;
+const SUPER_LEGACY_UPDATE_MANIFEST_URL =
   `${SUPER_UPDATE_PUBLIC_ORIGIN}/api/super/updates/latest`;
 const SUPER_UPDATE_DOWNLOAD_PREFIX = '/downloads/super/';
 const MAX_RELEASE_NOTES_LENGTH = 12_000;
@@ -60,6 +62,7 @@ export type GitHubRelease = {
   releaseUrl: string;
   notes: string;
   assets: GitHubReleaseAsset[];
+  deltas: Array<{ fromVersion: string; asset: GitHubReleaseAsset }>;
 };
 
 export type SelectedUpdateAsset = {
@@ -105,7 +108,6 @@ export type AppUpdateServiceOptions = {
     installerPath: string,
     mode: 'interactive' | 'silent',
   ) => Promise<void>;
-  scheduleInstallerCleanup?: (installerPath: string) => void;
   onDownloadProgress?: (progress: AppUpdateProgress) => void;
   logger?: AppUpdateLogger;
 };
@@ -197,6 +199,70 @@ function parseReleaseAsset(input: unknown): GitHubReleaseAsset | undefined {
     : { name, browserDownloadUrl, size, digest };
 }
 
+function isSafeReleaseRelativePath(input: unknown): input is string {
+  if (typeof input !== 'string' || input.length === 0 || input.length > 1_024) return false;
+  if (input.includes('\\') || input.includes('?') || input.includes('#')) return false;
+  return input.split('/').every((part) => part !== '' && part !== '.' && part !== '..');
+}
+
+function parseNativeEcsAsset(input: unknown): GitHubReleaseAsset | undefined {
+  if (!isRecord(input)) return undefined;
+  const name = input.name;
+  const relativePath = input.path;
+  const size = input.size;
+  const sha256 = input.sha256;
+  if (
+    typeof name !== 'string'
+    || !SAFE_ASSET_NAME.test(name)
+    || !isSafeReleaseRelativePath(relativePath)
+    || typeof size !== 'number'
+    || !Number.isSafeInteger(size)
+    || size < 1
+    || size > MAX_DOWNLOAD_BYTES
+    || typeof sha256 !== 'string'
+    || !/^[a-f0-9]{64}$/iu.test(sha256)
+  ) {
+    return undefined;
+  }
+  const browserDownloadUrl = new URL(relativePath, `${SUPER_UPDATE_PUBLIC_ORIGIN}${SUPER_UPDATE_DOWNLOAD_PREFIX}`).toString();
+  if (!isSafeSuperUpdateUrl(browserDownloadUrl)) return undefined;
+  return {
+    name,
+    browserDownloadUrl,
+    size,
+    digest: sha256.toLowerCase(),
+  };
+}
+
+/** Parse Super's native ECS release document, including source-version deltas. */
+export function parseEcsUpdateRelease(input: unknown): GitHubRelease | undefined {
+  if (!isRecord(input)) return undefined;
+  const version = input.version;
+  const full = parseNativeEcsAsset(input.full);
+  if (typeof version !== 'string' || parseSemver(version) === undefined || full === undefined) {
+    return undefined;
+  }
+  const deltasInput = input.deltas;
+  if (deltasInput !== undefined && !Array.isArray(deltasInput)) return undefined;
+  const deltas = (deltasInput ?? []).flatMap((candidate) => {
+    if (!isRecord(candidate) || typeof candidate.fromVersion !== 'string') return [];
+    if (parseSemver(candidate.fromVersion) === undefined || candidate.fromVersion === version) return [];
+    const asset = parseNativeEcsAsset(candidate.asset);
+    return asset === undefined ? [] : [{ fromVersion: candidate.fromVersion, asset }];
+  });
+  const notes = typeof input.notes === 'string'
+    ? input.notes.slice(0, MAX_RELEASE_NOTES_LENGTH)
+    : '';
+  return {
+    tagName: `v${version}`,
+    version,
+    releaseUrl: `${SUPER_UPDATE_PUBLIC_ORIGIN}${SUPER_UPDATE_DOWNLOAD_PREFIX}`,
+    notes,
+    assets: [full],
+    deltas,
+  };
+}
+
 /** Parse the small, stable subset of the ECS update feed consumed by Super. */
 export function parseGitHubRelease(input: unknown): GitHubRelease | undefined {
   if (!isRecord(input)) return undefined;
@@ -228,7 +294,34 @@ export function parseGitHubRelease(input: unknown): GitHubRelease | undefined {
     releaseUrl,
     notes,
     assets,
+    deltas: [],
   };
+}
+
+export function parseUpdateRelease(input: unknown): GitHubRelease | undefined {
+  return parseEcsUpdateRelease(input) ?? parseGitHubRelease(input);
+}
+
+async function fetchLatestUpdateRelease(
+  fetchImpl: AppUpdateFetch,
+  options: AppUpdateServiceOptions,
+): Promise<GitHubRelease | undefined> {
+  // ECS publishes the native manifest atomically at this static URL. Keep the
+  // legacy API as a fallback for installations behind an older server config.
+  for (const url of [SUPER_UPDATE_MANIFEST_URL, SUPER_LEGACY_UPDATE_MANIFEST_URL]) {
+    try {
+      const response = await fetchImpl(url, {
+        headers: superUpdateRequestHeaders(options, 'application/json'),
+      });
+      if (!response.ok) continue;
+      const release = parseUpdateRelease(await response.json());
+      if (release !== undefined) return release;
+    } catch {
+      // A proxy can serve a stale non-JSON payload at the static path. The
+      // verified legacy endpoint below remains a safe compatibility fallback.
+    }
+  }
+  return undefined;
 }
 
 export function parseSha256(text: string): string | undefined {
@@ -337,7 +430,17 @@ export function updateAssetName(
 export function selectUpdateAsset(
   release: GitHubRelease,
   target: AppUpdateTarget,
+  currentVersion?: string,
 ): SelectedUpdateAsset | undefined {
+  const normalizedCurrentVersion = currentVersion === undefined
+    ? undefined
+    : stripVersionPrefix(currentVersion);
+  if (target.platform === 'win32' && target.distribution === 'installed' && normalizedCurrentVersion !== undefined) {
+    const delta = release.deltas.find((candidate) => candidate.fromVersion === normalizedCurrentVersion);
+    if (delta !== undefined) {
+      return { asset: delta.asset, assetKind: 'delta-installer' };
+    }
+  }
   const expected = updateAssetName(release.version, target);
   const asset = release.assets.find((candidate) => candidate.name === expected.name);
   if (asset === undefined) return undefined;
@@ -623,6 +726,7 @@ export class AppUpdateService {
   readonly #fetch: AppUpdateFetch;
   #cachedUpdate: CachedUpdate | undefined;
   #preparedInstaller: PreparedInstaller | undefined;
+  #lastAttemptedUpdate: CachedUpdate | undefined;
   #busy = false;
   #downloadAbort: AbortController | undefined;
 
@@ -710,17 +814,14 @@ export class AppUpdateService {
     if (currentVersion === undefined) return resultError('invalid-release');
 
     try {
-      const response = await this.#fetch(SUPER_UPDATE_MANIFEST_URL, {
-        headers: superUpdateRequestHeaders(this.#options, 'application/json'),
-      });
-      if (!response.ok) {
+      const release = await fetchLatestUpdateRelease(this.#fetch, this.#options);
+      if (release === undefined) {
         this.#options.logger?.info('app-update.check', 'Super ECS update manifest request failed.', {
-          status: response.status,
+          nativeManifest: SUPER_UPDATE_MANIFEST_URL,
+          legacyManifest: SUPER_LEGACY_UPDATE_MANIFEST_URL,
         });
         return resultError('network');
       }
-      const release = parseGitHubRelease(await response.json());
-      if (release === undefined) return resultError('invalid-release');
       const latestVersion = parseVersionForComparison(release.version);
       if (latestVersion === undefined) return resultError('invalid-release');
       if (compareSemver(latestVersion, currentVersion) <= 0) {
@@ -733,7 +834,7 @@ export class AppUpdateService {
           distribution,
         };
       }
-      const selected = selectUpdateAsset(release, target);
+      const selected = selectUpdateAsset(release, target, this.#options.currentVersion);
       if (selected === undefined) {
         this.#options.logger?.info('app-update.check', 'Latest release has no compatible verified asset.', {
           version: release.version,
@@ -763,9 +864,36 @@ export class AppUpdateService {
 
   /** Download and verify the latest update without replacing the running app. */
   async prepareUpdate(): Promise<AppUpdateInstallResult> {
+    const result = await this.#prepareUpdateOnce();
+    const attempted = this.#lastAttemptedUpdate;
+    if (
+      result.ok
+      || result.code === 'cancelled'
+      || attempted?.selected.assetKind !== 'delta-installer'
+    ) {
+      return result;
+    }
+
+    // Deltas are an optimization, never a prerequisite for a safe update.
+    // A failed archive/checksum/extraction retries the full, independently
+    // verified installer within the same user-approved update action.
+    const full = selectUpdateAsset(attempted.release, attempted.target);
+    if (full === undefined || full.assetKind !== 'installer') return result;
+    this.#cachedUpdate = { ...attempted, selected: full };
+    this.#options.logger?.info('app-update.delta', 'Delta update failed; retrying the full installer.', {
+      version: attempted.release.version,
+      deltaAsset: attempted.selected.asset.name,
+      fullAsset: full.asset.name,
+      failure: result.code,
+    });
+    return this.#prepareUpdateOnce();
+  }
+
+  async #prepareUpdateOnce(): Promise<AppUpdateInstallResult> {
     if (this.#busy) return installResultError('busy');
     await this.discardPreparedUpdate();
     this.#busy = true;
+    this.#lastAttemptedUpdate = undefined;
     this.#downloadAbort = new AbortController();
     const { signal } = this.#downloadAbort;
     let downloadPath: string | undefined;
@@ -776,6 +904,7 @@ export class AppUpdateService {
       const checked = cached === undefined ? await this.checkForUpdates() : undefined;
       const update = cached ?? (checked?.status === 'available' ? this.#cachedUpdate : undefined);
       if (update === undefined) return installResultError('not-available');
+      this.#lastAttemptedUpdate = update;
 
       const { asset, checksumAsset } = update.selected;
       validateDownloadUrl(asset.browserDownloadUrl);
@@ -1042,9 +1171,7 @@ export class AppUpdateService {
         }
       }
       this.#preparedInstaller = undefined;
-      if (prepared.platform === 'win32' && this.#options.scheduleInstallerCleanup !== undefined) {
-        this.#options.scheduleInstallerCleanup(prepared.installerPath);
-      } else {
+      if (prepared.platform !== 'win32') {
         await removeUpdateArtifact(prepared.cleanupPath);
       }
       this.#options.logger?.info('app-update.install', 'Update installer opened.', {

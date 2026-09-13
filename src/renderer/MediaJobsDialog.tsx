@@ -179,7 +179,7 @@ export function MediaJobsDialog({
                         gap: 8,
                         gridTemplateColumns:
                           "minmax(0, 1.4fr) minmax(0, 1.2fr) 90px minmax(0, 2fr)",
-                        fontSize: 11,
+                        fontSize: "calc(11px * var(--app-font-scale))",
                       }}
                     >
                       <MediaJobAssetLabel
@@ -243,7 +243,7 @@ export function MediaJobsDialog({
                           gap: 8,
                           gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) auto",
                           alignItems: "center",
-                          fontSize: 11,
+                          fontSize: "calc(11px * var(--app-font-scale))",
                         }}
                       >
                         <strong className="media-jobs-grid-cell">{job.folderName}</strong>
@@ -297,7 +297,7 @@ export function MediaJobsDialog({
                       style={{
                         display: "grid", gap: 8,
                         gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) auto",
-                        alignItems: "center", fontSize: 11,
+                        alignItems: "center", fontSize: "calc(11px * var(--app-font-scale))",
                       }}
                     >
                       <strong className="media-jobs-grid-cell">{job.folderName}</strong>
@@ -430,7 +430,7 @@ export function MediaJobsDialog({
                           gap: 8,
                           gridTemplateColumns:
                             "minmax(0, 1.4fr) minmax(0, 1.2fr) 90px minmax(0, 2fr)",
-                          fontSize: 11,
+                          fontSize: "calc(11px * var(--app-font-scale))",
                         }}
                       >
                         <MediaJobAssetLabel
@@ -494,7 +494,7 @@ export function MediaJobsDialog({
                               gap: 8,
                               gridTemplateColumns:
                                 "minmax(160px, 1.4fr) minmax(90px, 0.8fr) 90px minmax(140px, 1.4fr)",
-                              fontSize: 11,
+                              fontSize: "calc(11px * var(--app-font-scale))",
                             }}
                           >
                             <span title={job.ownerPluginId}>

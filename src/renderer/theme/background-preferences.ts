@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 /** Versioned renderer-owned persistence key for the application backdrop. */
-export const BACKGROUND_PREFERENCES_VERSION = 3 as const;
-export const BACKGROUND_PREFERENCES_KEY = 'superApi.background-preferences.v3';
+export const BACKGROUND_PREFERENCES_VERSION = 4 as const;
+export const BACKGROUND_PREFERENCES_KEY = 'superApi.background-preferences.v4';
 /**
  * Legacy persisted keys. v1 stored images without metadata and rejected user
  * files above ~3 MB; v2 added auto-compression and image provenance, kept a
@@ -11,9 +11,19 @@ export const BACKGROUND_PREFERENCES_KEY = 'superApi.background-preferences.v3';
  * slider (inverted semantics), and replaces `cover` with `fill`.
  */
 export const BACKGROUND_PREFERENCES_LEGACY_KEYS = [
+  'superApi.background-preferences.v3',
   'superApi.background-preferences.v2',
   'superApi.background-preferences.v1',
 ] as const;
+
+/** `default` is bundled with the app; `custom` stays local to the user. */
+export const BACKGROUND_IMAGE_KINDS = ['default', 'custom', 'none'] as const;
+export type BackgroundImageKind = (typeof BACKGROUND_IMAGE_KINDS)[number];
+
+export const DEFAULT_BACKGROUND_IMAGE_URL = new URL(
+  './assets/default-wallpaper.png',
+  import.meta.url,
+).href;
 
 /**
  * Keep image data below the practical localStorage quota. This is the size of
@@ -50,10 +60,11 @@ const DATA_URL_PATTERN = /^data:([^;,\s]+);base64,([a-z0-9+/]*={0,2})$/iu;
 
 const defaultPreferences = (): BackgroundPreferences => ({
   version: BACKGROUND_PREFERENCES_VERSION,
+  imageKind: 'default',
   imageDataUrl: null,
   imageSource: null,
   mode: 'cover',
-  imageOpacity: 0.8,
+  imageOpacity: 0.32,
 });
 
 export const DEFAULT_BACKGROUND_PREFERENCES: BackgroundPreferences =
@@ -115,9 +126,11 @@ export type BackgroundImageSource = z.infer<
 >;
 
 export const backgroundDisplayModeSchema = z.enum(BACKGROUND_DISPLAY_MODES);
+export const backgroundImageKindSchema = z.enum(BACKGROUND_IMAGE_KINDS);
 
 export const backgroundPreferencesSchema = z.strictObject({
   version: z.literal(BACKGROUND_PREFERENCES_VERSION),
+  imageKind: backgroundImageKindSchema,
   imageDataUrl: backgroundImageDataUrlSchema.nullable(),
   imageSource: backgroundImageSourceSchema.nullable(),
   mode: backgroundDisplayModeSchema,
@@ -127,6 +140,18 @@ export const backgroundPreferencesSchema = z.strictObject({
 export type BackgroundPreferences = z.infer<
   typeof backgroundPreferencesSchema
 >;
+
+function normalizeBackgroundImageKind(
+  value: unknown,
+  imageDataUrl: string | null,
+): BackgroundImageKind {
+  if (backgroundImageKindSchema.safeParse(value).success) {
+    if (value === 'custom' && imageDataUrl === null) return 'none';
+    return value as BackgroundImageKind;
+  }
+  // v1–v3 had no kind. Preserve a user's custom image and old empty state.
+  return imageDataUrl === null ? 'none' : 'custom';
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -191,10 +216,19 @@ export function normalizeBackgroundPreferences(
   value: unknown,
 ): BackgroundPreferences {
   const record = isRecord(value) ? value : {};
+  const imageDataUrl = normalizeBackgroundImageDataUrl(record.imageDataUrl);
+  const imageKind = normalizeBackgroundImageKind(
+    record.imageKind,
+    imageDataUrl,
+  );
   const normalized: BackgroundPreferences = {
     version: BACKGROUND_PREFERENCES_VERSION,
-    imageDataUrl: normalizeBackgroundImageDataUrl(record.imageDataUrl),
-    imageSource: normalizeBackgroundImageSource(record.imageSource),
+    imageKind,
+    imageDataUrl: imageKind === 'custom' ? imageDataUrl : null,
+    imageSource:
+      imageKind === 'custom'
+        ? normalizeBackgroundImageSource(record.imageSource)
+        : null,
     mode: normalizeBackgroundDisplayMode(record.mode),
     imageOpacity: normalizeBackgroundImageOpacity(
       record.imageOpacity,
@@ -308,9 +342,15 @@ export function applyBackgroundPreferences(
   // The background color is gone in v3; let the token default (surface canvas)
   // own the variable so a stale v2 inline value cannot leak through.
   root.style.removeProperty('--ui-background-color');
+  const imageUrl =
+    normalized.imageKind === 'default'
+      ? DEFAULT_BACKGROUND_IMAGE_URL
+      : normalized.imageKind === 'custom'
+        ? normalized.imageDataUrl
+        : null;
   root.style.setProperty(
     '--ui-background-image',
-    normalized.imageDataUrl === null ? 'none' : `url(${normalized.imageDataUrl})`,
+    imageUrl === null ? 'none' : `url(${imageUrl})`,
   );
   root.style.setProperty(
     '--ui-background-image-opacity',
@@ -322,12 +362,15 @@ export function applyBackgroundPreferences(
   // Without one, surfaces stay fully opaque for the solid layout.
   root.style.setProperty(
     '--ui-background-surface-opacity',
-    normalized.imageDataUrl === null ? '100%' : '0%',
+    imageUrl === null ? '100%' : '0%',
   );
   root.style.setProperty(
     '--ui-background-size',
     normalized.mode === 'tile' ? 'auto' : normalized.mode === 'fill' ? '100% 100%' : 'cover',
   );
-  root.style.setProperty('--ui-background-position', 'center');
+  root.style.setProperty(
+    '--ui-background-position',
+    normalized.imageKind === 'default' ? 'center 38%' : 'center',
+  );
   root.style.setProperty('--ui-background-repeat', normalized.mode === 'tile' ? 'repeat' : 'no-repeat');
 }

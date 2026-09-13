@@ -1448,6 +1448,39 @@ describe('smart collections', () => {
     service.closeAll();
   });
 
+  it('reuses smart collection counts until a library mutation advances the sequence', () => {
+    const { service, libraryId, assetId } = createLibraryWithAsset();
+    const smart = service.createSmartCollection({
+      libraryId,
+      name: 'Favorites',
+      queryDefinitionJson: JSON.stringify({
+        filters: [{ field: 'favorite', values: [], exclude: false }],
+      }),
+    });
+    const first = service.listSmartCollections(libraryId);
+    const openById = (service as unknown as {
+      openById: Map<string, {
+        smartCollectionCountCache?: { changeSequence: number; counts: Map<string, number> };
+      }>;
+    }).openById;
+    const firstCache = openById.get(libraryId)?.smartCollectionCountCache;
+    expect(first[0]?.assetCount).toBe(0);
+    expect(firstCache?.counts.get(smart.collectionId)).toBe(0);
+
+    service.listSmartCollections(libraryId);
+    expect(openById.get(libraryId)?.smartCollectionCountCache).toBe(firstCache);
+
+    service.setAssetMetadata({
+      libraryId,
+      assetId,
+      expectedVersion: 0,
+      favorite: true,
+    });
+    expect(service.listSmartCollections(libraryId)[0]?.assetCount).toBe(1);
+    expect(openById.get(libraryId)?.smartCollectionCountCache).not.toBe(firstCache);
+    service.closeAll();
+  });
+
   it('creates and lists smart collections', () => {
     const { service, libraryId } = createLibraryWithAsset();
 

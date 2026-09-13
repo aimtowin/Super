@@ -122,7 +122,11 @@ describe("fetchBrowseLayout (Super-sa65 compact geometry index)", () => {
       executeSmartCollection: vi.fn(),
     } as unknown as SuperLibraryApi;
 
-    expect(await fetchBrowseLayout({ api, definition: searchDefinition })).toEqual(layout);
+    expect(await fetchBrowseLayout({ api, definition: searchDefinition })).toEqual({
+      layout,
+      total: 1,
+      offset: 0,
+    });
     expect(searchAssets).toHaveBeenCalledWith(
       expect.objectContaining({ libraryId: "lib-1", layoutOnly: true }),
     );
@@ -143,10 +147,10 @@ describe("fetchBrowseLayout (Super-sa65 compact geometry index)", () => {
 });
 
 describe("browse tail sentinel (Super-performance)", () => {
-  it("waits for compact layout hydration before starting a tail query", () => {
+  it("uses the tail sentinel to continue progressive layout hydration", () => {
     expect(
       shouldRunBrowseSentinel({ layoutHydrationComplete: false, total: 20_000 }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldRunBrowseSentinel({ layoutHydrationComplete: true, total: 20_000 }),
     ).toBe(true);

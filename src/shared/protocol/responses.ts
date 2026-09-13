@@ -7,6 +7,7 @@ import { publicErrorReasonSchema, publicErrorSchema } from './errors';
 import { CONTENT_REPLACE_MAX_BASE64_LENGTH } from '../content-replace';
 import { fbxConvertErrorCodeSchema, fbxConversionStatsSchema } from '../fbx-conversion';
 import {
+  WORKER_BACKGROUND_MODE_MESSAGE_TYPE,
   WORKER_READY_MESSAGE_TYPE,
   WORKER_SHUTDOWN_ACK_MESSAGE_TYPE,
   WORKER_SHUTDOWN_MESSAGE_TYPE,
@@ -84,6 +85,10 @@ export function parseWorkerReadyMessage(input: unknown): WorkerReadyMessage {
 export const workerControlMessageSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal(WORKER_SHUTDOWN_MESSAGE_TYPE) }),
   z.strictObject({ type: z.literal(WORKER_SHUTDOWN_ACK_MESSAGE_TYPE) }),
+  z.strictObject({
+    type: z.literal(WORKER_BACKGROUND_MODE_MESSAGE_TYPE),
+    mode: z.enum(['active', 'paused']),
+  }),
 ]);
 
 export type WorkerControlMessage = z.infer<typeof workerControlMessageSchema>;
@@ -1150,6 +1155,8 @@ const assetOperationSuccessSchemas = [
     type: z.literal('asset.search.result'),
     items: z.array(assetSummarySchema),
     total: z.number().int().nonnegative(),
+    /** False only when this response intentionally carries a lower bound. */
+    totalIsExact: z.boolean().optional(),
     offset: z.number().int().nonnegative(),
     snippets: z.array(
       z.strictObject({

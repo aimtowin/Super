@@ -60,6 +60,9 @@ export const APPLICATION_MENU_ITEM_STATE_CHANNEL =
 export const NATIVE_EDIT_COPY_CHANNEL = 'super:shell:native-edit-copy' as const;
 export const WINDOW_MAXIMIZED_CHANNEL =
   'super:shell:window-maximized' as const;
+/** Main → Renderer: the user has begun a native BrowserWindow move. */
+export const WINDOW_MOVE_STARTED_CHANNEL =
+  'super:shell:window-move-started' as const;
 /** Main → Renderer: BrowserWindow focus state (macOS traffic lights / shell chrome). */
 export const WINDOW_FOCUS_CHANNEL = 'super:shell:window-focus' as const;
 /** Renderer → Main: enable Main before-input capture for video letter keys. */
@@ -124,3 +127,5 @@ export const OFFSCREEN_THUMBNAIL_FRAME_CHANNEL =
 export const WORKER_READY_MESSAGE_TYPE = 'worker.ready' as const;
 export const WORKER_SHUTDOWN_MESSAGE_TYPE = 'worker.shutdown' as const;
 export const WORKER_SHUTDOWN_ACK_MESSAGE_TYPE = 'worker.shutdown.ack' as const;
+/** Main tells the long-lived Worker whether the application is in tray standby. */
+export const WORKER_BACKGROUND_MODE_MESSAGE_TYPE = 'worker.background-mode' as const;

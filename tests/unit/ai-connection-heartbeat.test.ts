@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   AI_CONNECTION_HEARTBEAT_MS,
+  AI_CONNECTION_HEARTBEAT_MAX_MS,
+  aiConnectionHeartbeatDelay,
   aiAnalyzeConnectionReady,
   aiAnalyzeShowsDisconnectGlyph,
   shouldRunAiConnectionHeartbeat,
@@ -12,9 +14,17 @@ describe("ai-connection-heartbeat (Super-rsbt)", () => {
     expect(AI_CONNECTION_HEARTBEAT_MS).toBe(60_000);
   });
 
-  it("runs heartbeat only when a stored key exists", () => {
+  it("runs heartbeat only while a stored key exists and the window is visible", () => {
     expect(shouldRunAiConnectionHeartbeat(true)).toBe(true);
     expect(shouldRunAiConnectionHeartbeat(false)).toBe(false);
+    expect(shouldRunAiConnectionHeartbeat(true, true)).toBe(false);
+  });
+
+  it("backs off repeated failed probes without stopping recovery checks", () => {
+    expect(aiConnectionHeartbeatDelay(0)).toBe(AI_CONNECTION_HEARTBEAT_MS);
+    expect(aiConnectionHeartbeatDelay(1)).toBe(120_000);
+    expect(aiConnectionHeartbeatDelay(2)).toBe(240_000);
+    expect(aiConnectionHeartbeatDelay(99)).toBe(AI_CONNECTION_HEARTBEAT_MAX_MS);
   });
 
   it("shows the disconnect glyph when unavailable", () => {

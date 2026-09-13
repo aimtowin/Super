@@ -9,7 +9,7 @@
  *   SUPER_UPDATE_SSH_PORT      SSH port (default: 22)
  *   SUPER_UPDATE_SSH_IDENTITY_FILE  explicit PEM/private-key path
  *   SUPER_UPDATE_REMOTE_DIR    ECS update volume (default: /www/wwwroot/resource/data/super-updates)
- *   SUPER_UPDATE_RETAIN_RELEASES  Number of newest release directories to retain (default: 5)
+ *   SUPER_UPDATE_RETAIN_RELEASES  Number of newest complete release directories to retain (1-5; default: 5)
  *   SUPER_UPDATE_NOTES         bounded release notes shown in Super
  *
  * The server image serves `latest.json` and `releases/<version>/...` from
@@ -22,6 +22,12 @@ import { createReadStream } from 'node:fs';
 import { access, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import {
+  DELTA_SOURCE_RETENTION,
+  FULL_RELEASE_RETENTION,
+  compareReleaseVersions,
+} from './update-retention-policy.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const defaultRemoteDirectory = '/www/wwwroot/resource/data/super-updates';
@@ -79,8 +85,8 @@ function parsePort(value) {
 }
 
 function parseReleaseRetention(value) {
-  if (value === undefined || value.trim() === '') return 5;
-  if (!/^[1-9]\d?$/u.test(value.trim())) fail('SUPER_UPDATE_RETAIN_RELEASES must be an integer from 1 to 99.');
+  if (value === undefined || value.trim() === '') return FULL_RELEASE_RETENTION;
+  if (!/^[1-5]$/u.test(value.trim())) fail(`SUPER_UPDATE_RETAIN_RELEASES must be an integer from 1 to ${FULL_RELEASE_RETENTION}.`);
   return Number(value.trim());
 }
 
@@ -116,7 +122,10 @@ async function loadDeltaArtifacts(version) {
   }
   const versions = new Set(deltas.map((delta) => delta.fromVersion));
   if (versions.size !== deltas.length) fail('Duplicate delta source versions.');
-  return deltas;
+  if (deltas.length > DELTA_SOURCE_RETENTION) {
+    fail(`At most ${DELTA_SOURCE_RETENTION} direct delta packages may be published for one release.`);
+  }
+  return deltas.sort((left, right) => compareReleaseVersions(right.fromVersion, left.fromVersion) ?? 0);
 }
 
 async function main() {
@@ -161,7 +170,7 @@ async function main() {
     deltas: deltas.map((delta) => ({
       fromVersion: delta.fromVersion,
       asset: {
-        name: zipName,
+        name: delta.remoteName,
         path: `releases/${version}/${delta.remoteName}`,
         size: delta.size,
         sha256: delta.sha256,

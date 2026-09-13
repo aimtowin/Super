@@ -41,6 +41,11 @@ import {
   ThemeProfilePicker,
 } from "./theme/ThemeAppearanceControls";
 import { ThemeColorSettings } from "./theme/ThemeColorSettings";
+import { useTheme } from "./theme/ThemeProvider";
+import {
+  APP_FONT_SIZE_LEVELS,
+  clampAppFontSizeLevel,
+} from "./theme/font-size-preferences";
 
 const SHADOW_LEVEL_TICKS = [0, 1, 2, 3] as const;
 const MENU_ACRYLIC_LEVEL_TICKS = [0, 1, 2, 3] as const;
@@ -269,6 +274,7 @@ export function AssetsSettingsPage({
 
 export function AppearanceSettingsPage(): ReactNode {
   const t = useT();
+  const { fontSizeLevel, setFontSizeLevel } = useTheme();
   const { preferences: shadowPrefs, setLevel: setShadowLevel } = useElevation();
   const { preferences: menuAcrylicPrefs, setLevel: setMenuAcrylicLevel } =
     useMenuAcrylic();
@@ -296,6 +302,46 @@ export function AppearanceSettingsPage(): ReactNode {
       >
         <BackgroundSettings />
       </SettingsDisclosure>
+      <div className="app-settings-card-divider" />
+      <div className="app-settings-row-copy">
+        <strong>{t("settings.appFontSizeSection")}</strong>
+        <span>{t("settings.appFontSizeHint")}</span>
+      </div>
+      <div className="app-settings-elevation-scale app-settings-font-size-scale">
+        <div className="app-settings-elevation-rail">
+          <Slider
+            aria-label={t("settings.appFontSizeSection")}
+            aria-valuetext={t(`settings.appFontSizeLevel${fontSizeLevel}` as const)}
+            className="app-settings-elevation-slider"
+            max={4}
+            min={1}
+            onValueChange={(value) =>
+              setFontSizeLevel(clampAppFontSizeLevel(value))
+            }
+            step={1}
+            value={fontSizeLevel}
+          />
+          <div aria-hidden="true" className="app-settings-elevation-ticks">
+            {APP_FONT_SIZE_LEVELS.map((level) => (
+              <button
+                className={
+                  fontSizeLevel === level
+                    ? "app-settings-elevation-tick is-active"
+                    : "app-settings-elevation-tick"
+                }
+                key={level}
+                onClick={() => setFontSizeLevel(level)}
+                type="button"
+              >
+                <span className="app-settings-elevation-tick-mark" />
+                <span className="app-settings-elevation-tick-label">
+                  {level}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
       <div className="app-settings-card-divider" />
       <div className="app-settings-row-copy">
         <strong>{t("settings.elevationSection")}</strong>

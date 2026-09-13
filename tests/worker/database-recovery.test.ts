@@ -299,7 +299,14 @@ describe('database damage recovery (Super-dw9a)', () => {
     const managedPath = path.join(library.libraryPath, 'Assets', 'probe.jpg');
 
     rmSync(managedPath);
-    service.refreshManagedAssets(library.libraryId, { includeAssets: true });
+    // Confirmed managed-file deletions now remove their asset row instead of
+    // keeping a broken placeholder. Model the legacy/interrupted missing-row
+    // state directly so this probe test remains focused on known candidates.
+    const database = new Database(databasePath(library.libraryPath));
+    database.prepare(
+      "UPDATE assets SET availability = 'missing', updated_at = ? WHERE asset_id = ?",
+    ).run(new Date().toISOString(), asset.assetId);
+    database.close();
     writeFileSync(managedPath, 'known bytes');
     expect(service.probeMissingAssetRecovery({
       libraryId: library.libraryId,

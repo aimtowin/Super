@@ -26,8 +26,8 @@ describe('requestTimeoutForCommand', () => {
     expect(requestTimeoutForCommand('extension.save-from-url')).toBe(5 * 60_000);
   });
 
-  it('keeps ordinary requests on the short timeout', () => {
-    expect(requestTimeoutForCommand('asset.list')).toBe(15_000);
+  it('keeps ordinary non-browse requests on the short timeout', () => {
+    expect(requestTimeoutForCommand('asset.list')).toBe(60_000);
   });
 
   it('waits for an explicit media cancellation behind a large decode wave', () => {
@@ -36,6 +36,8 @@ describe('requestTimeoutForCommand', () => {
 
   it('gives large-library reads room to finish after queued work', () => {
     expect(requestTimeoutForCommand('asset.search')).toBe(60_000);
+    expect(requestTimeoutForCommand('folder.browse-entries')).toBe(60_000);
+    expect(requestTimeoutForCommand('collection.assets.list')).toBe(60_000);
     expect(requestTimeoutForCommand('media.get-asset-drag-infos')).toBe(60_000);
   });
 
@@ -160,6 +162,14 @@ describe('requestTimeoutForCommand', () => {
       });
       await vi.advanceTimersByTimeAsync(15_000);
       await pendingRejection;
+      const requestId = child.postMessage.mock.calls.at(-1)![0].requestId;
+      expect(logger.info).toHaveBeenCalledWith('worker.request.timeout', expect.any(String),
+        expect.objectContaining({ requestId, commandType: 'library.close', totalMs: 15_000 }));
+      await vi.advanceTimersByTimeAsync(2_000);
+      child.emit('message', { requestId, result: { ok: true, type: 'library.closed', libraryId: 'library-1' } });
+      expect(logger.info).toHaveBeenCalledWith('worker.response.late', expect.any(String),
+        expect.objectContaining({ requestId, commandType: 'library.close', totalMs: 17_000 }));
+      expect(child.kill).not.toHaveBeenCalled();
 
       const shutdown = client.shutdown();
       child.emit('message', { type: 'worker.shutdown.ack' });

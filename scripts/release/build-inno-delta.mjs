@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createWriteStream, existsSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const { ZipArchive } = require('archiver');
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const silentUpdateUiPath = path.join(repoRoot, 'assets', 'inno', 'silent-update-ui.iss');
 const semver = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u;
 
 function fail(message) { throw new Error(`[build-inno-delta] ${message}`); }
@@ -84,22 +85,33 @@ CloseApplications=force
 UsePreviousAppDir=yes
 DisableDirPage=yes
 DisableProgramGroupPage=yes
+DisableWelcomePage=yes
+DisableReadyPage=yes
 Uninstallable=no
 CreateUninstallRegKey=no
 [Files]
 ${fileLines.join('\n')}
 [Code]
+#include "${escaped(silentUpdateUiPath)}"
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssInstall then
   begin
 ${deleteLines.length ? deleteLines.join('\n') : '    { No obsolete packaged files in this delta. }'}
+    ShowSilentUpdateProgress();
   end;
   if CurStep = ssPostInstall then
+  begin
     SaveStringToFile(ExpandConstant('{app}\\.super-installed'), 'installed', False);
+    ShowSilentUpdateCompletion();
+  end;
 end;
-[Run]
-Filename: "{app}\\{#AppExeName}"; Parameters: "--updated"; Flags: nowait runasoriginaluser skipifdoesntexist skipifnotsilent
+
+procedure CurInstallProgressChanged(CurProgress, MaxProgress: Integer);
+begin
+  UpdateSilentUpdateProgress(CurProgress, MaxProgress);
+end;
 `;
 }
 
@@ -118,6 +130,7 @@ async function main() {
   const toVersion = argument('--to-version');
   const baselinePath = argument('--baseline');
   const packageDirectory = argument('--package-dir') ?? path.join(repoRoot, 'out', 'Super-win32-x64');
+  const outputDirectory = argument('--output-dir') ?? path.join(repoRoot, 'out', 'make', 'delta');
   if (!fromVersion || !toVersion || !baselinePath || !semver.test(fromVersion) || !semver.test(toVersion)) fail('from/to versions and baseline are required semantic versions.');
   const baseline = loadBaseline(path.resolve(baselinePath), fromVersion);
   const current = await collect(path.resolve(packageDirectory));
@@ -131,7 +144,7 @@ async function main() {
   if (changed.length === 0) fail('No changed packaged files; refusing to create an empty delta.');
   const currentPaths = new Set(current.map((file) => file.path));
   const removed = [...baseline.files.keys()].filter((file) => !currentPaths.has(file));
-  const deltaRoot = path.join(repoRoot, 'out', 'make', 'delta');
+  const deltaRoot = path.resolve(outputDirectory);
   await mkdir(deltaRoot, { recursive: true });
   const stem = `Super-win-x86-64-${fromVersion}-to-${toVersion}-delta`;
   const issPath = path.join(deltaRoot, `${stem}.iss`);

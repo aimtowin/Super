@@ -1520,6 +1520,52 @@ describe('sort', () => {
 // ── Pagination ──────────────────────────────────────────────────────
 
 describe('pagination', () => {
+  it('returns a lower-bound total for a deferred folder first page, then an exact layout total', () => {
+    const { service, libraryId, libraryPath } = createLibraryWithAssetAndTags();
+    void createSecondAsset(service, libraryId, libraryPath, 'Second');
+    const folderId = service.listManagedFolders(libraryId)[0]!.folderId;
+    const scope = { kind: 'folder' as const, folderId, recursive: false };
+
+    const firstPage = service.searchAssets({
+      libraryId,
+      scope,
+      limit: 1,
+      offset: 0,
+      deferTotal: true,
+    });
+    expect(firstPage.items).toHaveLength(1);
+    expect(firstPage.total).toBe(2);
+    expect(firstPage.totalIsExact).toBe(false);
+
+    const layout = service.searchAssets({
+      libraryId,
+      scope,
+      layoutOnly: true,
+      limit: 10,
+      offset: 0,
+    });
+    expect(layout.total).toBe(2);
+    expect(layout.totalIsExact).toBeUndefined();
+
+    service.closeAll();
+  });
+
+  it('keeps a deferred total exact when the folder fits in the first page', () => {
+    const { service, libraryId } = createLibraryWithAssetAndTags();
+    const folderId = service.listManagedFolders(libraryId)[0]!.folderId;
+
+    const result = service.searchAssets({
+      libraryId,
+      scope: { kind: 'folder', folderId, recursive: false },
+      limit: 10,
+      deferTotal: true,
+    });
+    expect(result.total).toBe(1);
+    expect(result.totalIsExact).toBeUndefined();
+
+    service.closeAll();
+  });
+
   it('paginates with limit and offset', () => {
     const { service, libraryId, libraryPath } = createLibraryWithAssetAndTags();
     void createSecondAsset(service, libraryId, libraryPath, 'Second');
@@ -1699,11 +1745,9 @@ describe('pagination', () => {
     });
     expect(result.items).toEqual([]);
     expect(result.total).toBe(2);
-    expect(result.offset).toBe(0);
-    expect(result.layout).toHaveLength(2);
-    expect(result.layout?.map((entry) => entry.assetId).sort()).toEqual(
-      [assetId, secondAssetId].sort(),
-    );
+    expect(result.offset).toBe(1);
+    expect(result.layout).toHaveLength(1);
+    expect([assetId, secondAssetId]).toContain(result.layout?.[0]?.assetId);
     expect(result.layout?.every((entry) => entry.width && entry.height)).toBe(true);
     expect(result.layout?.every((entry) => entry.displayName)).toBe(true);
 

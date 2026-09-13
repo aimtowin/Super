@@ -34,6 +34,45 @@ describe('AiJobAbortRegistry', () => {
 });
 
 describe('AiQueueScheduler', () => {
+  it('defers queued AI work during tray standby and resumes it once foregrounded', async () => {
+    const processBatch = vi.fn().mockResolvedValue({ processed: 0, requeued: 0 });
+    const scheduler = new AiQueueScheduler(processBatch, {
+      batchSize: 20,
+      baseRetryDelayMs: 100,
+      maxRetryDelayMs: 800,
+    });
+
+    scheduler.setPaused(true);
+    await scheduler.trigger('library-1');
+    expect(processBatch).not.toHaveBeenCalled();
+
+    scheduler.setPaused(false);
+    await vi.waitFor(() => expect(processBatch).toHaveBeenCalledWith('library-1', 20));
+    scheduler.clearAll();
+  });
+
+  it('preserves a scheduled retry when tray standby clears its timer', async () => {
+    vi.useFakeTimers();
+    const processBatch = vi.fn()
+      .mockResolvedValueOnce({ processed: 1, requeued: 1 })
+      .mockResolvedValueOnce({ processed: 0, requeued: 0 });
+    const scheduler = new AiQueueScheduler(processBatch, {
+      batchSize: 20,
+      baseRetryDelayMs: 100,
+      maxRetryDelayMs: 800,
+    });
+
+    await scheduler.trigger('library-1');
+    scheduler.setPaused(true);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(processBatch).toHaveBeenCalledTimes(1);
+
+    scheduler.setPaused(false);
+    await vi.waitFor(() => expect(processBatch).toHaveBeenCalledTimes(2));
+    scheduler.clearAll();
+    vi.useRealTimers();
+  });
+
   it('drains successive full batches without waiting for another trigger', async () => {
     const processBatch = vi.fn()
       .mockResolvedValueOnce({ processed: 20, requeued: 0 })

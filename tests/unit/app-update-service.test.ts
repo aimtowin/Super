@@ -10,6 +10,7 @@ import { parseAppUpdatePrepared } from '../../src/shared/app-update';
 import {
   createAppUpdateService,
   detectAppDistribution,
+  parseEcsUpdateRelease,
   parseGitHubRelease,
   parseSha256,
   resolveAppUpdateTarget,
@@ -35,6 +36,11 @@ function releasePayload(overrides: Record<string, unknown> = {}) {
     ],
     ...overrides,
   };
+}
+
+function isUpdateManifestRequest(url: string): boolean {
+  return url.endsWith('/downloads/super/latest.json')
+    || url.endsWith('/api/super/updates/latest');
 }
 
 describe('Super app update release contract', () => {
@@ -160,6 +166,101 @@ describe('Super app update release contract', () => {
     )).toBeUndefined();
   });
 
+  it('prefers only an exact-source ECS delta and otherwise keeps the full installer', () => {
+    const release = parseEcsUpdateRelease({
+      version: '2.0.3',
+      notes: 'Incremental update',
+      full: {
+        name: 'Super-win-x86-64-2.0.3-setup.zip',
+        path: 'releases/2.0.3/Super-win-x86-64-2.0.3-full-setup.zip',
+        size: 200,
+        sha256: 'a'.repeat(64),
+      },
+      deltas: [{
+        fromVersion: '2.0.2',
+        asset: {
+          name: 'Super-win-x86-64-2.0.2-to-2.0.3-delta.zip',
+          path: 'releases/2.0.3/Super-win-x86-64-2.0.2-to-2.0.3-delta.zip',
+          size: 20,
+          sha256: 'b'.repeat(64),
+        },
+      }],
+    });
+    const target = resolveAppUpdateTarget({
+      platform: 'win32', arch: 'x64', distribution: 'installed',
+    });
+    expect(selectUpdateAsset(release!, target!, '2.0.2')).toMatchObject({
+      assetKind: 'delta-installer',
+      asset: { name: 'Super-win-x86-64-2.0.2-to-2.0.3-delta.zip', size: 20 },
+    });
+    expect(selectUpdateAsset(release!, target!, '2.0.1')).toMatchObject({
+      assetKind: 'installer',
+      asset: { name: 'Super-win-x86-64-2.0.3-setup.zip', size: 200 },
+    });
+    expect(parseEcsUpdateRelease({
+      version: '2.0.3',
+      full: { name: 'bad.zip', path: '../escape.zip', size: 1, sha256: 'c'.repeat(64) },
+    })).toBeUndefined();
+  });
+
+  it('retries the full installer when an exact-source delta cannot be extracted', async () => {
+    const archive = new AdmZip();
+    archive.addFile('SuperSetup.exe', Buffer.from('full installer'));
+    const fullBytes = archive.toBuffer();
+    const deltaBytes = Buffer.from('not a valid installer archive');
+    const root = await mkdtemp(path.join(tmpdir(), 'super-app-update-delta-fallback-test-'));
+    const requested: string[] = [];
+    try {
+      const payload = {
+        version: '2.0.3',
+        full: {
+          name: 'Super-win-x86-64-2.0.3-setup.zip',
+          path: 'releases/2.0.3/Super-win-x86-64-2.0.3-full-setup.zip',
+          size: fullBytes.byteLength,
+          sha256: createHash('sha256').update(fullBytes).digest('hex'),
+        },
+        deltas: [{
+          fromVersion: '2.0.2',
+          asset: {
+            name: 'Super-win-x86-64-2.0.2-to-2.0.3-delta.zip',
+            path: 'releases/2.0.3/Super-win-x86-64-2.0.2-to-2.0.3-delta.zip',
+            size: deltaBytes.byteLength,
+            sha256: createHash('sha256').update(deltaBytes).digest('hex'),
+          },
+        }],
+      };
+      const service = createAppUpdateService({
+        currentVersion: '2.0.2',
+        isPackaged: true,
+        platform: 'win32',
+        arch: 'x64',
+        executablePath: path.join(root, 'Super.exe'),
+        tempDirectory: root,
+        downloadsDirectory: path.join(root, 'Downloads'),
+        preparedUpdateDirectory: path.join(root, 'updates'),
+        environment: { SUPER_DISTRIBUTION: 'installed' },
+        fetchImpl: async (url) => {
+          requested.push(url);
+          if (url.endsWith('/latest.json')) return new Response(JSON.stringify(payload));
+          if (url.endsWith('delta.zip')) return new Response(deltaBytes as unknown as BodyInit);
+          return new Response(fullBytes as unknown as BodyInit);
+        },
+      });
+
+      await service.checkForUpdates();
+      await expect(service.prepareUpdate()).resolves.toMatchObject({
+        ok: true,
+        action: 'installer-staged',
+        version: '2.0.3',
+      });
+      expect(requested.some((url) => url.endsWith('delta.zip'))).toBe(true);
+      expect(requested.some((url) => url.endsWith('full-setup.zip'))).toBe(true);
+      await service.discardPreparedUpdate();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('checks the public ECS manifest without sending a GitHub credential', async () => {
     let authorization: string | null = null;
     let requestedUrl = '';
@@ -281,7 +382,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'portable' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
+          if (isUpdateManifestRequest(url)) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           return new Response(portableBytes);
         },
@@ -331,7 +432,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'portable' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
+          if (isUpdateManifestRequest(url)) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           return new Response(portableBytes);
         },
@@ -383,7 +484,7 @@ describe('Super app update release contract', () => {
         preparedUpdateDirectory: path.join(root, 'updates'),
         environment: { SUPER_DISTRIBUTION: 'portable' },
         fetchImpl: async (url, init) => {
-          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
+          if (isUpdateManifestRequest(url)) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           assetRequestCount += 1;
           const range = new Headers(init?.headers).get('range');
@@ -503,7 +604,7 @@ describe('Super app update release contract', () => {
         preparedUpdateDirectory: updateDirectory,
         environment: { SUPER_DISTRIBUTION: 'portable' },
         fetchImpl: async (url, init) => {
-          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
+          if (isUpdateManifestRequest(url)) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           const range = new Headers(init?.headers).get('range');
           if (range !== null) rangeRequests.push(range);
@@ -547,7 +648,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'installed' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
+          if (isUpdateManifestRequest(url)) return new Response(JSON.stringify(payload));
           return new Response(installerBytes as unknown as BodyInit);
         },
         openPath: async () => 'The installer could not be opened.',
@@ -586,7 +687,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'installed' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
+          if (isUpdateManifestRequest(url)) return new Response(JSON.stringify(payload));
           return new Response(archiveBytes as unknown as BodyInit);
         },
       });
@@ -632,7 +733,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'installed' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
+          if (isUpdateManifestRequest(url)) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           return new Response(archiveBytes as unknown as BodyInit);
         },
@@ -655,7 +756,7 @@ describe('Super app update release contract', () => {
       expect(launchedBytes).toEqual(installerBytes);
       expect((await readdir(path.join(root, 'Downloads')))).toEqual([]);
       expect((await readdir(root)).filter((entry) => entry.startsWith('super-installer-')))
-        .toEqual([]);
+        .toHaveLength(1);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -692,7 +793,7 @@ describe('Super app update release contract', () => {
         preparedUpdateDirectory: path.join(root, 'updates'),
         environment: { SUPER_DISTRIBUTION: 'installed' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
+          if (isUpdateManifestRequest(url)) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           return new Response(archiveBytes as unknown as BodyInit);
         },
@@ -722,8 +823,12 @@ describe('Super app update release contract', () => {
       });
       expect(launched).toHaveLength(1);
       expect(launched[0]?.mode).toBe('silent');
-      expect((await readdir(path.join(root, 'updates'))).filter((entry) => entry.startsWith('super-update-')))
-        .toEqual([]);
+      // Windows keeps the staged installer until the newly launched app can
+      // safely prune it. The foreground updater may relay-launch itself after
+      // the original process exits, so deleting it at handoff is unsafe.
+      const stagedDirectories = (await readdir(path.join(root, 'updates')))
+        .filter((entry) => entry.startsWith('super-update-'));
+      expect(stagedDirectories).toHaveLength(1);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -760,7 +865,7 @@ describe('Super app update release contract', () => {
         downloadsDirectory: path.join(root, 'Downloads'),
         environment: { SUPER_DISTRIBUTION: 'installed' },
         fetchImpl: async (url) => {
-          if (url.endsWith('/api/super/updates/latest')) return new Response(JSON.stringify(payload));
+          if (isUpdateManifestRequest(url)) return new Response(JSON.stringify(payload));
           if (url.endsWith('.sha256')) return new Response(`${checksum}\n`);
           return new Response(archiveBytes as unknown as BodyInit);
         },
@@ -784,7 +889,7 @@ describe('Super app update release contract', () => {
       expect(openedBytes).toEqual(installerBytes);
       expect((await readdir(path.join(root, 'Downloads')))).toEqual([]);
       expect((await readdir(root)).filter((entry) => entry.startsWith('super-installer-')))
-        .toEqual([]);
+        .toHaveLength(1);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -1424,6 +1424,10 @@ export function InspectorPanel(props: InspectorPanelProps) {
                             background: isCssColor(color)
                               ? color
                               : "transparent",
+                            // The persisted ratio represents coverage in the
+                            // thumbnail/poster. Keep a tiny hit target for a
+                            // rare colour, but let the strip convey dominance.
+                            flexGrow: Math.max(ratio ?? 1, 0.045),
                           }}
                           tabIndex={0}
                           title={

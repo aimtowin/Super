@@ -1,7 +1,7 @@
 {
   "name": "super",
   "productName": "Super",
-  "version": "2.0.2",
+  "version": "2.2.8",
   "description": "A local-first visual asset workspace for creative professionals.",
   "author": "dolag233",
   "license": "UNLICENSED",
@@ -30,6 +30,7 @@
     "make:inno": "node scripts/inno-build.mjs",
     "release:baseline": "node scripts/release/package-file-manifest.mjs",
     "release:delta": "node scripts/release/build-inno-delta.mjs",
+    "release:deltas": "node scripts/release/build-retained-deltas.mjs",
     "release:publish-ecs": "node scripts/release/publish-ecs-update.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.extension.json",
