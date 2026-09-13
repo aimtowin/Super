@@ -10,7 +10,6 @@
 | [扩展作者手册](manual/README.md) | 插件、脚本、MCP 开发指南与 API 参考 |
 | [产品简报](product-brief.md) | 产品愿景与 MVP 边界 |
 | [术语表](glossary.md) | 领域术语 |
-| [发行说明](../release-notes-2.0.0.md) | 当前版本功能、稳定性改进与已知限制 |
 
 ## 构建与交付
 

@@ -71,6 +71,5 @@ npm run make:inno
 | [扩展作者手册](docs/manual/README.md) | 插件、自动化脚本和 MCP 的开发指南与 API 参考 |
 | [产品简报](docs/product-brief.md) | 产品愿景、范围、术语与交付边界 |
 | [术语表](docs/glossary.md) | 资源库、自动化、插件、同步等领域定义 |
-| [发行说明](release-notes-2.0.0.md) | 最近一轮功能、稳定性改进与已知限制 |
 
 第三方组件、媒体运行时和素材的许可信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 及各组件随附的许可文件。
