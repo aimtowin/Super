@@ -11,7 +11,6 @@ Popular pages: [Quick start](quick-start.en.md) · [Appearance](appearance.en.md
 - [WebDAV cloud sync](sync.en.md) — server configuration, library binding, auto-sync, opening remote synced libraries
 - [AI analysis and search](ai.en.md) — manual/automatic analysis, re-analysis review, natural-language search, and smart collections
 - [Appearance](appearance.en.md) — color modes, backgrounds, text size, and depth
-- [Browser extension](browser-extension.en.md) — capture, manual installation, and package availability
 - [Using plugins](plugins.en.md) — install, enable, update, and uninstall plugins
 - [Automation](automation.en.md) — automation scripts and MCP client connections
 - [Troubleshooting](troubleshooting.en.md) — common problems and fixes
@@ -53,4 +52,4 @@ flowchart LR
 
 This directory describes the current user-facing product. Screens and available features can change between releases; follow the latest installer and release notes.
 
-Images under `live-2.2.8/` come from the running application. Other images marked as older references illustrate workflows; follow the text and current interface for control names and positions. Platform instructions do not guarantee a release attachment for that platform.
+Images under `live-2.2.8/` come from the running application. Legacy screenshots have been replaced or withdrawn from this guide; screenshots illustrate the captured state, not end-to-end verification of every feature. Platform instructions do not guarantee a release attachment for that platform.

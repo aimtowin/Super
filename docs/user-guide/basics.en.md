@@ -1,6 +1,6 @@
 # Basics
 
-> Applies to Super Lib v2.2.8; package availability follows release attachments. Images marked as older references may show previous layouts; follow the current instructions.
+> Applies to Super Lib v2.2.8; package availability follows release attachments.
 
 ## Create, open, and configure a library
 
@@ -30,11 +30,11 @@ The `?` help explains `*`, `?`, `**`, a trailing `/` for directories, a leading 
 
 After conversion, browsing, search, tags, AI analysis, and everything else work exactly like a local library, and the original files are left untouched.
 
-![Older reference — Open external library](../assets/ui/open-external-library.png)
+![Current external-library entry; no conversion started](../assets/ui/live-2.2.8/open-external-library.png)
 
 ## Import assets
 
-Drop one or more files, folders, or a mixed selection into Super, or use **Import files** / **Import folder**. Folder imports are recursive. The browser extension can save web images and videos from the context menu or by drag-and-drop.
+Drop one or more files, folders, or a mixed selection into Super, or use **Import files** / **Import folder**. Folder imports are recursive. For web assets you have permission to save, download them with your browser first, then import the local files.
 
 The current product registry includes:
 
@@ -53,8 +53,6 @@ Super copies managed files into the library and assigns a stable asset ID. Name 
 #### Sequence-frame import
 
 In **Settings → Assets**, turn **Detect image sequences during import** on or off (on by default). When enabled, dropping or importing consecutively numbered, same-size images (for example `00001.png`…`00150.png`) opens the sequence import dialog, where you can set the FPS. When disabled, the files are imported as ordinary images. A sequence appears as one playable asset in the viewer and can be dissolved back into individual frames.
-
-![Older reference — Image sequence import dialog](../assets/ui/import-sequence.png)
 
 In the dialog, adjust the frame range and FPS, then choose whether to import only the current file or the selected frames as a sequence.
 
@@ -81,7 +79,7 @@ Double-click an asset to open the viewer. Images, SVG, RAW, PSD, TIFF, TGA, and 
 
 The viewer supports pan, wheel zoom, fit-to-view (numpad `.`), fullscreen, and rotate/horizontal/vertical mirror transforms for images and video. PDF preview supports zoom (0.25×–8×), pan, and fit-to-page; scrolling zooms around the mouse pointer. For formats other than PNG/JPEG, Super uses a detected color space when available and lets you choose among supported spaces. EXR can expose multiple planes/parts when present; this is not a professional channel-grading tool.
 
-![Older reference — 3D viewer and Inspector](../assets/ui/3D-inspector.png)
+![Current 3D viewer displaying an existing FBX asset](../assets/ui/live-2.2.8/model-viewer.png)
 
 ## Tags, collections, and smart collections
 

@@ -22,10 +22,6 @@ The current `v2.2.8` release provides a Windows x64 installer. Check the actual 
 
 Unsigned development builds may trigger SmartScreen. Verify the source, then choose **More info → Run anyway**. Uninstall from **Settings → Apps**.
 
-## Browser extension
-
-Browser extensions are packaged separately. The current `v2.2.8` Release has no extension attachments. See [Browser extension](browser-extension.en.md) for availability and installation instructions.
-
 ## Upgrading
 
 Download through the in-app update prompt or run a newer `SuperSetup.exe` over the existing installation. In-app updates prefer an available delta matching your installed version and otherwise use the full package. Once downloaded and prepared, confirm installation, wait for the separate updater to finish, then click **Launch Super Lib**.

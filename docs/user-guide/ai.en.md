@@ -1,6 +1,6 @@
 # AI analysis
 
-> Applies to Super Lib v2.2.8; package availability follows release attachments. Images marked as older references may show previous layouts; follow the current instructions.
+> Applies to Super Lib v2.2.8; package availability follows release attachments.
 
 Super’s AI analysis connects to a cloud AI service that you provide. Prepare a provider account, API key, a vision-capable model, and check the provider’s pricing first.
 
@@ -59,7 +59,7 @@ Accept the disclaimer and enable `Automatically run AI analysis on new assets` t
 
 Choose `AI analysis` from an asset context menu or use the batch action for a multi-selection. `Analyze unanalyzed assets` skips assets that already have results; use normal `AI analysis` to re-analyze one.
 
-![Older reference — Start AI analysis from the asset context menu](../assets/ui/AI-analyze-menu.png)
+![Current asset context menu; no AI request submitted](../assets/ui/live-2.2.8/ai-context-menu.png)
 
 Results appear in the AI section of the asset Inspector. Re-analysis produces a proposal for review; the current AI result is replaced only when you accept it. Clearing AI content does not remove manual content or tag entities.
 

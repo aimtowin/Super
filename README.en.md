@@ -36,7 +36,7 @@ Super Lib itself is free. Optional third-party AI services may charge according 
 - **Automation and extensibility**: plugins, controlled automation scripts, and local MCP connections are supported. Writes are bounded by permissions, execution plans, and risk confirmation.
 - **AI analysis and search**: generate descriptions and tags for supported media, then use natural language to find analyzed assets and create temporary smart collections. AI is optional and requires your own provider configuration.
 - **Appearance**: light and dark themes, custom backgrounds, theme colors, and four application text-size levels.
-- **External libraries and browser capture**: supported external libraries can be opened directly; the browser extension saves web images and video into the currently open Super library.
+- **External libraries**: supported external libraries can be opened directly.
 
 ## Install and use
 
@@ -44,7 +44,7 @@ The current `v2.2.8` release provides a Windows x64 installer. Download `SuperSe
 
 Libraries live at the location you choose. Importing copies assets into the library; linking references files at their existing location, which must remain accessible. See the [quick start](docs/user-guide/quick-start.en.md).
 
-For installation, import, browsing, sync, AI, extension, and troubleshooting guidance, see the [user guide](docs/user-guide/README.en.md).
+For installation, import, browsing, sync, AI, plugins, and troubleshooting guidance, see the [user guide](docs/user-guide/README.en.md).
 
 ## Feedback and license
 
@@ -81,7 +81,7 @@ On Windows, `npm run make:inno` creates `out/make/inno/SuperSetup.exe`. Reposito
 | --- | --- |
 | [Quick start](docs/user-guide/quick-start.en.md) | Installation, local library creation, optional setup, and first import |
 | [Appearance](docs/user-guide/appearance.en.md) | Color modes, backgrounds, text size, and screenshots |
-| [User guide](docs/user-guide/README.en.md) | Install, import, browse, search, tags, collections, sync, AI, browser extension, and troubleshooting |
+| [User guide](docs/user-guide/README.en.md) | Install, import, browse, search, tags, collections, sync, AI, plugins, and troubleshooting |
 | [Extension author manual](docs/manual/README.md) | Plugin, automation-script, and MCP development guides and API references |
 | [Product brief (historical planning)](docs/product-brief.md) | Product direction and early scope; use the user guide for current instructions |
 | [Glossary](docs/glossary.md) | Definitions for libraries, automation, plugins, sync, and more |

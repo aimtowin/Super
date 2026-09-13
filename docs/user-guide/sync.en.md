@@ -1,8 +1,10 @@
 # WebDAV Cloud Sync
 
-> Applies to Super Lib v2.2.8; package availability follows release attachments. Images marked as older references may show previous layouts; follow the current instructions.
+> Applies to Super Lib v2.2.8; package availability follows release attachments.
 
-Super can sync a library across machines over WebDAV. Configure servers globally, bind each library individually, and Super syncs both ways automatically: local changes upload, remote changes pull.
+Super Lib can sync a library across machines over WebDAV. Configure servers globally, bind each library individually, and Super syncs both ways automatically: local changes upload, remote changes pull.
+
+The screenshots below were captured from the current Super Lib instance, with no server configured; they show setup entry points, not a completed sync. Sync propagates edits and deletions and is not an independent backup. Back up your library first and verify your server and devices with a small test library before syncing important assets.
 
 ## Sync overview
 
@@ -15,12 +17,12 @@ Super can sync a library across machines over WebDAV. Configure servers globally
 
 Open **General settings** → **Sync** to add a sync server:
 
-- **Server address**: must start with `http://` or `https://`; use the WebDAV path of your NAS or shared folder (for example `https://nas.local/dav/share/`).
+- **Server address**: use the WebDAV path of your NAS or shared folder, for example `https://nas.local/dav/share/`. Prefer an explicit `https://` prefix. Omitting the protocol adds `http://`; HTTP does not encrypt network traffic.
 - **Username / password**: server credentials. The password is encrypted with the system secure storage (macOS Keychain / Windows DPAPI) and never stored in plain text.
-- **Allow self-signed certificate or HTTP**: enable for self-hosted servers without a proper certificate.
+- **Allow self-signed certificate**: enable only for a server whose identity you trust. This setting relaxes TLS certificate verification; it does not encrypt HTTP traffic.
 - After saving you can test the connection; failures show an actionable reason (invalid address, DNS, TLS, authentication, …).
 
-![Older reference — Global sync settings](../assets/ui/sync-settings.png)
+![Current global WebDAV settings; no credentials entered](../assets/ui/live-2.2.8/sync-settings.png)
 
 ## Bind a library (Library settings)
 
@@ -33,7 +35,7 @@ Open **Library settings** → **Sync**:
 - **Poll interval (seconds)**: how often remote changes are checked, 5 seconds by default. **For large libraries, consider a longer interval** to avoid frequent checks weighing on the network and disk.
 - **Save**: persists the binding; turning auto-sync on triggers a sync immediately.
 
-![Older reference — Library sync settings](../assets/ui/library-sync.png)
+![Current library sync settings; not bound or enabled](../assets/ui/live-2.2.8/library-sync.png)
 
 ## Sync behavior
 
@@ -51,4 +53,4 @@ Open **Library settings** → **Sync**:
 
 The server must provide WebDAV operations including PROPFIND, MKCOL, GET, PUT, and DELETE. Connection testing also checks capabilities such as MOVE. A plain HTTP download address is not a WebDAV server.
 
-![Older reference — Open synced library](../assets/ui/open-sync-library.png)
+![Current open-synced-library dialog; configure a server first](../assets/ui/live-2.2.8/open-sync-library.png)

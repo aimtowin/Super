@@ -1,6 +1,6 @@
 # Plugin features
 
-> Applies to Super Lib v2.2.8; package availability follows release attachments. Images marked as older references may show previous layouts; follow the current instructions.
+> Applies to Super Lib v2.2.8; package availability follows release attachments.
 
 Plugins add tools, menus, or workflows to Super. They are not ordinary library assets and can be enabled or disabled at any time.
 
@@ -16,7 +16,7 @@ Plugins add tools, menus, or workflows to Super. They are not ordinary library a
 
 The plugin appears in the plugin list after installation. Follow the plugin author’s own instructions if it needs additional setup.
 
-![Older reference — Plugin manager and installation entry](../assets/ui/extension.png)
+![Current plugin settings; no plugins installed](../assets/ui/live-2.2.8/plugin-settings.png)
 
 ## Enable and disable
 
@@ -33,9 +33,6 @@ GitHub plugins can check for updates from plugin settings. Automatic updates are
 
 Uninstalling a plugin does not remove personal settings it may have saved. Reinstall it later if you want to keep those settings; if the plugin provides its own cleanup action, prefer that action.
 
-## Browser extension
-
-For the browser extension (Chrome / Edge / Firefox), see [Browser extension](browser-extension.en.md).
 
 ## If a plugin does not work
 
