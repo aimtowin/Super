@@ -80,9 +80,10 @@ npm run make:inno
 | 文档 | 内容 |
 | --- | --- |
 | [快速上手](docs/user-guide/quick-start.md) | 从下载安装到创建资产库、可选配置和第一次导入 |
+| [外观设置](docs/user-guide/appearance.md) | 深浅主题、自定义背景、字体大小与实际界面配图 |
 | [使用手册](docs/user-guide/README.md) | 安装、导入、浏览、搜索、标签、合集、同步、AI、浏览器扩展与故障排查 |
 | [扩展作者手册](docs/manual/README.md) | 插件、自动化脚本和 MCP 的开发指南与 API 参考 |
-| [产品简报](docs/product-brief.md) | 产品愿景、范围、术语与交付边界 |
+| [产品简报（历史规划）](docs/product-brief.md) | 产品方向与早期范围；当前操作请以使用手册为准 |
 | [术语表](docs/glossary.md) | 资源库、自动化、插件、同步等领域定义 |
 
 第三方组件、媒体运行时和素材的许可信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 及各组件随附的许可文件。

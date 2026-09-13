@@ -1,5 +1,7 @@
 # Troubleshooting
 
+> Applies to Super Lib v2.2.8; package availability follows release attachments.
+
 ## macOS Gatekeeper / Windows SmartScreen
 
 Development builds may be unsigned. Verify the package source first, then choose **Open** on macOS or **More info → Run anyway** on Windows. Do not bypass security prompts for an unknown package.
@@ -11,6 +13,8 @@ Super generates previews for many image, RAW, video, audio, and 3D formats. Conf
 Different formats may use different preview methods; for example, video may use a compatible playback version and audio first gets a waveform. A corrupt or unsupported source cannot be fixed by retrying alone.
 
 ## AI analysis fails or never starts
+
+Manual analysis does not require automatic analysis to be enabled; enable the automatic switch only if you want new assets analyzed automatically.
 
 In **Settings → AI**, verify the API format, model, and key, test the connection, and enable **Analyze new assets automatically** if you want import-time analysis. The switch is off by default; audio, text, and formats outside the image/video/model registry are not supported.
 
@@ -40,4 +44,29 @@ Shortcut handling follows focus and modal priority. Settings, the viewer, and me
 
 ## Still stuck
 
-Open a [project issue](https://github.com/aimtowin/Super/issues) with your OS/version, Super version, library type, reproducible steps, error text/code, and relevant `.super/` logs. Never attach an API key, full token, or unsanitized personal paths.
+Open **Settings → General → View diagnostic logs**, or use the diagnostic-log action in **Main menu → Window**. On Windows, the default directory is `%APPDATA%\Super\logs`, with `super-*.log` session files. Custom user-data directories may change this location. Application session logs do not live in the library's `.super/` directory.
+
+Report through [GitHub Issues](https://github.com/aimtowin/Super/issues) or the author's social platform using:
+
+```text
+App version:
+OS version:
+Time of the problem:
+Library location type: local / linked folder / network disk
+Steps to reproduce:
+Expected result:
+Actual result and error:
+Screenshots and relevant session logs:
+```
+
+Never attach API keys, full tokens, private assets, or unsanitized personal paths.
+
+## Slow loading after restoring from the tray
+
+Record when you restored the window and switched folders. Check **Main menu → Window → Background jobs** and diagnostic logs for scans, slow requests, or timeouts. The loading bar is indeterminate, not a measured percentage. Indexing completion does not mean thumbnail or palette jobs have finished.
+
+Save the relevant session log before restarting, and report library size, linked-folder use, disk accessibility, and reproduction steps. Do not delete the library database to troubleshoot a delay.
+
+## Extension thumbnails instead of previews
+
+ZIP, EXE, and similar formats intentionally display their extension as a thumbnail. This alone is not an error. For media with a supported preview path, check the source file and background jobs.

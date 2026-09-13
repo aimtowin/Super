@@ -1,5 +1,7 @@
 # 自动化功能
 
+> 适用版本：Super Lib v2.2.8；安装包可用性以发行附件为准。 标为“旧版参考”的图片可能显示早期布局，请以当前正文为准。
+
 Super 提供两种自动化方式：用脚本批量整理资产，或让外部 AI 工具通过 MCP 连接 Super。普通浏览、导入和查看不需要使用这些功能。
 
 ## 自动化脚本
@@ -29,7 +31,7 @@ MCP 是一种让外部 AI 工具读取和整理 Super 资产的连接方式。�
 
 Agent 连接后会从 MCP 的服务器说明和 `tools/list` 自动获知基本用法，再调用 `super_library_list_open` 或 `super_library_list_recent` 获取 `libraryId`。如果 Agent 询问要操作哪个资源库，让它先列出资源库并使用返回的 ID。所有资源库相关操作都必须明确带上这个 `libraryId`；删除等关键操作还需要 Agent 的二次确认。
 
-![MCP 设置和客户端配置](../assets/ui/MCP-settings.png)
+![旧版参考：MCP 设置和客户端配置](../assets/ui/MCP-settings.png)
 
 只给可信的本地 AI 工具开启连接。涉及删除、移动等有影响的操作时，Super 仍会要求确认。
 

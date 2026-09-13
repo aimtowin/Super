@@ -1,5 +1,7 @@
 # 安装
 
+> 适用版本：Super Lib v2.2.8；安装包可用性以发行附件为准。
+
 Super Lib 完全免费。在 [Super Releases](https://github.com/aimtowin/Super/releases/latest) 下载最新版。首次使用建议同时阅读[快速上手](quick-start.md)。
 
 ## 系统要求
@@ -22,7 +24,7 @@ Windows 安装包和版本说明以 [Super Releases](https://github.com/aimtowin
 
 ## 浏览器扩展
 
-浏览器扩展包由项目团队随版本交付；安装与使用见[浏览器扩展](browser-extension.md)。
+浏览器扩展单独打包，当前 `v2.2.8` Release 没有扩展附件；包可用性、安装与使用见[浏览器扩展](browser-extension.md)。
 
 ## 升级
 

@@ -1,14 +1,17 @@
 # 使用手册
 
-面向最终用户的 Super 使用指南。英文版：[README.en.md](README.en.md)
+面向最终用户的 Super Lib 使用指南。本轮核对基线：`v2.2.8`。英文版：[README.en.md](README.en.md)
+
+常用入口：[快速上手](quick-start.md) · [外观设置](appearance.md) · [AI 分析与查找](ai.md) · [故障排查](troubleshooting.md)
 
 - [快速上手](quick-start.md)——下载安装、创建本地资产库、可选 AI 与外观配置
 - [安装](installation.md)——Windows 安装、更新与其他平台说明
 - [基本使用](basics.md)——资源库、导入、浏览、标签、合集、文件操作和查看器
 - [搜索与过滤](search-and-filters.md)——高级搜索语法、过滤维度和 Shift 多选
 - [WebDAV 云同步](sync.md)——服务器配置、资源库绑定、自动同步与打开远端同步库
-- [AI 分析](ai.md)——支持的资产、自动/手动分析、任务进度和隐私提示
-- [浏览器扩展](browser-extension.md)——Chrome / Edge / Firefox 保存网页图片视频
+- [AI 分析与查找](ai.md)——手动/自动分析、重分析确认、自然语言查找与智能合集
+- [外观设置](appearance.md)——深浅主题、自定义背景、字体大小和层级效果
+- [浏览器扩展](browser-extension.md)——浏览器采集、手动安装与扩展包可用性说明
 - [插件使用](plugins.md)——安装、启用、更新和卸载插件
 - [自动化功能](automation.md)——自动化脚本和 MCP 外部客户端连接
 - [故障排查](troubleshooting.md)——常见问题与解决
@@ -49,3 +52,5 @@ flowchart LR
 ## 功能状态说明
 
 本目录说明当前版本的用户功能。不同版本的界面和可用功能可能略有变化，请以最新安装包和发行说明为准。
+
+`live-2.2.8/` 下的配图来自当前运行实例；其余标为“旧版参考”的图片保留用于说明流程，控件名称和位置以正文及当前界面为准。跨平台说明不表示该平台一定有对应发行附件。

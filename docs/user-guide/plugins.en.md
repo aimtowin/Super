@@ -1,5 +1,7 @@
 # Plugin features
 
+> Applies to Super Lib v2.2.8; package availability follows release attachments. Images marked as older references may show previous layouts; follow the current instructions.
+
 Plugins add tools, menus, or workflows to Super. They are not ordinary library assets and can be enabled or disabled at any time.
 
 ## Install a plugin
@@ -14,7 +16,7 @@ Plugins add tools, menus, or workflows to Super. They are not ordinary library a
 
 The plugin appears in the plugin list after installation. Follow the plugin author’s own instructions if it needs additional setup.
 
-![Plugin manager and installation entry](../assets/ui/extension.png)
+![Older reference — Plugin manager and installation entry](../assets/ui/extension.png)
 
 ## Enable and disable
 

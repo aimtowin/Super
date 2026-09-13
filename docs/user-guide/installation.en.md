@@ -1,5 +1,7 @@
 # Installation
 
+> Applies to Super Lib v2.2.8; package availability follows release attachments.
+
 Super Lib is free. Download it from the [latest Super Release](https://github.com/aimtowin/Super/releases/latest). New users can follow the [quick start](quick-start.en.md).
 
 ## Requirements
@@ -22,7 +24,7 @@ Unsigned development builds may trigger SmartScreen. Verify the source, then cho
 
 ## Browser extension
 
-The project team distributes the browser extension package with supported releases. For installation and usage, see [Browser extension](browser-extension.en.md).
+Browser extensions are packaged separately. The current `v2.2.8` Release has no extension attachments. See [Browser extension](browser-extension.en.md) for availability and installation instructions.
 
 ## Upgrading
 

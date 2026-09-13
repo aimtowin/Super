@@ -1,5 +1,7 @@
 # WebDAV Cloud Sync
 
+> Applies to Super Lib v2.2.8; package availability follows release attachments. Images marked as older references may show previous layouts; follow the current instructions.
+
 Super can sync a library across machines over WebDAV. Configure servers globally, bind each library individually, and Super syncs both ways automatically: local changes upload, remote changes pull.
 
 ## Sync overview
@@ -18,7 +20,7 @@ Open **General settings** → **Sync** to add a sync server:
 - **Allow self-signed certificate or HTTP**: enable for self-hosted servers without a proper certificate.
 - After saving you can test the connection; failures show an actionable reason (invalid address, DNS, TLS, authentication, …).
 
-![Global sync settings](../assets/ui/sync-settings.png)
+![Older reference — Global sync settings](../assets/ui/sync-settings.png)
 
 ## Bind a library (Library settings)
 
@@ -31,13 +33,13 @@ Open **Library settings** → **Sync**:
 - **Poll interval (seconds)**: how often remote changes are checked, 5 seconds by default. **For large libraries, consider a longer interval** to avoid frequent checks weighing on the network and disk.
 - **Save**: persists the binding; turning auto-sync on triggers a sync immediately.
 
-![Library sync settings](../assets/ui/library-sync.png)
+![Older reference — Library sync settings](../assets/ui/library-sync.png)
 
 ## Sync behavior
 
-- **The first sync uploads assets, metadata, and a manifest to the server**; later syncs transfer only changed files.
+- A first sync to an empty remote directory uploads assets, metadata, and a manifest. An existing remote directory is compared with local state and may require downloads or conflict handling. Later syncs primarily transfer changed content.
 - If two machines edit the same file, the losing version is kept as a “name (conflict-…)” copy instead of being silently overwritten.
-- Auto-sync and manual sync are mutually exclusive; a failed sync only writes a log entry and does not interrupt you.
+- Auto-sync and manual sync are mutually exclusive. Background auto-sync failures are logged; check the interface for failures from manual actions.
 
 ## Open a synced library
 
@@ -47,6 +49,6 @@ Open **Library settings** → **Sync**:
 2. the panel lists synced libraries on that server (recognized by their remote manifest, so you can continue on another device);
 3. pick a local destination and open — remote content is downloaded locally.
 
-The server must support file upload/download (PUT/GET).
+The server must provide WebDAV operations including PROPFIND, MKCOL, GET, PUT, and DELETE. Connection testing also checks capabilities such as MOVE. A plain HTTP download address is not a WebDAV server.
 
-![Open synced library](../assets/ui/open-sync-library.png)
+![Older reference — Open synced library](../assets/ui/open-sync-library.png)

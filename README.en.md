@@ -80,9 +80,10 @@ On Windows, `npm run make:inno` creates `out/make/inno/SuperSetup.exe`. Reposito
 | Document | Content |
 | --- | --- |
 | [Quick start](docs/user-guide/quick-start.en.md) | Installation, local library creation, optional setup, and first import |
+| [Appearance](docs/user-guide/appearance.en.md) | Color modes, backgrounds, text size, and screenshots |
 | [User guide](docs/user-guide/README.en.md) | Install, import, browse, search, tags, collections, sync, AI, browser extension, and troubleshooting |
 | [Extension author manual](docs/manual/README.md) | Plugin, automation-script, and MCP development guides and API references |
-| [Product brief](docs/product-brief.md) | Product vision, scope, terminology, and delivery boundaries |
+| [Product brief (historical planning)](docs/product-brief.md) | Product direction and early scope; use the user guide for current instructions |
 | [Glossary](docs/glossary.md) | Definitions for libraries, automation, plugins, sync, and more |
 
 License notices for third-party components, media runtimes, and assets are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the license files shipped with each component.

@@ -1,5 +1,7 @@
 # Automation
 
+> Applies to Super Lib v2.2.8; package availability follows release attachments. Images marked as older references may show previous layouts; follow the current instructions.
+
 Super offers two kinds of automation: scripts for batch organization, and MCP for connecting an external AI tool to Super. Normal browsing, importing, and viewing do not require either one.
 
 ## Automation scripts
@@ -29,7 +31,7 @@ The default address is `http://127.0.0.1:47342/mcp`. Each client connection has 
 
 After connecting, the Agent receives the basic usage rules in the MCP server instructions and `tools/list`. It should then call `super_library_list_open` or `super_library_list_recent` to obtain a `libraryId`; if it asks which library to use, let it list the libraries first and choose by ID. Every library-scoped call must include that explicit `libraryId`; critical operations also require the Agent's second-step confirmation.
 
-![MCP settings and client configuration](../assets/ui/MCP-settings.png)
+![Older reference — MCP settings and client configuration](../assets/ui/MCP-settings.png)
 
 Only enable the connection for a local AI tool you trust. Super still asks for confirmation before impactful operations such as deleting or moving assets.
 

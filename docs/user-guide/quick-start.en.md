@@ -1,5 +1,7 @@
 # Quick start
 
+> Applies to Super Lib v2.2.8; package availability follows release attachments.
+
 [简体中文](quick-start.md) · [User guide](README.en.md) · [Latest release](https://github.com/aimtowin/Super/releases/latest)
 
 Super Lib is free to use. Create a local library to get started; AI and appearance settings are optional and can be configured later.
@@ -16,6 +18,10 @@ Open the app, choose to create a library, and select a location on a local disk 
 
 Once the library is created, you can start browsing and organizing.
 
+With a library already open, use **Main menu → Library → New library**. Enter a name, then follow the prompt to select a local location.
+
+![Create-library dialog in the running application; Chinese UI](../assets/ui/live-2.2.8/create-library.png)
+
 ## 3. Optionally set up AI and appearance
 
 Open **Main menu → Settings → AI**, enter your provider's API settings, model, and API key, then test the connection and save. See [AI analysis and search](ai.en.md). Importing, browsing, filtering, and organizing do not require AI.
@@ -23,6 +29,8 @@ Open **Main menu → Settings → AI**, enter your provider's API settings, mode
 You choose the AI service; third-party providers may charge. Analysis sends images or previews to the selected provider, so review its data handling before analyzing private assets.
 
 In **Main menu → Settings → Appearance**, choose a light or dark theme, theme colors, a custom background, background opacity, and text size. Text-size levels `1`–`4` affect application text only.
+
+See [Appearance](appearance.en.md) for screenshots and details.
 
 ## 4. Add your first assets
 
@@ -34,6 +42,10 @@ Start with a small collection to become familiar with the controls.
 | Link a folder | You want to keep using an existing asset directory | Remains at its original location |
 
 Import through the menu or by dragging files into the window. Use the link action in the sidebar's folder section to link an existing directory. Linked folders and their disks must remain accessible; moving or deleting original files also affects linked assets.
+
+**Main menu → File** also provides separate actions for importing files, importing folders, and importing linked folders.
+
+![Import and link actions in the File menu; Chinese UI](../assets/ui/live-2.2.8/import-menu.png)
 
 ## 5. Explore
 

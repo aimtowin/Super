@@ -1,5 +1,11 @@
 # Search and filters
 
+> Applies to Super Lib v2.2.8; package availability follows release attachments.
+
+Click **Color** above the asset canvas to open the palette. Shift-click selects multiple colors; **Exclude** excludes the selected colors.
+
+![Current palette filter; Chinese UI](../assets/ui/live-2.2.8/color-filter.png)
+
 ## Scope and updates
 
 Search runs only in the current browse scope: the current folder/collection, the include-descendants choice, and active structured filters define the candidate set. Typing updates the result after about 200 ms; press Enter to submit immediately. Results load progressively in pages.
@@ -36,24 +42,22 @@ name:"hero concept" -tag:sketch | author:Jane
 
 This means “the file name contains hero concept and is not tagged sketch, or the author is Jane”. Without a field prefix, all searchable fields are searched. Width, height, long edge, and duration are structured filters, not search operators.
 
-![Search help and filter entry point](../assets/ui/filter-panel.png)
-
 ## Filters
 
-Open the **Filters** button beside the search field. Different dimensions combine with AND; multiple values within one dimension combine with OR. Available dimensions include:
+Use the separate Color, Tags, Shape, Rating, AI analysis, Favorites, Format, and More controls above the asset canvas. Different dimensions combine with AND; multiple values within one dimension combine with OR. Available dimensions include:
 
-- Color: red, orange, yellow, green, cyan, blue, purple, pink, black, white
+- Color: 18 hue ranges plus black, gray, and white, totaling 21 swatches; matches representative palette colors rather than only the dominant color
 - Tags: searchable tags, top tags, and recently used filters
 - Shape: landscape/portrait, 16:9, 4:3, 1:1, 3:4, 9:16 presets, plus a custom aspect ratio
 - Rating: unrated through five stars
+- AI analysis: analyzed or unanalyzed assets
+- Favorites: a shortcut to favorite assets
 - Format: image, video, audio, 3D, text, and individual extensions
 - More: favorite, source URL present/absent, availability (available/missing), long-edge buckets, width, height, and duration ranges
 
 Hold **Shift** while clicking color, tag, rating, format, or shape-preset values to OR-select several values in one dimension. Shift-click an active value again to remove it. A normal click replaces that dimension’s selection; clicking its only selected value clears it. Different dimensions remain ANDed. Boolean and numeric fields in **More** are independent fields, not a list of discrete values.
 
 The bottom of the filter popover repeats “Hold Shift to multi-select”. Active conditions appear as removable chips; **Clear all** resets every filter.
-
-![Filter dimensions and Shift multi-select](../assets/ui/asset-filter.png)
 
 ## Sorting and smart collections
 
