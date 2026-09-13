@@ -14,6 +14,7 @@ out/
 coverage/
 playwright-report/
 test-results/
+tmp/
 *.log
 .super-dev-user-data/
 .env
