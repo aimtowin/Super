@@ -158,6 +158,7 @@ export default defineConfig({
       input: {
         main_window: path.resolve(rendererDir, 'index.html'),
         offscreen_thumbnail: path.resolve(rendererDir, 'offscreen-thumbnail.html'),
+        floating_preview: path.resolve(rendererDir, 'floating-preview.html'),
       },
     },
   },

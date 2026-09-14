@@ -715,6 +715,8 @@ export interface SuperLibraryApi {
   /** Super-xffq: 执行完整双向同步。 */
   syncRun(input: { libraryId: string; serverId: string; directoryName?: string }): Promise<LibraryApiResult<{ report: SyncReport; conflicts: Array<{ syncId: string; conflictCopyPath: string }> }>>;
   requestPreview(input: { libraryId: string; assetId: string; mode: 'client' | 'fullscreen'; intent?: 'viewer' | 'hover' | 'proxy-fallback'; exrPlane?: number; colorSpace?: string }): Promise<LibraryApiResult<PreviewResolution>>;
+  /** Move an already-viewable static image into a Main-authorized floating window. */
+  openFloatingPreview(input: { libraryId: string; assetId: string }): Promise<LibraryApiResult<void>>;
   closePreview(input: { libraryId: string; assetId: string }): Promise<LibraryApiResult<void>>;
   // 3D viewer (slice C, Super-qvc6): companion-texture index for model
   // previews. Only library-relative paths + ids; no absolute paths.

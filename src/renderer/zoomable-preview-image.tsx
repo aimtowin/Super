@@ -67,6 +67,9 @@ export const ZoomableImage = forwardRef<
     fitKeybinds?: "space-and-f" | "f-only";
     isFullscreen?: boolean;
     onFullscreen?: () => void;
+    /** Opens the current static image in Main's separate always-on-top window. */
+    onFloat?: () => void;
+    floating?: boolean;
     onSwipeNext?: () => void;
     onSwipePrevious?: () => void;
     colorSpaceOptions?: Array<{ id: string; label: string }>;
@@ -90,6 +93,8 @@ export const ZoomableImage = forwardRef<
     fitKeybinds = "space-and-f",
     isFullscreen = false,
     onFullscreen,
+    onFloat,
+    floating = false,
     onSwipeNext,
     onSwipePrevious,
     colorSpaceOptions,
@@ -361,6 +366,7 @@ export const ZoomableImage = forwardRef<
         />
         {onRotate && (
           <button
+            data-hover-tip-placement="above"
             onClick={onRotate}
             tabIndex={VIEWER_CHROME_TAB_INDEX}
             type="button"
@@ -370,6 +376,7 @@ export const ZoomableImage = forwardRef<
           </button>
         )}
         <button
+          data-hover-tip-placement="above"
           onClick={fitToWindow}
           tabIndex={VIEWER_CHROME_TAB_INDEX}
           type="button"
@@ -379,6 +386,7 @@ export const ZoomableImage = forwardRef<
         </button>
         {onFullscreen && (
           <button
+            data-hover-tip-placement="above"
             onClick={onFullscreen}
             tabIndex={VIEWER_CHROME_TAB_INDEX}
             type="button"
@@ -392,6 +400,18 @@ export const ZoomableImage = forwardRef<
               name={isFullscreen ? "fullscreen-exit" : "fullscreen"}
               size={14}
             />
+          </button>
+        )}
+        {onFloat && (
+          <button
+            data-hover-tip-placement="above"
+            disabled={floating}
+            onClick={onFloat}
+            tabIndex={VIEWER_CHROME_TAB_INDEX}
+            type="button"
+            {...iconActionAttrs(t("preview.floatPreview"))}
+          >
+            <Icon name="pop-out" size={14} />
           </button>
         )}
       </div>

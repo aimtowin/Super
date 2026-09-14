@@ -17,6 +17,7 @@ export type IconName =
   | "panel-left-close"
   | "panel-right"
   | "panel-right-close"
+  | "pop-out"
   | "download"
   | "edit"
   | "eye"
@@ -175,6 +176,14 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M15 4v16" />
       <path d="M15 4h5v16h-5z" fill="currentColor" opacity="0.35" stroke="none" />
       <path d="m8 9 3 3-3 3" />
+    </>
+  ),
+  // Window with an outbound arrow — distinguish floating preview from the
+  // four-corner fullscreen icon used immediately to its left.
+  "pop-out": (
+    <>
+      <rect x="4" y="5" width="13" height="14" rx="1.8" />
+      <path d="M13 4h7v7M20 4l-9 9" />
     </>
   ),
   edit: (

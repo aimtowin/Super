@@ -1562,6 +1562,8 @@ export const en = {
     actualSize: "Actual size",
     copyAsset: "Copy asset",
     fitWindow: "Fit",
+    floatPreview: "Float preview",
+    floatPreviewFailed: "Could not open the floating preview. Try again.",
     pbrBaseColorTitle: "PBR channel: Base Color",
     pbrNormalTitle: "PBR channel: Normal",
     pbrRoughnessTitle: "PBR channel: Roughness",

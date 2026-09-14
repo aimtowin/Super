@@ -133,9 +133,12 @@ import {
   VIEWER_VIDEO_SHORTCUTS_ACTIVE_CHANNEL,
   BROWSE_SHORTCUT_MENU_ENABLED_CHANNEL,
   OFFSCREEN_THUMBNAIL_FRAME_CHANNEL,
+  FLOATING_PREVIEW_CLOSE_CHANNEL,
+  FLOATING_PREVIEW_GET_STATE_CHANNEL,
   MCP_SETTINGS_REQUEST_CHANNEL,
   MCP_SETTINGS_EVENT_CHANNEL,
 } from "../shared/protocol/channels";
+import type { FloatingPreviewState } from "../shared/floating-preview";
 import {
   createAutomationCommandGateway,
   type AutomationCommandGateway,
@@ -412,6 +415,9 @@ const hasSingleInstanceLock = allowMultiInstance
   : app.requestSingleInstanceLock();
 
 let mainWindow: BrowserWindow | undefined;
+/** One capability-minimal, always-on-top image monitor at a time. */
+let floatingPreviewWindow: BrowserWindow | undefined;
+let floatingPreviewState: FloatingPreviewState | undefined;
 /** Effective UI locale for native dialogs; synced from Renderer (Super-bwb). */
 let appLocale: AppLocale = "en";
 let workerClient: LibraryWorkerClient | undefined;
@@ -1191,6 +1197,147 @@ async function loadRendererDevUrl(
     { url, attempts: DEV_RENDERER_LOAD_ATTEMPTS },
   );
   throw new Error(`Renderer remained blank after dev load retries: ${url}`);
+}
+
+async function loadFloatingPreviewRenderer(window: BrowserWindow): Promise<void> {
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    const devUrl = new URL(
+      "floating-preview.html",
+      `${MAIN_WINDOW_VITE_DEV_SERVER_URL.replace(/\/$/u, "")}/`,
+    ).toString();
+    await window.loadURL(devUrl);
+    return;
+  }
+  await window.loadFile(
+    path.join(
+      __dirname,
+      `../renderer/${MAIN_WINDOW_VITE_NAME}/floating-preview.html`,
+    ),
+  );
+}
+
+function restoreMainAfterFloatingPreview(): void {
+  if (shutdownStarted) return;
+  const target = mainWindow;
+  if (!target || target.isDestroyed()) return;
+  if (target.isMinimized()) target.restore();
+  target.show();
+  target.focus();
+}
+
+async function openFloatingImagePreview(input: {
+  libraryId: string;
+  assetId: string;
+}): Promise<RendererResult> {
+  const client = workerClient;
+  if (!client) {
+    return { ok: false, error: createPublicError("INTERNAL_ERROR") } satisfies RendererResult;
+  }
+
+  const preview = await client.request({
+    type: "media.get-preview-artifact",
+    libraryId: input.libraryId,
+    assetId: input.assetId,
+    intent: "viewer",
+  });
+  if (!preview.ok) return preview as RendererResult;
+  if (
+    preview.type !== "media.preview-artifact" ||
+    preview.mediaType !== "image" ||
+    preview.status !== "ready"
+  ) {
+    return {
+      ok: false,
+      error: createPublicError("ASSET_NOT_FOUND", "UNSUPPORTED_FORMAT"),
+    } satisfies RendererResult;
+  }
+
+  const sourceUrl =
+    preview.playbackMode === "source" && preview.sourceRevisionId
+      ? `super://source/${input.libraryId}/${input.assetId}?revision=${encodeURIComponent(preview.sourceRevisionId)}`
+      : preview.artifactId
+        ? `super://preview/${input.libraryId}/${preview.artifactId}`
+        : undefined;
+  if (!sourceUrl) {
+    return { ok: false, error: createPublicError("ASSET_NOT_FOUND") } satisfies RendererResult;
+  }
+
+  // Closing an existing monitor is intentionally silent: it must not restore
+  // the main window while a replacement monitor is being opened.
+  const previous = floatingPreviewWindow;
+  floatingPreviewWindow = undefined;
+  floatingPreviewState = undefined;
+  if (previous && !previous.isDestroyed()) previous.close();
+
+  const parent = mainWindow;
+  if (!parent || parent.isDestroyed()) {
+    return { ok: false, error: createPublicError("INTERNAL_ERROR") } satisfies RendererResult;
+  }
+
+  const window = new BrowserWindow({
+    width: 960,
+    height: 640,
+    minWidth: 320,
+    minHeight: 220,
+    show: false,
+    frame: false,
+    resizable: true,
+    alwaysOnTop: true,
+    backgroundColor: "#0d1014",
+    title: "Super 悬浮预览",
+    ...(appIconImage() ? { icon: appIconImage() } : {}),
+    webPreferences: {
+      preload: path.join(__dirname, "floating-preview.js"),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      spellcheck: false,
+    },
+  });
+  // `screen-saver` is Electron's highest normal desktop level. It cannot and
+  // should not outrank OS secure surfaces or exclusive fullscreen software.
+  window.setAlwaysOnTop(true, "screen-saver");
+  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.on("will-navigate", (event) => event.preventDefault());
+  attachRendererDiagnostics(window);
+
+  floatingPreviewWindow = window;
+  floatingPreviewState = Object.freeze({
+    assetId: input.assetId,
+    sourceUrl,
+  });
+  window.once("ready-to-show", () => {
+    if (floatingPreviewWindow !== window || window.isDestroyed()) return;
+    window.show();
+    if (!parent.isDestroyed()) parent.minimize();
+  });
+  window.on("closed", () => {
+    if (floatingPreviewWindow !== window) return;
+    floatingPreviewWindow = undefined;
+    floatingPreviewState = undefined;
+    restoreMainAfterFloatingPreview();
+  });
+
+  try {
+    await loadFloatingPreviewRenderer(window);
+  } catch (error) {
+    logger?.error("floating-preview.load", error, { assetId: input.assetId });
+    if (floatingPreviewWindow === window) {
+      floatingPreviewWindow = undefined;
+      floatingPreviewState = undefined;
+    }
+    if (!window.isDestroyed()) window.destroy();
+    return { ok: false, error: createPublicError("INTERNAL_ERROR") } satisfies RendererResult;
+  }
+
+  logger?.info("floating-preview.opened", "Opened a floating image preview.", {
+    assetId: input.assetId,
+  });
+  return {
+    ok: true,
+    type: "asset.preview.floating-opened",
+    assetId: input.assetId,
+  } satisfies RendererResult;
 }
 
 function attachRendererDiagnostics(window: BrowserWindow): void {
@@ -3504,6 +3651,9 @@ async function commandFor(
         ...(request.exrPlane === undefined ? {} : { exrPlane: request.exrPlane }),
         ...(request.colorSpace === undefined ? {} : { colorSpace: request.colorSpace }),
       };
+    case "asset.preview.float.request":
+      // Main resolves the image and creates the restricted child window.
+      return undefined;
     case "asset.close-preview.request":
       // Preview close is a no-op on the Main side; renderer handles UI state.
       return undefined;
@@ -3642,6 +3792,10 @@ async function handleLibraryRequest(input: unknown): Promise<RendererResult> {
   let previousLibraryPaths: string[] = [];
   try {
     const request = parseRendererRequest(input);
+
+    if (request.type === "asset.preview.float.request") {
+      return openFloatingImagePreview(request);
+    }
 
     if (criticalRendererRequest(request)) {
       logger?.info(
@@ -7549,6 +7703,21 @@ async function startApplication(): Promise<void> {
     return handleLibraryRequest(input);
   });
 
+  ipcMain.handle(FLOATING_PREVIEW_GET_STATE_CHANNEL, (event) => {
+    const window = floatingPreviewWindow;
+    const state = floatingPreviewState;
+    if (!window || window.isDestroyed() || !state || event.sender !== window.webContents) {
+      throw new Error("Floating preview state is unavailable.");
+    }
+    return state;
+  });
+
+  ipcMain.on(FLOATING_PREVIEW_CLOSE_CHANNEL, (event) => {
+    const window = floatingPreviewWindow;
+    if (!window || window.isDestroyed() || event.sender !== window.webContents) return;
+    window.close();
+  });
+
   ipcMain.on(ASSET_NATIVE_DRAG_CHANNEL, (event, input: unknown) => {
     const dragWindow = mainWindow;
     if (
@@ -8174,6 +8343,10 @@ if (!hasSingleInstanceLock) {
 
   app.on("before-quit", (event) => {
     shutdownStarted = true;
+    const floatingWindow = floatingPreviewWindow;
+    floatingPreviewWindow = undefined;
+    floatingPreviewState = undefined;
+    if (floatingWindow && !floatingWindow.isDestroyed()) floatingWindow.destroy();
     if (automaticUpdateTimer !== undefined) {
       clearTimeout(automaticUpdateTimer);
       automaticUpdateTimer = undefined;

@@ -17,7 +17,10 @@ type TipState = {
   readonly text: string;
   readonly left: number;
   readonly top: number;
+  readonly placement: "above" | "below";
   readonly variant: "default" | "search-syntax";
+  /** `title` tips keep the browser's existing pointer-local presentation. */
+  readonly source: "managed" | "native-title";
 };
 
 function renderSearchSyntaxTip(text: string): ReactNode {
@@ -60,7 +63,12 @@ export function HoverTipHost() {
     };
 
     const scheduleShow = (el: Element) => {
-      const text = el.getAttribute('data-hover-tip')?.trim();
+      // Most modern controls opt in with data-hover-tip, but asset names and
+      // navigation rows still deliberately use the native title attribute.
+      // Feed both paths into the corner bubble without replacing native tips.
+      const managedText = el.getAttribute('data-hover-tip')?.trim();
+      const nativeTitle = el.getAttribute('title')?.trim();
+      const text = managedText || nativeTitle;
       if (!text) {
         hide();
         return;
@@ -69,11 +77,15 @@ export function HoverTipHost() {
       clearTimer();
       activeElRef.current = el;
       setTip(null);
-      const id = el.getAttribute('data-hover-tip-id') ?? undefined;
+      const source = managedText ? 'managed' : 'native-title';
+      const id = source === 'managed'
+        ? el.getAttribute('data-hover-tip-id') ?? undefined
+        : undefined;
       showTimerRef.current = window.setTimeout(() => {
         if (activeElRef.current !== el) return;
         const rect = el.getBoundingClientRect();
         const variant =
+          source === 'managed' &&
           el.getAttribute('data-hover-tip-variant') === 'search-syntax'
             ? 'search-syntax'
             : 'default';
@@ -87,17 +99,25 @@ export function HoverTipHost() {
         const edgeInset = variant === 'search-syntax'
           ? 12 + searchGuideHalfWidth
           : 12;
+        const placement =
+          el.getAttribute('data-hover-tip-placement') === 'above'
+            ? 'above'
+            : 'below';
         const left = Math.min(
           window.innerWidth - edgeInset,
           Math.max(edgeInset, rect.left + rect.width / 2),
         );
-        const top = Math.min(window.innerHeight - 8, rect.bottom + 6);
+        const top = placement === 'above'
+          ? Math.max(8, rect.top - 6)
+          : Math.min(window.innerHeight - 8, rect.bottom + 6);
         setTip({
           id,
           text,
           left,
           top,
+          placement,
           variant,
+          source,
         });
         showTimerRef.current = null;
       }, HOVER_TIP_SHOW_DELAY_MS);
@@ -106,7 +126,7 @@ export function HoverTipHost() {
     const onPointerOver = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const el = target.closest('[data-hover-tip]');
+      const el = target.closest('[data-hover-tip], [title]');
       if (!el || !(el instanceof Element)) {
         if (activeElRef.current) hide();
         return;
@@ -137,7 +157,7 @@ export function HoverTipHost() {
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const el = target.closest('[data-hover-tip]');
+      const el = target.closest('[data-hover-tip], [title]');
       if (el instanceof Element) scheduleShow(el);
     };
     const onFocusOut = (event: FocusEvent) => {
@@ -190,20 +210,40 @@ export function HoverTipHost() {
   const style: CSSProperties = {
     left: tip.left,
     top: tip.top,
-    transform: 'translateX(-50%)',
+    transform: tip.placement === 'above'
+      ? 'translate(-50%, -100%)'
+      : 'translateX(-50%)',
   };
 
   return createPortal(
-    <div
-      className={`hover-tip${tip.variant === 'search-syntax' ? ' is-search-syntax' : ''}`}
-      id={tip.id}
-      role="tooltip"
-      style={style}
-    >
-      {tip.variant === 'search-syntax'
-        ? renderSearchSyntaxTip(tip.text)
-        : tip.text}
-    </div>,
+    <>
+      {tip.source === 'managed' ? (
+        <div
+          className={`hover-tip${tip.variant === 'search-syntax' ? ' is-search-syntax' : ''}`}
+          id={tip.id}
+          role="tooltip"
+          style={style}
+        >
+          {tip.variant === 'search-syntax'
+            ? renderSearchSyntaxTip(tip.text)
+            : tip.text}
+        </div>
+      ) : null}
+      {/*
+       * Keep the contextual tip where the pointer is, but also surface the
+       * exact same guidance in a stable corner bubble. This prevents controls
+       * near the lower edge (such as the preview toolbar) from making a tip
+       * hard to read or clipping it behind the window edge.
+       */}
+      <div
+        aria-hidden="true"
+        className={`hover-tip-corner${tip.variant === 'search-syntax' ? ' is-search-syntax' : ''}`}
+      >
+        {tip.variant === 'search-syntax'
+          ? renderSearchSyntaxTip(tip.text)
+          : tip.text}
+      </div>
+    </>,
     document.body,
   );
 }

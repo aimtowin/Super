@@ -174,6 +174,13 @@ const config: ForgeConfig = {
           target: 'preload',
         },
         {
+          // The floating image monitor is also a separate BrowserWindow, but
+          // it intentionally exposes only read-state + self-close IPC.
+          entry: 'src/preload/floating-preview.ts',
+          config: 'vite.floating-preview-preload.config.ts',
+          target: 'preload',
+        },
+        {
           entry: 'src/worker/index.ts',
           config: 'vite.worker.config.ts',
           target: 'main',

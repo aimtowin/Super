@@ -1078,6 +1078,36 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
 }
 
+/* A stable companion to the pointer-local tip. It intentionally does not
+   receive pointer events: it is a reading surface, never another control. */
+.hover-tip-corner {
+  position: fixed;
+  right: clamp(14px, 1.7vw, 28px);
+  bottom: clamp(14px, 1.9vh, 24px);
+  z-index: var(--ui-layer-tooltip);
+  max-width: min(300px, calc(100vw - 28px));
+  padding: 8px 11px;
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 88%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--raised-2) 92%, transparent);
+  color: var(--text);
+  font-size: calc(12px * var(--app-font-scale));
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 18%);
+  backdrop-filter: blur(12px) saturate(112%);
+  -webkit-backdrop-filter: blur(12px) saturate(112%);
+}
+
+[data-theme="light"] .hover-tip-corner {
+  background: color-mix(in srgb, var(--raised) 90%, transparent);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 12%);
+}
+
 /* Search grammar needs a little room to teach rather than a one-line system
    hint. Keep it light and quiet so it reads as guidance, not a warning. */
 .hover-tip.is-search-syntax {
@@ -1117,6 +1147,11 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 [data-theme="light"] .hover-tip.is-search-syntax {
   background: color-mix(in srgb, var(--raised-2) 94%, white);
   border-color: var(--divider-soft);
+}
+
+.hover-tip-corner.is-search-syntax {
+  width: min(312px, calc(100vw - 28px));
+  max-width: none;
 }
 
 .tool-button {
@@ -5227,7 +5262,8 @@ body.super-modal-open .app-shell {
 .preview-zoom-controls {
   position: absolute;
   z-index: 2;
-  bottom: 12px;
+  /* Keep native select menus and hover tips clear of the window edge. */
+  bottom: clamp(20px, 2.4vh, 30px);
   left: 50%;
   display: flex;
   align-items: center;
@@ -5262,6 +5298,7 @@ body.super-modal-open .app-shell {
   outline: 0;
   background: transparent;
   color: var(--text);
+  color-scheme: dark;
   font: inherit;
   cursor: pointer;
 }
@@ -5297,6 +5334,24 @@ body.super-modal-open .app-shell {
 .preview-zoom-controls button:focus-visible {
   background: var(--hover);
   color: var(--text);
+}
+.preview-color-space-control select option,
+.preview-color-space-control select optgroup {
+  background-color: var(--raised);
+  color: var(--text);
+}
+.preview-color-space-control select option:disabled {
+  /* Chromium's Windows menu otherwise paints disabled entries white-on-white. */
+  background-color: var(--raised);
+  color: color-mix(in srgb, var(--secondary) 76%, transparent);
+  opacity: 1;
+}
+[data-theme="light"] .preview-color-space-control select {
+  color-scheme: light;
+}
+.preview-zoom-controls button:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 .plugin-inspector-section-header {
   display: flex;

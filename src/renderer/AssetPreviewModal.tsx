@@ -212,6 +212,7 @@ export const AssetPreviewModal = forwardRef<
   const [viewerContextMenu, setViewerContextMenu] =
     useState<ViewerContextMenuPosition | null>(null);
   const [fitRequestToken, setFitRequestToken] = useState(0);
+  const [floatingPreview, setFloatingPreview] = useState(false);
   const resolutionRef = useRef<PreviewResolution | null>(null);
   const playbackErrorRef = useRef<string | null>(null);
   const requestedProxyFallbackRef = useRef<string | null>(null);
@@ -602,6 +603,22 @@ export const AssetPreviewModal = forwardRef<
     setSelectedColorSpace(colorSpace);
     onSetColorSpace?.(asset.assetId, colorSpace);
     void resolvePreview(false, "client", selectedExrPlane, colorSpace);
+  }
+
+  async function openFloatingPreview() {
+    if (floatingPreview) return;
+    setFloatingPreview(true);
+    try {
+      const result = await api.openFloatingPreview({
+        libraryId,
+        assetId: asset.assetId,
+      });
+      if (!result.ok) setError(t("preview.floatPreviewFailed"));
+    } catch {
+      setError(t("preview.floatPreviewFailed"));
+    } finally {
+      setFloatingPreview(false);
+    }
   }
 
   async function toggleFullscreen() {
@@ -1028,6 +1045,11 @@ export const AssetPreviewModal = forwardRef<
                 selectedColorSpace ?? resolution?.colorSpace?.id
               }
               isFullscreen={isFullscreen}
+              onFloat={
+                asset.mediaType === "image" && ready && resolution?.url
+                  ? openFloatingPreview
+                  : undefined
+              }
               key={asset.assetId}
               onColorSpaceChange={selectColorSpace}
               onFullscreen={() => void toggleFullscreen()}
@@ -1035,6 +1057,7 @@ export const AssetPreviewModal = forwardRef<
               onSwipeNext={onNext}
               onSwipePrevious={onPrevious}
               pbrChannel={pbrChannel}
+              floating={floatingPreview}
               placeholderSrc={placeholderUrl ?? undefined}
               src={imageSrc}
             />

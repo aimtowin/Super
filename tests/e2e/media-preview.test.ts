@@ -193,6 +193,13 @@ test("generates a decoded thumbnail and keeps asset viewer context coherent", as
       name: "automatic.png 查看页面",
     });
     await expect(preview).toBeVisible();
+    const navigationTitleTip = window
+      .locator(".navigation-pane button.nav-row[title]")
+      .first();
+    const navigationTipText = await navigationTitleTip.getAttribute("title");
+    expect(navigationTipText).toBeTruthy();
+    await navigationTitleTip.hover();
+    await expect(window.locator(".hover-tip-corner")).toHaveText(navigationTipText!);
     await expect(preview).toBeAttached({ attached: true });
     await expect(window.locator(".workspace > .workspace-viewer")).toHaveCount(
       1,
@@ -205,6 +212,48 @@ test("generates a decoded thumbnail and keeps asset viewer context coherent", as
       window.getByRole("button", { name: "导入文件", exact: true }).first(),
     ).toBeHidden();
     await expectImageDecoded(preview.locator("img.preview-image:not(.is-hidden)"));
+    await preview.hover();
+    await expect(preview.getByRole("button", { name: "悬浮预览" })).toHaveAttribute(
+      "data-hover-tip-placement",
+      "above",
+    );
+    const floatPreviewButton = preview.getByRole("button", { name: "悬浮预览" });
+    await floatPreviewButton.hover();
+    await expect(window.locator(".hover-tip-corner")).toHaveText("悬浮预览");
+    await expect(window.locator(".hover-tip-corner")).toHaveCSS("pointer-events", "none");
+    await floatPreviewButton.click();
+    await expect
+      .poll(() => application.windows().length)
+      .toBe(2);
+    const floatingWindow = (await application.windows()).find((candidate) =>
+      candidate.url().includes("floating-preview.html"),
+    );
+    expect(floatingWindow).toBeDefined();
+    await expectImageDecoded(
+      floatingWindow!.locator("img.floating-preview-image"),
+    );
+    await expect
+      .poll(() =>
+        application.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows().some(
+            (candidate) => candidate.title === "Super" && candidate.isMinimized(),
+          ),
+        ),
+      )
+      .toBe(true);
+    await floatingWindow!.getByRole("button", { name: "关闭悬浮预览" }).click();
+    await expect
+      .poll(() => application.windows().length)
+      .toBe(1);
+    await expect
+      .poll(() =>
+        application.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows().some(
+            (candidate) => candidate.title === "Super" && !candidate.isMinimized(),
+          ),
+        ),
+      )
+      .toBe(true);
     // Viewing keeps the host mounted so notices/activity strips remain
     // available, but removes it from normal flex flow with the viewing class.
     await expect(window.locator(".workspace-canvas-host")).toHaveClass(/is-viewing/);

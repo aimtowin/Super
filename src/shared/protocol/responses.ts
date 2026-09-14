@@ -2384,6 +2384,11 @@ const rendererSuccessResultSchema = z.discriminatedUnion('type', [
     type: z.literal('ai.pending-assets'),
     assetIds: z.array(nonBlankString),
   }),
+  z.strictObject({
+    ok: z.literal(true),
+    type: z.literal('asset.preview.floating-opened'),
+    assetId: nonBlankString,
+  }),
   ...assetOperationSuccessSchemas,
 ]);
 

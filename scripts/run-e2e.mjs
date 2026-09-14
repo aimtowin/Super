@@ -110,6 +110,26 @@ await build({
   },
 });
 
+// Floating image monitors are a separate BrowserWindow with a deliberately
+// narrow bridge. Keep this production-like graph in lockstep with Forge so a
+// missing child preload cannot turn the window into a blank surface in E2E.
+await build({
+  configFile: path.join(projectRoot, 'vite.floating-preview-preload.config.ts'),
+  resolve: nodeResolve,
+  build: {
+    emptyOutDir: false,
+    lib: {
+      entry: path.join(projectRoot, 'src/preload/floating-preview.ts'),
+      fileName: () => 'floating-preview.js',
+      formats: ['cjs'],
+    },
+    outDir: mainBuildDirectory,
+    rollupOptions: {
+      external: electronExternals,
+    },
+  },
+});
+
 await build({
   configFile: path.join(projectRoot, 'vite.worker.config.ts'),
   resolve: nodeResolve,

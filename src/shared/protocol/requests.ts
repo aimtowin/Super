@@ -1090,6 +1090,13 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     exrPlane: z.number().int().min(0).max(255).optional(),
     colorSpace: nonBlankString.max(120).optional(),
   }),
+  // The renderer sends only opaque identifiers. Main resolves and authorizes
+  // the image source for the capability-minimal floating child window.
+  z.strictObject({
+    type: z.literal('asset.preview.float.request'),
+    libraryId: identifierSchema,
+    assetId: identifierSchema,
+  }),
   z.strictObject({
     type: z.literal('asset.close-preview.request'),
     libraryId: identifierSchema,

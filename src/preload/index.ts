@@ -1994,6 +1994,13 @@ const library: SuperLibraryApi = Object.freeze({
     };
   },
 
+  async openFloatingPreview({ libraryId, assetId }: { libraryId: string; assetId: string }): Promise<LibraryApiResult<void>> {
+    const result = await request({ type: 'asset.preview.float.request', libraryId, assetId });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'asset.preview.floating-opened') throw new Error('Unexpected floating-preview response.');
+    return { ok: true, value: undefined };
+  },
+
   async closePreview({ libraryId, assetId }: { libraryId: string; assetId: string }): Promise<LibraryApiResult<void>> {
     const result = await request({ type: 'asset.close-preview.request', libraryId, assetId });
     if (!result.ok) return failure(result);

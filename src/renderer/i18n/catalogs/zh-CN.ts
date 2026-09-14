@@ -1545,6 +1545,8 @@ export const zhCN = {
     actualSize: "实际大小",
     copyAsset: "复制资产",
     fitWindow: "适应",
+    floatPreview: "悬浮预览",
+    floatPreviewFailed: "无法打开悬浮预览，请重试。",
     pbrBaseColorTitle: "PBR 通道：基础色",
     pbrNormalTitle: "PBR 通道：法线",
     pbrRoughnessTitle: "PBR 通道：粗糙度",

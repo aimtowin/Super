@@ -124,6 +124,12 @@ export const OFFSCREEN_THUMBNAIL_RENDER_CHANNEL =
 export const OFFSCREEN_THUMBNAIL_FRAME_CHANNEL =
   'super:offscreen-thumbnail:frame' as const;
 
+/** Dedicated, capability-minimal image floating-preview child window. */
+export const FLOATING_PREVIEW_GET_STATE_CHANNEL =
+  'super:floating-preview:get-state' as const;
+export const FLOATING_PREVIEW_CLOSE_CHANNEL =
+  'super:floating-preview:close' as const;
+
 export const WORKER_READY_MESSAGE_TYPE = 'worker.ready' as const;
 export const WORKER_SHUTDOWN_MESSAGE_TYPE = 'worker.shutdown' as const;
 export const WORKER_SHUTDOWN_ACK_MESSAGE_TYPE = 'worker.shutdown.ack' as const;

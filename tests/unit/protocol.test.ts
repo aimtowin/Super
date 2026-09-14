@@ -388,6 +388,11 @@ describe('renderer request protocol', () => {
       exrPlane: 2,
     })).toMatchObject({ type: 'asset.preview.request', mode: 'fullscreen', exrPlane: 2 });
     expect(parseRendererRequest({
+      type: 'asset.preview.float.request',
+      libraryId: 'library-01',
+      assetId: 'asset-01',
+    })).toMatchObject({ type: 'asset.preview.float.request' });
+    expect(parseRendererRequest({
       type: 'asset.retry-artifact.request',
       libraryId: 'library-01',
       assetId: 'asset-01',
@@ -1199,6 +1204,16 @@ describe('preview response protocol', () => {
     });
     expect(result).toMatchObject({ status: 'failed', errorCode: 'FFMPEG_REQUIRED' });
     expect(JSON.stringify(result)).not.toContain('/Users/');
+  });
+
+  it('acknowledges floating preview creation without leaking a source URL', () => {
+    const result = parseRendererResult({
+      ok: true,
+      type: 'asset.preview.floating-opened',
+      assetId: 'asset-01',
+    });
+    expect(result).toMatchObject({ type: 'asset.preview.floating-opened' });
+    expect(JSON.stringify(result)).not.toContain('super://');
   });
 
   it('allows an audio proxy response without exposing a source path', () => {
