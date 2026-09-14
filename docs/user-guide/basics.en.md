@@ -1,6 +1,8 @@
 # Basics
 
-> Applies to Super Lib v2.2.8; package availability follows release attachments.
+> Updated with floating image previews and hover hints introduced in Super Lib v2.3.1. Screenshots retain their capture versions; package availability follows release attachments.
+
+[简体中文](basics.md) · [User guide](README.en.md) · [Floating image preview](#floating-image-preview) · [Corner hint bubble](#hover-hints)
 
 ## Create, open, and configure a library
 
@@ -80,6 +82,35 @@ Double-click an asset to open the viewer. Images, SVG, RAW, PSD, TIFF, TGA, and 
 The viewer supports pan, wheel zoom, fit-to-view (numpad `.`), fullscreen, and rotate/horizontal/vertical mirror transforms for images and video. PDF preview supports zoom (0.25×–8×), pan, and fit-to-page; scrolling zooms around the mouse pointer. For formats other than PNG/JPEG, Super uses a detected color space when available and lets you choose among supported spaces. EXR can expose multiple planes/parts when present; this is not a professional channel-grading tool.
 
 ![Current 3D viewer displaying an existing FBX asset](../assets/ui/live-2.2.8/model-viewer.png)
+
+<a id="floating-image-preview"></a>
+
+### Floating image preview (new in v2.3.1)
+
+Keep a reference image visible while working in another application:
+
+1. Double-click an image to open the viewer. Move the pointer into the preview to reveal the bottom controls.
+2. Click **Float preview**, next to the fullscreen button on the right. Once the floating window appears, the Super Lib main window minimizes automatically.
+3. Drag the floating window's top area to move it. Drag an edge or corner to resize it. The whole image fits proportionally without stretching; unused space remains when the window and image have different aspect ratios.
+4. Move the pointer into the floating window to reveal its close button at the upper right. Click it, or press `Esc` while the floating window has focus, to restore the main window and continue browsing and previewing.
+
+One floating image is shown at a time; opening another replaces it. This control is for available image previews, not video, audio, PDF, or 3D viewers. The window stays above ordinary application windows; system security screens and exclusive fullscreen applications may cover it.
+
+The floating window uses its own fit-to-window view. It does not inherit the main viewer's zoom, rotation, mirroring, or temporary color-space selection. Close it to return to those controls in the main viewer.
+
+### Image viewer controls (updated in v2.3.1)
+
+The bottom controls leave space above the window edge, and tool hints appear above the buttons on the right. The color-space menu follows light and dark themes; dimmed options are unavailable for selection.
+
+<a id="hover-hints"></a>
+
+## Corner hint bubble (new in v2.3.1)
+
+In the main window, hover over a control or name that already has a hint to see the same text in an additional bubble at the lower right. The original hint near the pointer remains available.
+
+This includes toolbar buttons, sidebar folder, collection, and smart-collection names, plus asset names, list entries, and settings with existing hints. Long names wrap in the bubble so you can read the full text. Ordinary content without a hint does not receive an additional description.
+
+The corner bubble follows the active theme and lets mouse clicks pass through. It hides when you move away, click, scroll, switch windows, or press `Esc`. It is enabled by default and requires no setup.
 
 ## Tags, collections, and smart collections
 

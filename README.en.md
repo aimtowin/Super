@@ -33,6 +33,8 @@ Super Lib itself is free. Optional third-party AI services may charge according 
 - **Organization and discovery**: folders, tags, ratings, favorites, descriptions, palettes, collections, filters, sorting, and full-text search within the current scope.
 - **Local first**: managed imports copy assets into a library, while linked folders reference an external directory in place. Library data stays local and can be synchronized between devices through WebDAV when needed.
 - **Browsing and preview**: thumbnails, video previews, metadata, the viewer, and background derivative work are designed not to block browsing.
+- **Floating reference images**: keep the current image in a movable, resizable, always-on-top window while the main window minimizes. See [Floating image preview](docs/user-guide/basics.en.md#floating-image-preview).
+- **Hover hints in two locations**: existing hints for buttons, sidebar entries, and asset names also appear in a separate lower-right bubble. See [Corner hint bubble](docs/user-guide/basics.en.md#hover-hints).
 - **Automation and extensibility**: plugins, controlled automation scripts, and local MCP connections are supported. Writes are bounded by permissions, execution plans, and risk confirmation.
 - **AI analysis and search**: generate descriptions and tags for supported media, then use natural language to find analyzed assets and create temporary smart collections. AI is optional and requires your own provider configuration.
 - **Appearance**: light and dark themes, custom backgrounds, theme colors, and four application text-size levels.
@@ -40,7 +42,7 @@ Super Lib itself is free. Optional third-party AI services may charge according 
 
 ## Install and use
 
-The current `v2.3.0` release provides a Windows x64 installer. Download `SuperSetup.exe` for a first installation. Full update ZIPs and delta packages are update-delivery artifacts. Availability on other platforms depends on the files actually attached to a release.
+The current `v2.3.1` release provides a Windows x64 installer. Download `SuperSetup.exe` for a first installation. Full update ZIPs and delta packages are update-delivery artifacts. Availability on other platforms depends on the files actually attached to a release.
 
 Libraries live at the location you choose. Importing copies assets into the library; linking references files at their existing location, which must remain accessible. See the [quick start](docs/user-guide/quick-start.en.md).
 

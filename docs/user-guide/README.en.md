@@ -1,8 +1,8 @@
 # User Guide
 
-A Super Lib guide for end users. Review baseline: `v2.2.8`. Chinese version: [README.md](README.md)
+A Super Lib guide for end users. The core guide was reviewed for `v2.2.8`, with folder-creation updates from `v2.3.0` and floating previews and hover hints from `v2.3.1` added. Chinese version: [README.md](README.md)
 
-Popular pages: [Quick start](quick-start.en.md) · [Appearance](appearance.en.md) · [AI analysis and search](ai.en.md) · [Troubleshooting](troubleshooting.en.md)
+Popular pages: [Quick start](quick-start.en.md) · [Appearance](appearance.en.md) · [Floating image preview](basics.en.md#floating-image-preview) · [Corner hint bubble](basics.en.md#hover-hints) · [AI analysis and search](ai.en.md) · [Troubleshooting](troubleshooting.en.md)
 
 - [Quick start](quick-start.en.md) — install, create a local library, optionally configure AI and appearance
 - [Install](installation.en.md) — Windows installation, updates, and other platforms
