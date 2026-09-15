@@ -9659,41 +9659,6 @@ function AppInner() {
                 }}
               />
             )}
-            <LibrarySwitcher
-              busy={busy}
-              disabled={busy}
-              syncStatus={syncBindingStatus}
-              importMenuCopy={importMenuCopy}
-              libraryName={library?.displayName ?? null}
-              libraryOpen={Boolean(library)}
-              onCloseLibrary={() => void closeLibrary()}
-              onRemoveLibrary={() => void removeLibrary()}
-              onDeleteLibraryFromDisk={() => requestDeleteLibraryFromDisk()}
-              onOpenLibrarySettings={() => {
-                setAppSettingsOpen(false);
-                setLibrarySettingsOpen(true);
-              }}
-              onCreateLibrary={() => {
-                setDialogValue(t("shell.myLibrary"));
-                setCreateLibraryPhase("form");
-                setDialog("library");
-              }}
-              onExportLibrary={() => setExportDialogOpen(true)}
-              onImportFolder={() => void importAssets("folder")}
-              onImportLibrary={() => {
-                setOpenLibraryChooserOpen(false);
-                setImportLibraryChooserOpen(true);
-              }}
-              onImportLinkedFolder={() => void importFolderAsLinked()}
-              onMenuOpen={() => void refreshRecentLibraries()}
-              onOpenLibrary={() => {
-                setImportLibraryChooserOpen(false);
-                setOpenLibraryChooserOpen(true);
-              }}
-              onOpenRecent={(path) => void openRecentLibrary(path)}
-              onForgetRecent={(path) => void forgetRecentLibrary(path)}
-              recentLibraries={recentLibraries}
-            />
             <ScopeBreadcrumbs
               onNavigateFolder={(folderId) => void chooseFolder(folderId)}
               onNavigateTrashTombstone={(tombstoneId) => {
@@ -9795,6 +9760,64 @@ function AppInner() {
         ) : null}
       </header>
       <NavigationSidebar
+        footer={
+          <div className="navigation-footer-content">
+            <LibrarySwitcher
+              busy={busy}
+              disabled={busy}
+              syncStatus={syncBindingStatus}
+              importMenuCopy={importMenuCopy}
+              libraryName={library?.displayName ?? null}
+              libraryPath={library?.displayPath ?? null}
+              libraryOpen={Boolean(library)}
+              onCloseLibrary={() => void closeLibrary()}
+              onRemoveLibrary={() => void removeLibrary()}
+              onDeleteLibraryFromDisk={() => requestDeleteLibraryFromDisk()}
+              onOpenLibrarySettings={() => {
+                setAppSettingsOpen(false);
+                setLibrarySettingsOpen(true);
+              }}
+              onCreateLibrary={() => {
+                setDialogValue(t("shell.myLibrary"));
+                setCreateLibraryPhase("form");
+                setDialog("library");
+              }}
+              onExportLibrary={() => setExportDialogOpen(true)}
+              onImportFolder={() => void importAssets("folder")}
+              onImportLibrary={() => {
+                setOpenLibraryChooserOpen(false);
+                setImportLibraryChooserOpen(true);
+              }}
+              onImportLinkedFolder={() => void importFolderAsLinked()}
+              onMenuOpen={() => void refreshRecentLibraries()}
+              onOpenLibrary={() => {
+                setImportLibraryChooserOpen(false);
+                setOpenLibraryChooserOpen(true);
+              }}
+              onOpenRecent={(path) => void openRecentLibrary(path)}
+              onForgetRecent={(path) => void forgetRecentLibrary(path)}
+              recentLibraries={recentLibraries}
+            />
+            <div className="navigation-footer-actions">
+              <button
+                aria-label={t("dialog.about.productName")}
+                className="navigation-footer-icon"
+                data-hover-tip={t("dialog.about.productName")}
+                onClick={() => setAboutOpen(true)}
+                type="button"
+              >
+                <Icon name="info" size={15} />
+              </button>
+              <AppSettingsEntry
+                disabled={busy}
+                onOpen={() => {
+                  setAppSettingsCategory("general");
+                  setAppSettingsOpen(true);
+                }}
+              />
+            </div>
+          </div>
+        }
         library={library}
         assetScope={sidebarFolderScope}
         showTrash={showTrash}

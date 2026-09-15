@@ -5335,6 +5335,117 @@ body.super-modal-open .app-shell {
   background: var(--hover);
   color: var(--text);
 }
+
+/* Obsidian-inspired lower-left workspace control. The switcher remains a
+   normal button/menu for accessibility, but its compact two-line treatment
+   makes the active library and its location legible without stealing space
+   from the top toolbar. */
+.navigation-footer .library-switcher {
+  flex: 1 1 auto;
+  max-width: none;
+}
+
+.navigation-footer .library-switcher-trigger {
+  min-height: 40px;
+  height: auto;
+  padding: 5px 7px;
+  gap: 7px;
+  border-radius: 7px;
+  text-align: left;
+}
+
+.library-switcher-glyph {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--raised-2) 72%, transparent);
+  color: var(--secondary);
+}
+
+.library-switcher-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 2px;
+}
+
+.library-switcher-path {
+  overflow: hidden;
+  color: var(--tertiary);
+  font-family: var(--font-mono);
+  font-size: calc(9px * var(--app-font-scale));
+  font-weight: 450;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigation-footer {
+  flex: 0 0 auto;
+  margin: 8px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--divider) 78%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--pane) 58%, transparent);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+}
+
+.navigation-footer-content {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.navigation-footer-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.navigation-footer-icon,
+.navigation-footer .app-settings-entry {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--secondary);
+  cursor: pointer;
+}
+
+.navigation-footer-icon:hover,
+.navigation-footer-icon:focus-visible,
+.navigation-footer .app-settings-entry:hover:not(:disabled),
+.navigation-footer .app-settings-entry:focus-visible {
+  background: var(--hover);
+  color: var(--text);
+  outline: none;
+}
+
+.navigation-footer .library-switcher-menu {
+  top: auto;
+  bottom: calc(100% + 7px);
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+
+.navigation-footer .library-switcher-trigger .icon {
+  transform: none;
+}
+
+.navigation-footer .library-switcher-trigger > .icon:last-child {
+  transform: rotate(90deg);
+}
 .preview-color-space-control select option,
 .preview-color-space-control select optgroup {
   background-color: var(--raised);
@@ -5886,6 +5997,141 @@ body.super-modal-open .app-shell {
 .create-library-dialog {
   width: min(440px, calc(100vw - 40px));
   padding: 24px 24px 20px;
+}
+
+/* No-library landing surface: recent workspaces stay visible on the left,
+   while the right side carries the Super Lib identity and primary actions. */
+.library-start-dialog {
+  width: min(820px, calc(100vw - 48px));
+  min-height: min(470px, calc(100vh - 48px));
+  padding: 0;
+  overflow: hidden;
+  background: var(--raised);
+}
+
+.library-start-surface {
+  display: grid;
+  min-height: min(470px, calc(100vh - 48px));
+  grid-template-columns: minmax(220px, 0.78fr) minmax(0, 1.22fr);
+}
+
+.library-start-recents {
+  min-width: 0;
+  padding: 26px 18px;
+  border-right: 1px solid var(--divider);
+  background: color-mix(in srgb, var(--canvas) 68%, var(--raised));
+}
+
+.library-start-recents-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 4px 12px;
+  color: var(--secondary);
+  font-size: calc(11px * var(--app-font-scale));
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.library-start-recents-count {
+  min-width: 20px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--tertiary);
+  font-size: calc(10px * var(--app-font-scale));
+  text-align: center;
+}
+
+.library-start-recents .create-dialog-recent-list {
+  max-height: min(360px, calc(100vh - 170px));
+}
+
+.library-start-recents-empty {
+  margin: 22px 4px 0;
+  color: var(--tertiary);
+  font-size: calc(11px * var(--app-font-scale));
+  line-height: 1.6;
+}
+
+.library-start-main {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  padding: 42px 48px;
+  text-align: center;
+}
+
+.library-start-logo {
+  width: 74px;
+  height: 74px;
+  margin-bottom: 17px;
+  border: 1px solid var(--divider);
+  border-radius: 18px;
+  box-shadow: var(--shadow-panel);
+  object-fit: cover;
+}
+
+.library-start-eyebrow {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: calc(10px * var(--app-font-scale));
+  font-weight: 650;
+  letter-spacing: 0.14em;
+}
+
+.library-start-main h2 {
+  margin: 7px 0 6px;
+  color: var(--text);
+  font-size: calc(28px * var(--app-font-scale));
+  letter-spacing: -0.04em;
+}
+
+.library-start-main p {
+  max-width: 34em;
+  margin: 0;
+  color: var(--secondary);
+  font-size: calc(12px * var(--app-font-scale));
+  line-height: 1.65;
+}
+
+.library-start-actions {
+  display: grid;
+  width: min(100%, 300px);
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.library-start-actions .primary-button,
+.library-start-actions .secondary-button {
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .library-start-dialog {
+    width: min(520px, calc(100vw - 28px));
+  }
+
+  .library-start-surface {
+    grid-template-columns: 1fr;
+  }
+
+  .library-start-recents {
+    max-height: 190px;
+    padding: 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--divider);
+  }
+
+  .library-start-recents .create-dialog-recent-list {
+    max-height: 118px;
+  }
+
+  .library-start-main {
+    padding: 30px 24px 34px;
+  }
 }
 
 .create-library-lead {
@@ -8885,7 +9131,7 @@ select.ai-config-input.ai-config-languages {
 
 .app-update-ready-prompt .primary-button {
   background: var(--accent-dark);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .app-update-ready-prompt .primary-button:hover:not(:disabled) {
@@ -9372,6 +9618,60 @@ select.ai-config-input.ai-config-languages {
   color: var(--danger);
   outline: none;
   transform: translateY(-1px);
+}
+
+.about-dialog-body {
+  display: grid;
+  gap: 12px;
+  padding: 18px 24px 22px;
+  background: var(--raised);
+}
+
+.about-dialog-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--divider-soft);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--raised-2) 78%, var(--raised));
+}
+
+.about-dialog-card-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--divider));
+  border-radius: 8px;
+  color: var(--accent);
+}
+
+.about-dialog-card-copy {
+  min-width: 0;
+}
+
+.about-dialog-card-copy strong {
+  display: block;
+  color: var(--text);
+  font-size: calc(12px * var(--app-font-scale));
+  font-weight: 650;
+}
+
+.about-dialog-card-copy p {
+  margin: 4px 0 0;
+  color: var(--secondary);
+  font-size: calc(11px * var(--app-font-scale));
+  line-height: 1.55;
+}
+
+.about-dialog-footer-note {
+  margin: 0;
+  color: var(--tertiary);
+  font-size: calc(10px * var(--app-font-scale));
+  line-height: 1.5;
+  text-align: center;
 }
 
 @keyframes about-dialog-update-spin {

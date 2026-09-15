@@ -558,6 +558,8 @@ function Section({
 // ---------------------------------------------------------------------------
 
 export interface NavigationSidebarProps {
+  /** Optional shell controls rendered in the Obsidian-style lower-left footer. */
+  footer?: ReactNode;
   // --- Library connection ---
   library: RendererLibrarySummary | null;
 
@@ -712,6 +714,7 @@ export interface NavigationSidebarProps {
 export function NavigationSidebar(props: NavigationSidebarProps) {
   const t = useT();
   const {
+    footer,
     library,
     assetScope,
     showTrash,
@@ -1684,6 +1687,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
           )}
         </Section>
       </nav>
+      {footer ? <div className="navigation-footer">{footer}</div> : null}
     </PaneSurface>
   );
 }

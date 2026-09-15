@@ -42,6 +42,8 @@ export function buildRecentLibraryMenuEntries(
 
 export type LibrarySwitcherProps = {
   libraryName: string | null;
+  /** Absolute library path shown in the lower-left workspace footer. */
+  libraryPath?: string | null;
   disabled?: boolean;
   onCreateLibrary: () => void;
   /** Opens the open-library chooser (existing Super + third-party + sync). */
@@ -80,6 +82,7 @@ export type LibrarySwitcherProps = {
  */
 export function LibrarySwitcher({
   libraryName,
+  libraryPath = null,
   disabled = false,
   onCreateLibrary,
   onOpenLibrary,
@@ -185,7 +188,15 @@ export function LibrarySwitcher({
         }
         type="button"
       >
+        <span className="library-switcher-glyph" aria-hidden="true">
+          <Icon name="folder-tree" size={14} />
+        </span>
+        <span className="library-switcher-copy">
         <span className="library-switcher-name">{label}</span>
+          {libraryPath ? (
+            <span className="library-switcher-path">{libraryPath}</span>
+          ) : null}
+        </span>
         {syncStatus !== "none" ? (
           <span
             className="library-switcher-sync-status"

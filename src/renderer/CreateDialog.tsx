@@ -1,4 +1,5 @@
 import { type FormEvent } from "react";
+import appIcon from "../../assets/icons/app.png";
 import { Icon } from "./Icons";
 import { iconActionAttrs } from "./icon-action-attrs";
 import { useT } from "./i18n";
@@ -74,6 +75,7 @@ export function CreateDialog({
   // the list container scrolls when the store holds more (cap is 8). Rows
   // always show name + full path (the dialog's original layout).
   const visibleRecents = showRecents ? recentLibraries.slice(0, 5) : [];
+  const isStartSurface = required && phase === "start";
   const isNameForm = phase === "form" || phase === "eagle" || phase === "billfish";
   const isBillfish = phase === "billfish";
   const isExternalLibrary = phase === "eagle" || isBillfish;
@@ -101,7 +103,7 @@ export function CreateDialog({
   return (
     <div className="dialog-backdrop" role="presentation">
       <DialogShell
-        className="create-dialog create-library-dialog"
+        className={`create-dialog create-library-dialog${isStartSurface ? " library-start-dialog" : ""}`}
         dialogId="create-library-dialog"
         headerActions={
           !required ? (
@@ -116,14 +118,107 @@ export function CreateDialog({
           ) : null
         }
         style={{ padding: 0 }}
-        title={title}
+        title={isStartSurface ? undefined : title}
         description={
-          <span className="create-library-lead">
-            {body}
-          </span>
+          isStartSurface ? undefined : (
+            <span className="create-library-lead">
+              {body}
+            </span>
+          )
         }
       >
-        {isNameForm ? (
+        {isStartSurface ? (
+          <div className="library-start-surface">
+            <aside className="library-start-recents">
+              <div className="library-start-recents-heading">
+                <span>{t("empty.recentLibraries")}</span>
+                <span className="library-start-recents-count">
+                  {recentLibraries.length}
+                </span>
+              </div>
+              {visibleRecents.length > 0 ? (
+                <ul className="create-dialog-recent-list">
+                  {visibleRecents.map((entry) => (
+                    <li className="create-dialog-recent-row" key={entry.path}>
+                      <button
+                        className="create-dialog-recent-open"
+                        disabled={busy}
+                        onClick={() => onOpenRecent(entry.path)}
+                        title={entry.path}
+                        type="button"
+                      >
+                        <span className="create-dialog-recent-texts">
+                          <span className="create-dialog-recent-name">
+                            {entry.name}
+                          </span>
+                          <span className="create-dialog-recent-path">
+                            {entry.path}
+                          </span>
+                        </span>
+                        {onForgetRecent != null && (
+                          <span
+                            aria-label={t("shell.forgetRecentLibrary")}
+                            className="create-dialog-recent-forget"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onForgetRecent(entry.path);
+                            }}
+                            role="button"
+                            tabIndex={-1}
+                            title={t("shell.forgetRecentLibrary")}
+                          >
+                            <Icon name="close" size={12} />
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="library-start-recents-empty">{body}</p>
+              )}
+            </aside>
+            <section className="library-start-main">
+              <img
+                alt={t("dialog.about.logoAlt")}
+                className="library-start-logo"
+                src={appIcon}
+              />
+              <span className="library-start-eyebrow">SUPER LIB</span>
+              <h2 aria-label={title}>{t("dialog.about.productName")}</h2>
+              <p>{body}</p>
+              <div className="library-start-actions">
+                <button
+                  className="primary-button"
+                  disabled={busy}
+                  onClick={onBeginCreate}
+                  type="button"
+                >
+                  <Icon name="plus" size={15} />
+                  {t("shell.createLibrary")}
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={onOpenExisting}
+                  type="button"
+                >
+                  <Icon name="folder" size={15} />
+                  {t("shell.openLibrary")}
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={onImportLibrary}
+                  type="button"
+                >
+                  <Icon name="download" size={15} />
+                  {t("toolbar.importLibrary")}
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : isNameForm ? (
           <form
             className="create-library-form"
             onSubmit={(event: FormEvent) => {
@@ -203,7 +298,7 @@ export function CreateDialog({
           </div>
         )}
 
-        {showRecents ? (
+        {!isStartSurface && showRecents ? (
           <div className="create-dialog-existing">
             <div className="create-dialog-existing-label">
               {t("empty.recentLibraries")}

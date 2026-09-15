@@ -135,6 +135,20 @@ export function AboutDialog({
             </div>
           ) : null}
         </div>
+        <div className="about-dialog-body">
+          <div className="about-dialog-card">
+            <div className="about-dialog-card-icon" aria-hidden="true">
+              <Icon name="info" size={18} />
+            </div>
+            <div className="about-dialog-card-copy">
+              <strong>{t("dialog.about.productName")}</strong>
+              <p>{t("dialog.about.description")}</p>
+            </div>
+          </div>
+          <p className="about-dialog-footer-note">
+            {t("dialog.about.openSourceNote")}
+          </p>
+        </div>
       </div>
     </div>
   );
