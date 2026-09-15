@@ -148,7 +148,7 @@ async function expectContributionsAndSettingsIframe(window: Page, libraryId: str
   await expect(quality).toHaveValue('high');
   await expect(hostSettings.locator('[data-hover-tip="Choose the probe processing quality."]')).toBeVisible();
   await hostSettings.locator('[data-hover-tip="Choose the probe processing quality."]').hover();
-  await expect(window.locator('.hover-tip')).toHaveText('Choose the probe processing quality.');
+  await expect(window.locator('.hover-tip-corner')).toHaveText('Choose the probe processing quality.');
   await expect(dialog.getByText('该插件暂无设置页。')).toHaveCount(0);
   await expect(dialog.locator('iframe.plugin-settings-page-frame')).toBeVisible({ timeout: 15_000 });
   await dialog.getByRole('button', { name: '关闭' }).click();

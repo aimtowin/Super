@@ -154,7 +154,7 @@ test("library switcher, breadcrumbs, and workspace history", async () => {
       await expect(refreshButton).toBeVisible();
       await expect(refreshButton).toHaveAttribute("data-hover-tip", "检查更新");
       await refreshButton.hover();
-      await expect(window.locator(".hover-tip")).toHaveText("检查更新");
+      await expect(window.locator(".hover-tip-corner")).toHaveText("检查更新");
       const updateStatus = aboutDialog.locator(".about-dialog-update-status");
       await expect(aboutDialog.getByText("开发版本不检查更新。", { exact: true })).toHaveCount(0);
       await expect(updateStatus).toBeVisible({ timeout: 30_000 });
@@ -176,7 +176,7 @@ test("library switcher, breadcrumbs, and workspace history", async () => {
       await expect(refreshButton).toBeVisible();
       await expect(refreshButton).toHaveAttribute("data-hover-tip", "检查更新");
       await refreshButton.hover();
-      await expect(window.locator(".hover-tip")).toHaveText("检查更新");
+      await expect(window.locator(".hover-tip-corner")).toHaveText("检查更新");
       const updateStatus = aboutDialog.locator(".about-dialog-update-status");
       await expect(aboutDialog.getByText("开发版本不检查更新。", { exact: true })).toHaveCount(0);
       await expect(updateStatus).toBeVisible({ timeout: 30_000 });

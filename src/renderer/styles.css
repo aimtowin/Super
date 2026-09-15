@@ -1053,33 +1053,7 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   -webkit-app-region: no-drag;
 }
 
-/* REQ-SHELL-013: portal hover tip — quiet, delayed; above dialogs/backdrops. */
-.hover-tip {
-  position: fixed;
-  z-index: var(--ui-layer-tooltip);
-  max-width: min(280px, calc(100vw - 24px));
-  padding: 3px 7px;
-  border: 1px solid var(--divider-soft);
-  border-radius: 4px;
-  background: var(--raised-2);
-  color: var(--secondary);
-  font-size: calc(11px * var(--app-font-scale));
-  font-weight: 450;
-  line-height: 1.35;
-  letter-spacing: 0;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  pointer-events: none;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
-}
-
-[data-theme="light"] .hover-tip {
-  background: var(--raised);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
-}
-
-/* A stable companion to the pointer-local tip. It intentionally does not
-   receive pointer events: it is a reading surface, never another control. */
+/* REQ-SHELL-013: stable, delayed hover guidance; above dialogs/backdrops. */
 .hover-tip-corner {
   position: fixed;
   right: clamp(14px, 1.7vw, 28px);
@@ -1108,23 +1082,6 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   box-shadow: 0 8px 20px rgb(0 0 0 / 12%);
 }
 
-/* Search grammar needs a little room to teach rather than a one-line system
-   hint. Keep it light and quiet so it reads as guidance, not a warning. */
-.hover-tip.is-search-syntax {
-  width: min(312px, calc(100vw - 24px));
-  max-width: none;
-  padding: 8px 10px;
-  border-color: color-mix(in srgb, var(--divider-soft) 72%, white);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--raised-2) 84%, white);
-  color: var(--secondary);
-  font-size: calc(11px * var(--app-font-scale));
-  line-height: 1.55;
-  white-space: normal;
-  text-align: left;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
-}
-
 .search-syntax-tip-line {
   display: block;
 }
@@ -1142,11 +1099,6 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 .search-syntax-tip-line strong {
   color: var(--text);
   font-weight: 650;
-}
-
-[data-theme="light"] .hover-tip.is-search-syntax {
-  background: color-mix(in srgb, var(--raised-2) 94%, white);
-  border-color: var(--divider-soft);
 }
 
 .hover-tip-corner.is-search-syntax {
