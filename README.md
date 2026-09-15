@@ -4,7 +4,7 @@
 
 </div>
 
-# Super Lib  v2.3.1
+# Super Lib  v2.3.2
 
 <div align="center">
 
