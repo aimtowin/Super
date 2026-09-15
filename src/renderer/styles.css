@@ -5337,9 +5337,8 @@ body.super-modal-open .app-shell {
 }
 
 /* Obsidian-inspired lower-left workspace control. The switcher remains a
-   normal button/menu for accessibility, but its compact two-line treatment
-   makes the active library and its location legible without stealing space
-   from the top toolbar. */
+   normal button/menu for accessibility, with the active library represented
+   by its name only so filesystem paths never crowd the workspace chrome. */
 .navigation-footer .library-switcher {
   flex: 1 1 auto;
   max-width: none;
@@ -5373,16 +5372,6 @@ body.super-modal-open .app-shell {
   gap: 2px;
 }
 
-.library-switcher-path {
-  overflow: hidden;
-  color: var(--tertiary);
-  font-family: var(--font-mono);
-  font-size: calc(9px * var(--app-font-scale));
-  font-weight: 450;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .navigation-footer {
   flex: 0 0 auto;
   margin: 8px;
@@ -5409,7 +5398,6 @@ body.super-modal-open .app-shell {
   gap: 2px;
 }
 
-.navigation-footer-icon,
 .navigation-footer .app-settings-entry {
   display: inline-grid;
   width: 30px;
@@ -5423,8 +5411,6 @@ body.super-modal-open .app-shell {
   cursor: pointer;
 }
 
-.navigation-footer-icon:hover,
-.navigation-footer-icon:focus-visible,
 .navigation-footer .app-settings-entry:hover:not(:disabled),
 .navigation-footer .app-settings-entry:focus-visible {
   background: var(--hover);

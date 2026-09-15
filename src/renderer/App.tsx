@@ -9768,7 +9768,6 @@ function AppInner() {
               syncStatus={syncBindingStatus}
               importMenuCopy={importMenuCopy}
               libraryName={library?.displayName ?? null}
-              libraryPath={library?.displayPath ?? null}
               libraryOpen={Boolean(library)}
               onCloseLibrary={() => void closeLibrary()}
               onRemoveLibrary={() => void removeLibrary()}
@@ -9799,15 +9798,6 @@ function AppInner() {
               recentLibraries={recentLibraries}
             />
             <div className="navigation-footer-actions">
-              <button
-                aria-label={t("dialog.about.productName")}
-                className="navigation-footer-icon"
-                data-hover-tip={t("dialog.about.productName")}
-                onClick={() => setAboutOpen(true)}
-                type="button"
-              >
-                <Icon name="info" size={15} />
-              </button>
               <AppSettingsEntry
                 disabled={busy}
                 onOpen={() => {
