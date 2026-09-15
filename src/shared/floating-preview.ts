@@ -15,6 +15,8 @@ const identifierSchema = z
  */
 export const floatingPreviewStateSchema = z.strictObject({
   assetId: identifierSchema,
+  /** The child only supports static images and PDF documents. */
+  mediaType: z.enum(["image", "pdf"]),
   sourceUrl: z.string().startsWith("super://"),
 });
 

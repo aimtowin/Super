@@ -1005,6 +1005,8 @@ export const AssetPreviewModal = forwardRef<
                 isFullscreen={isFullscreen}
                 key={`${libraryId}:${asset.assetId}`}
                 libraryId={libraryId}
+                floating={floatingPreview}
+                onFloat={openFloatingPreview}
                 placeholderUrl={placeholderUrl}
                 sourceUrl={resolution.url}
               />

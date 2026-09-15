@@ -1,8 +1,8 @@
 # 使用手册
 
-面向最终用户的 Super Lib 使用指南。基础手册核对于 `v2.2.8`，已补充 `v2.3.0` 文件夹新建交互及 `v2.3.1` 悬浮预览和提示功能。英文版：[README.en.md](README.en.md)
+面向最终用户的 Super Lib 使用指南。基础手册核对于 `v2.2.8`，已补充 `v2.3.0` 文件夹新建交互、`v2.3.1` 悬浮预览和提示功能，以及 `v2.3.2` PDF 悬浮预览。英文版：[README.en.md](README.en.md)
 
-常用入口：[快速上手](quick-start.md) · [外观设置](appearance.md) · [悬浮图片预览](basics.md#floating-image-preview) · [右下角提示气泡](basics.md#hover-hints) · [AI 分析与查找](ai.md) · [故障排查](troubleshooting.md)
+常用入口：[快速上手](quick-start.md) · [外观设置](appearance.md) · [悬浮预览](basics.md#floating-image-preview) · [右下角提示气泡](basics.md#hover-hints) · [AI 分析与查找](ai.md) · [故障排查](troubleshooting.md)
 
 - [快速上手](quick-start.md)——下载安装、创建本地资产库、可选 AI 与外观配置
 - [安装](installation.md)——Windows 安装、更新与其他平台说明

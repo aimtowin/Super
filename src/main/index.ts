@@ -415,7 +415,7 @@ const hasSingleInstanceLock = allowMultiInstance
   : app.requestSingleInstanceLock();
 
 let mainWindow: BrowserWindow | undefined;
-/** One capability-minimal, always-on-top image monitor at a time. */
+/** One capability-minimal, always-on-top image or PDF monitor at a time. */
 let floatingPreviewWindow: BrowserWindow | undefined;
 let floatingPreviewState: FloatingPreviewState | undefined;
 /** Effective UI locale for native dialogs; synced from Renderer (Super-bwb). */
@@ -1225,7 +1225,7 @@ function restoreMainAfterFloatingPreview(): void {
   target.focus();
 }
 
-async function openFloatingImagePreview(input: {
+async function openFloatingPreview(input: {
   libraryId: string;
   assetId: string;
 }): Promise<RendererResult> {
@@ -1241,11 +1241,21 @@ async function openFloatingImagePreview(input: {
     intent: "viewer",
   });
   if (!preview.ok) return preview as RendererResult;
-  if (
-    preview.type !== "media.preview-artifact" ||
-    preview.mediaType !== "image" ||
-    preview.status !== "ready"
-  ) {
+  if (preview.type !== "media.preview-artifact" || preview.status !== "ready") {
+    return {
+      ok: false,
+      error: createPublicError("ASSET_NOT_FOUND", "UNSUPPORTED_FORMAT"),
+    } satisfies RendererResult;
+  }
+
+  const floatingMediaType =
+    preview.mediaType === "image"
+      ? "image"
+      : preview.mediaType === "document" &&
+          preview.sourceMimeType === "application/pdf"
+        ? "pdf"
+        : undefined;
+  if (!floatingMediaType) {
     return {
       ok: false,
       error: createPublicError("ASSET_NOT_FOUND", "UNSUPPORTED_FORMAT"),
@@ -1304,6 +1314,7 @@ async function openFloatingImagePreview(input: {
   floatingPreviewWindow = window;
   floatingPreviewState = Object.freeze({
     assetId: input.assetId,
+    mediaType: floatingMediaType,
     sourceUrl,
   });
   window.once("ready-to-show", () => {
@@ -1330,8 +1341,9 @@ async function openFloatingImagePreview(input: {
     return { ok: false, error: createPublicError("INTERNAL_ERROR") } satisfies RendererResult;
   }
 
-  logger?.info("floating-preview.opened", "Opened a floating image preview.", {
+  logger?.info("floating-preview.opened", "Opened a floating media preview.", {
     assetId: input.assetId,
+    mediaType: floatingMediaType,
   });
   return {
     ok: true,
@@ -3794,7 +3806,7 @@ async function handleLibraryRequest(input: unknown): Promise<RendererResult> {
     const request = parseRendererRequest(input);
 
     if (request.type === "asset.preview.float.request") {
-      return openFloatingImagePreview(request);
+      return openFloatingPreview(request);
     }
 
     if (criticalRendererRequest(request)) {

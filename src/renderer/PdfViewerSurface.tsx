@@ -9,11 +9,14 @@ import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
 import type { SuperLibraryApi } from "../shared/library-api";
 import { isMacPlatform } from "./commands/command-types";
+import { Icon } from "./Icons";
+import { iconActionAttrs } from "./icon-action-attrs";
 import {
   matchGlobalZoomShortcut,
   shouldIgnoreGlobalZoomShortcut,
 } from "./global-zoom-shortcuts";
 import { useT } from "./i18n";
+import { VIEWER_CHROME_TAB_INDEX } from "./viewer-focus-policy";
 import type { PdfZoomAnchor } from "./pdf-viewer-layout";
 import {
   applyPdfPageBox,
@@ -24,13 +27,17 @@ import {
 } from "./pdf-viewer-layout";
 
 export type PdfViewerSurfaceProps = {
-  api: SuperLibraryApi;
-  libraryId: string;
-  assetId: string;
+  /** Kept for the main viewer call sites; the PDF surface does not need it. */
+  api?: SuperLibraryApi;
+  libraryId?: string;
+  assetId?: string;
   sourceUrl: string | null;
   /** Ready document thumbnail shown while pdf.js loads the real source. */
   placeholderUrl?: string | null;
   isFullscreen: boolean;
+  /** Opens this already-resolved PDF in the dedicated floating window. */
+  onFloat?: () => void;
+  floating?: boolean;
 };
 
 /** Zoom bounds (1 = fit viewer width). */
@@ -69,6 +76,8 @@ export function PdfViewerSurface({
   sourceUrl,
   placeholderUrl,
   isFullscreen,
+  onFloat,
+  floating = false,
 }: PdfViewerSurfaceProps) {
   const t = useT();
   const hostRef = useRef<HTMLDivElement>(null);
@@ -581,6 +590,18 @@ export function PdfViewerSurface({
           >
             {t("viewer.zoomFit")}
           </button>
+          {onFloat ? (
+            <button
+              className="pdf-viewer-tool pdf-viewer-float"
+              disabled={floating}
+              onClick={onFloat}
+              tabIndex={VIEWER_CHROME_TAB_INDEX}
+              type="button"
+              {...iconActionAttrs(t("preview.floatPreview"))}
+            >
+              <Icon name="pop-out" size={14} />
+            </button>
+          ) : null}
           <span className="pdf-viewer-meta">
             {t("viewer.pdfPages", { count: pageCount, loaded: loadedPages })}
           </span>

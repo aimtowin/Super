@@ -1,6 +1,6 @@
 # Basics
 
-> Updated with floating image previews and hover hints introduced in Super Lib v2.3.1. Screenshots retain their capture versions; package availability follows release attachments.
+> Updated with floating image/PDF previews and hover hints through Super Lib v2.3.2. Screenshots retain their capture versions; package availability follows release attachments.
 
 [简体中文](basics.md) · [User guide](README.en.md) · [Floating image preview](#floating-image-preview) · [Corner hint bubble](#hover-hints)
 
@@ -85,18 +85,18 @@ The viewer supports pan, wheel zoom, fit-to-view (numpad `.`), fullscreen, and r
 
 <a id="floating-image-preview"></a>
 
-### Floating image preview (new in v2.3.1)
+### Floating preview (updated in v2.3.2)
 
-Keep a reference image visible while working in another application:
+Keep a reference image or PDF visible while working in another application:
 
-1. Double-click an image to open the viewer. Move the pointer into the preview to reveal the bottom controls.
-2. Click **Float preview**, next to the fullscreen button on the right. Once the floating window appears, the Super Lib main window minimizes automatically.
-3. Drag the floating window's top area to move it. Drag an edge or corner to resize it. The whole image fits proportionally without stretching; unused space remains when the window and image have different aspect ratios.
+1. Double-click an image or PDF to open the viewer. Move the pointer into the preview to reveal its controls.
+2. Click **Float preview** in the controls. Once the floating window appears, the Super Lib main window minimizes automatically.
+3. Drag the floating window's top area to move it. Drag an edge or corner to resize it. Images fit proportionally without stretching; PDFs retain page scrolling, zoom, fit, and drag-to-pan controls.
 4. Move the pointer into the floating window to reveal its close button at the upper right. Click it, or press `Esc` while the floating window has focus, to restore the main window and continue browsing and previewing.
 
-One floating image is shown at a time; opening another replaces it. This control is for available image previews, not video, audio, PDF, or 3D viewers. The window stays above ordinary application windows; system security screens and exclusive fullscreen applications may cover it.
+One image or PDF is shown at a time; opening another replaces it. This control is for ready image and PDF previews, not video, audio, or 3D viewers. The window stays above ordinary application windows; system security screens and exclusive fullscreen applications may cover it.
 
-The floating window uses its own fit-to-window view. It does not inherit the main viewer's zoom, rotation, mirroring, or temporary color-space selection. Close it to return to those controls in the main viewer.
+An image floating window uses its own fit-to-window view and does not inherit the main viewer's zoom, rotation, mirroring, or temporary color-space selection. A PDF reloads independently in the floating window and manages its own zoom and scroll. Close it to return to the main viewer.
 
 ### Image viewer controls (updated in v2.3.1)
 

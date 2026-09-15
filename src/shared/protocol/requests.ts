@@ -1091,7 +1091,7 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     colorSpace: nonBlankString.max(120).optional(),
   }),
   // The renderer sends only opaque identifiers. Main resolves and authorizes
-  // the image source for the capability-minimal floating child window.
+  // an image or PDF source for the capability-minimal floating child window.
   z.strictObject({
     type: z.literal('asset.preview.float.request'),
     libraryId: identifierSchema,

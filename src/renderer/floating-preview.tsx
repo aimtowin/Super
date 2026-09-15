@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { FloatingPreviewState } from "../shared/floating-preview";
+import { LocaleProvider } from "./i18n";
+import { PdfViewerSurface } from "./PdfViewerSurface";
+import "./styles.css";
 import "./floating-preview.css";
 
 type FloatingPreviewWindow = Window & {
@@ -53,7 +56,7 @@ function FloatingPreviewApp() {
           </svg>
         </button>
       </div>
-      {state ? (
+      {state?.mediaType === "image" ? (
         <img
           alt="悬浮图片预览"
           className="floating-preview-image"
@@ -61,8 +64,12 @@ function FloatingPreviewApp() {
           onError={() => setFailed(true)}
           src={state.sourceUrl}
         />
+      ) : state?.mediaType === "pdf" ? (
+        <div className="floating-preview-document">
+          <PdfViewerSurface isFullscreen={false} sourceUrl={state.sourceUrl} />
+        </div>
       ) : failed ? (
-        <p className="floating-preview-status">图片暂时无法显示</p>
+        <p className="floating-preview-status">预览暂时无法显示</p>
       ) : (
         <p aria-live="polite" className="floating-preview-status">正在打开预览…</p>
       )}
@@ -73,4 +80,8 @@ function FloatingPreviewApp() {
 const root = document.getElementById("root");
 if (!root) throw new Error("Floating preview root is missing.");
 
-createRoot(root).render(<FloatingPreviewApp />);
+createRoot(root).render(
+  <LocaleProvider>
+    <FloatingPreviewApp />
+  </LocaleProvider>,
+);

@@ -52,6 +52,21 @@ body {
   object-fit: contain;
 }
 
+.floating-preview-document {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.floating-preview-document .pdf-viewer {
+  background: #0d1014;
+}
+
+.floating-preview-document .pdf-viewer-toolbar {
+  padding: 40px 12px 6px;
+}
+
 .floating-preview-actions {
   position: absolute;
   z-index: 3;

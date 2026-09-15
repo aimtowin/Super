@@ -77,6 +77,96 @@ async function expectImageDecoded(image: Locator) {
     .toBe(true);
 }
 
+function createMinimalPdf(): Buffer {
+  const content = "BT\n/F1 24 Tf\n72 100 Td\n(PDF floating preview) Tj\nET\n";
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+    `5 0 obj\n<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}endstream\nendobj\n`,
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (const object of objects) {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += object;
+  }
+  const startXref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets.slice(1)) {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${startXref}\n%%EOF\n`;
+  return Buffer.from(pdf, "utf8");
+}
+
+test("opens a PDF in the floating preview window", async () => {
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), "super-floating-pdf-e2e-"));
+  const sourcePath = path.join(temporaryRoot, "floating-document.pdf");
+  const libraryName = "PDF 悬浮预览验收";
+  const libraryPath = path.join(temporaryRoot, libraryName);
+  writeFileSync(sourcePath, createMinimalPdf());
+
+  const executablePath = resolveElectronExecutablePath();
+  const applicationDirectory =
+    process.env.SUPER_E2E_APP_DIRECTORY ?? process.cwd();
+  const application = await electron.launch({
+    args: [applicationDirectory],
+    cwd: applicationDirectory,
+    executablePath,
+    env: {
+      ...process.env,
+      SUPER_E2E: "1",
+      SUPER_E2E_CREATE_PARENT_PATH: temporaryRoot,
+      SUPER_E2E_OPEN_LIBRARY_PATH: libraryPath,
+      SUPER_E2E_USER_DATA_PATH: path.join(temporaryRoot, "user-data"),
+      SUPER_E2E_IMPORT_FILES: sourcePath,
+    },
+  });
+
+  try {
+    const window = await application.firstWindow();
+    await window.getByRole("button", { name: "创建资源库" }).click();
+    await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
+    await window.getByRole("button", { name: "创建", exact: true }).click();
+    await window.getByRole("button", { name: "导入文件", exact: true }).first().click();
+
+    const assetCard = window.locator(".asset-card").filter({
+      hasText: "floating-document.pdf",
+    });
+    await expect(assetCard).toBeVisible({ timeout: 15_000 });
+    await assetCard.click();
+    await window.keyboard.press("Space");
+
+    const preview = window.getByRole("region", {
+      name: "floating-document.pdf 查看页面",
+    });
+    await expect(preview.locator(".pdf-viewer canvas").first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await preview.getByRole("button", { name: "悬浮预览" }).click();
+    await expect.poll(() => application.windows().length).toBe(2);
+
+    const floatingWindow = (await application.windows()).find((candidate) =>
+      candidate.url().includes("floating-preview.html"),
+    );
+    expect(floatingWindow).toBeDefined();
+    await expect(
+      floatingWindow!.locator(".floating-preview-document .pdf-viewer"),
+    ).toBeVisible();
+    await expect(
+      floatingWindow!.locator(".floating-preview-document .pdf-viewer canvas").first(),
+    ).toBeVisible({ timeout: 20_000 });
+
+    await floatingWindow!.getByRole("button", { name: "关闭悬浮预览" }).click();
+    await expect.poll(() => application.windows().length).toBe(1);
+  } finally {
+    await application.close();
+    rmSync(temporaryRoot, { force: true, recursive: true });
+  }
+});
+
 test("generates a decoded thumbnail and keeps asset viewer context coherent", async () => {
   const temporaryRoot = mkdtempSync(
     path.join(tmpdir(), "super-auto-thumbnail-e2e-"),
