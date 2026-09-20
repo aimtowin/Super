@@ -10,6 +10,7 @@ import {
 import {
   IMAGE_EXTENSIONS,
   MODEL_EXTENSIONS,
+  SOLIDWORKS_EXTENSIONS,
   VIDEO_EXTENSIONS,
   DOCUMENT_EXTENSIONS,
 } from "../../src/shared/media-formats";
@@ -36,6 +37,7 @@ describe("format-filter-presets", () => {
       ...VIDEO_EXTENSIONS.map((extension) => extension.slice(1)),
       ...AUDIO_EXTENSION_NAMES,
       ...MODEL_EXTENSIONS.map((extension) => extension.slice(1)),
+      ...SOLIDWORKS_EXTENSIONS.map((extension) => extension.slice(1)),
       ...DOCUMENT_EXTENSIONS.map((extension) => extension.slice(1)).filter(
         (extension) => !otherFormatSet.has(extension),
       ),

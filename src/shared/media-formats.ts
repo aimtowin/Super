@@ -39,6 +39,16 @@ export const MODEL_EXTENSIONS = [
   '.fbx', '.obj', '.gltf', '.glb', '.stl',
 ] as const;
 
+/**
+ * SolidWorks native files are indexed and given a format thumbnail, but are
+ * intentionally not added to MODEL_EXTENSIONS: Super has no licensed native
+ * geometry reader in the base install, so routing them to the WebGL model
+ * queue would create a misleading failed preview.
+ */
+export const SOLIDWORKS_EXTENSIONS = [
+  '.sldprt', '.sldasm', '.slddrw',
+] as const;
+
 /** Document formats with a native preview/viewer path. */
 export const DOCUMENT_EXTENSIONS = [
   '.pdf', '.html', '.htm',
@@ -55,6 +65,7 @@ const oiioExtensions = new Set<string>([
 const imageExtensions = new Set<string>(IMAGE_EXTENSIONS);
 const videoExtensions = new Set<string>(VIDEO_EXTENSIONS);
 const modelExtensions = new Set<string>(MODEL_EXTENSIONS);
+const solidWorksExtensions = new Set<string>(SOLIDWORKS_EXTENSIONS);
 const documentExtensions = new Set<string>(DOCUMENT_EXTENSIONS);
 
 function normalizedExtension(extensionOrFilename: string): string {
@@ -77,6 +88,11 @@ export function isSupportedVideoExtension(extensionOrFilename: string): boolean 
 
 export function isSupportedModelExtension(extensionOrFilename: string): boolean {
   return modelExtensions.has(normalizedExtension(extensionOrFilename));
+}
+
+/** Native SolidWorks parts, assemblies, and drawings with external-app preview. */
+export function isSolidWorksExtension(extensionOrFilename: string): boolean {
+  return solidWorksExtensions.has(normalizedExtension(extensionOrFilename));
 }
 
 export function isSupportedDocumentExtension(extensionOrFilename: string): boolean {

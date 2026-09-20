@@ -8,6 +8,7 @@ import {
   isRawImageExtension,
   isSupportedImageExtension,
   isSupportedModelExtension,
+  isSolidWorksExtension,
   isSupportedVideoExtension,
   modelMimeForExtension,
   videoMimeForExtension,
@@ -72,5 +73,14 @@ describe('media format registry', () => {
     expect(modelMimeForExtension('.fbx')).toBe('model/fbx');
     expect(modelMimeForExtension('.stl')).toBe('model/stl');
     expect(modelMimeForExtension('.zip')).toBeNull();
+  });
+
+  it('registers SolidWorks as indexed external-preview files, not WebGL models', () => {
+    for (const extension of ['.sldprt', '.sldasm', '.slddrw']) {
+      expect(isSolidWorksExtension(`fixture${extension}`)).toBe(true);
+      expect(isSolidWorksExtension(`fixture${extension.toUpperCase()}`)).toBe(true);
+      expect(isSupportedModelExtension(`fixture${extension}`)).toBe(false);
+    }
+    expect(isSolidWorksExtension('fixture.step')).toBe(false);
   });
 });

@@ -60,6 +60,7 @@ import { shouldCopyAssetOnShortcut } from "./viewer-copy-shortcut";
 import { ShellSurface, ViewerSurface } from "./ui/surfaces";
 import { ModelViewerSurface } from "./3d-viewer/viewer-surface";
 import { isMacPlatform } from "./commands/command-types";
+import { isSolidWorksExtension } from "../shared/media-formats";
 
 interface AssetPreviewModalProps {
   api: SuperLibraryApi;
@@ -863,11 +864,13 @@ export const AssetPreviewModal = forwardRef<
     });
     if (!result.ok)
       setError(
-        requestFailureMessage(
-          t("preview.cannotOpenExternal"),
-          result.error,
-          t,
-        ),
+        isSolidWorksExtension(asset.displayName)
+          ? t("preview.cannotOpenSolidWorks")
+          : requestFailureMessage(
+              t("preview.cannotOpenExternal"),
+              result.error,
+              t,
+            ),
       );
   }
 
@@ -1066,14 +1069,18 @@ export const AssetPreviewModal = forwardRef<
           ) : unsupported ? (            <div className="preview-state" role="status">
               <strong>{t("preview.unsupportedTitle")}</strong>
               <p>
-                {t("preview.unsupportedFormat")} {t("preview.openWithSystem")}
+                {isSolidWorksExtension(asset.displayName)
+                  ? t("preview.solidWorksNativeFormat")
+                  : <>{t("preview.unsupportedFormat")} {t("preview.openWithSystem")}</>}
               </p>
               <button
                 onClick={() => void openExternal()}
                 tabIndex={VIEWER_CHROME_TAB_INDEX}
                 type="button"
               >
-                {t("preview.openExternal")}
+                {isSolidWorksExtension(asset.displayName)
+                  ? t("preview.openSolidWorksExternal")
+                  : t("preview.openExternal")}
               </button>
             </div>
           ) : (

@@ -9,6 +9,7 @@
 import {
   IMAGE_EXTENSIONS,
   MODEL_EXTENSIONS,
+  SOLIDWORKS_EXTENSIONS,
   VIDEO_EXTENSIONS,
   DOCUMENT_EXTENSIONS,
 } from "../shared/media-formats";
@@ -48,6 +49,10 @@ export const FORMAT_FILTER_GROUPS: readonly FormatFilterGroup[] = [
   {
     labelKey: "filter.formatGroupModel",
     extensions: dotless(MODEL_EXTENSIONS),
+  },
+  {
+    labelKey: "filter.formatGroupSolidWorks",
+    extensions: dotless(SOLIDWORKS_EXTENSIONS),
   },
   {
     labelKey: "filter.formatGroupDocument",
