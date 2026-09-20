@@ -37,6 +37,7 @@ import { SettingsCard, SettingsDisclosure } from "./ui/patterns";
 import { Slider, Switch } from "./ui/primitives";
 import {
   BackgroundSettings,
+  AppFontColorPicker,
   ThemeModePicker,
   ThemeProfilePicker,
 } from "./theme/ThemeAppearanceControls";
@@ -302,6 +303,8 @@ export function AppearanceSettingsPage(): ReactNode {
       >
         <BackgroundSettings />
       </SettingsDisclosure>
+      <div className="app-settings-card-divider" />
+      <AppFontColorPicker />
       <div className="app-settings-card-divider" />
       <div className="app-settings-row-copy">
         <strong>{t("settings.appFontSizeSection")}</strong>

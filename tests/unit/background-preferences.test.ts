@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   BACKGROUND_PREFERENCES_KEY,
   BACKGROUND_PREFERENCES_LEGACY_KEYS,
-  DEFAULT_BACKGROUND_IMAGE_URL,
   DEFAULT_BACKGROUND_PREFERENCES,
   MAX_BACKGROUND_IMAGE_DATA_URL_BYTES,
   applyBackgroundPreferences,
@@ -43,7 +42,7 @@ const IMAGE_SOURCE = {
 };
 
 const customPreferences = {
-  version: 4 as const,
+  version: 5 as const,
   imageKind: 'custom' as const,
   imageDataUrl: PNG_DATA_URL,
   imageSource: IMAGE_SOURCE,
@@ -51,19 +50,19 @@ const customPreferences = {
   imageOpacity: 0.65,
 };
 
-describe('background preferences contract v4', () => {
-  it('defaults new installations to the bundled wallpaper', () => {
+describe('background preferences contract v5', () => {
+  it('defaults new installations to a solid application surface', () => {
     expect(DEFAULT_BACKGROUND_PREFERENCES).toEqual({
-      version: 4,
-      imageKind: 'default',
+      version: 5,
+      imageKind: 'none',
       imageDataUrl: null,
       imageSource: null,
       mode: 'cover',
-      imageOpacity: 0.32,
+      imageOpacity: 0.8,
     });
-    expect(DEFAULT_BACKGROUND_IMAGE_URL).toContain('default-wallpaper.png');
-    expect(BACKGROUND_PREFERENCES_KEY).toBe('superApi.background-preferences.v4');
+    expect(BACKGROUND_PREFERENCES_KEY).toBe('superApi.background-preferences.v5');
     expect(BACKGROUND_PREFERENCES_LEGACY_KEYS).toEqual([
+      'superApi.background-preferences.v4',
       'superApi.background-preferences.v3',
       'superApi.background-preferences.v2',
       'superApi.background-preferences.v1',
@@ -71,7 +70,7 @@ describe('background preferences contract v4', () => {
     expect(validateBackgroundPreferences(DEFAULT_BACKGROUND_PREFERENCES)).toBe(true);
   });
 
-  it('preserves v3 custom wallpapers and explicit no-image state during migration', () => {
+  it('preserves custom wallpapers and retires the old bundled default during migration', () => {
     const custom = normalizeBackgroundPreferences({
       version: 3,
       imageDataUrl: PNG_DATA_URL,
@@ -79,7 +78,7 @@ describe('background preferences contract v4', () => {
       mode: 'fill',
       imageOpacity: 0.8,
     });
-    expect(custom).toMatchObject({ version: 4, imageKind: 'custom', imageDataUrl: PNG_DATA_URL });
+    expect(custom).toMatchObject({ version: 5, imageKind: 'custom', imageDataUrl: PNG_DATA_URL });
 
     const none = normalizeBackgroundPreferences({
       version: 3,
@@ -88,7 +87,17 @@ describe('background preferences contract v4', () => {
       mode: 'cover',
       imageOpacity: 0.8,
     });
-    expect(none).toMatchObject({ version: 4, imageKind: 'none', imageDataUrl: null });
+    expect(none).toMatchObject({ version: 5, imageKind: 'none', imageDataUrl: null });
+
+    const retiredDefault = normalizeBackgroundPreferences({
+      version: 4,
+      imageKind: 'default',
+      imageDataUrl: null,
+      imageSource: null,
+      mode: 'cover',
+      imageOpacity: 0.32,
+    });
+    expect(retiredDefault).toMatchObject({ version: 5, imageKind: 'none' });
   });
 
   it('normalizes invalid custom state to none and clears non-custom payloads', () => {
@@ -97,7 +106,7 @@ describe('background preferences contract v4', () => {
     });
     expect(normalizeBackgroundPreferences({
       imageKind: 'default', imageDataUrl: PNG_DATA_URL, imageSource: IMAGE_SOURCE,
-    })).toMatchObject({ imageKind: 'default', imageDataUrl: null, imageSource: null });
+    })).toMatchObject({ imageKind: 'none', imageDataUrl: null, imageSource: null });
   });
 
   it('keeps the existing mode and opacity migration rules', () => {
@@ -124,7 +133,7 @@ describe('background preferences contract v4', () => {
     expect(loadBackgroundPreferences(storage)).toEqual(disabled);
   });
 
-  it('migrates a v3 record into the v4 storage key', () => {
+  it('migrates a v3 record into the v5 storage key', () => {
     const storage = memoryStorage();
     storage.memory.set(BACKGROUND_PREFERENCES_LEGACY_KEYS[0]!, JSON.stringify({
       version: 3,
@@ -134,7 +143,7 @@ describe('background preferences contract v4', () => {
       imageOpacity: 0.6,
     }));
     expect(loadBackgroundPreferences(storage)).toMatchObject({
-      version: 4, imageKind: 'custom', imageDataUrl: PNG_DATA_URL, imageOpacity: 0.6,
+      version: 5, imageKind: 'custom', imageDataUrl: PNG_DATA_URL, imageOpacity: 0.6,
     });
     expect(storage.memory.has(BACKGROUND_PREFERENCES_KEY)).toBe(true);
     expect(storage.memory.has(BACKGROUND_PREFERENCES_LEGACY_KEYS[0]!)).toBe(false);
@@ -163,7 +172,7 @@ describe('background preferences contract v4', () => {
     expect(storage.memory.has(BACKGROUND_PREFERENCES_KEY)).toBe(false);
   });
 
-  it('applies built-in, custom, and disabled wallpaper tokens safely', () => {
+  it('applies custom and disabled wallpaper tokens safely', () => {
     const values = new Map<string, string>();
     const previous = (globalThis as { document?: Document }).document;
     (globalThis as { document?: Document }).document = {
@@ -176,12 +185,6 @@ describe('background preferences contract v4', () => {
     } as unknown as Document;
 
     try {
-      applyBackgroundPreferences(DEFAULT_BACKGROUND_PREFERENCES);
-      expect(values.get('--ui-background-image')).toBe(`url(${DEFAULT_BACKGROUND_IMAGE_URL})`);
-      expect(values.get('--ui-background-position')).toBe('center 38%');
-      expect(values.get('--ui-background-surface-opacity')).toBe('0%');
-
-      values.clear();
       applyBackgroundPreferences(customPreferences);
       expect(values.get('--ui-background-image')).toBe(`url(${PNG_DATA_URL})`);
       expect(values.get('--ui-background-size')).toBe('auto');

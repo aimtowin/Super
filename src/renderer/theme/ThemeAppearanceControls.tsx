@@ -1,5 +1,6 @@
 import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
+import { COLOR_PRESETS } from '../../shared/color-filter-presets';
 import { useT } from '../i18n';
 import { Select, Slider } from '../ui/primitives';
 import { BackgroundImagePanel } from './BackgroundImageControls';
@@ -229,9 +230,6 @@ export function BackgroundSettings(): ReactNode {
           update({ imageKind: 'none', imageDataUrl: null, imageSource: null })
         }
         onSelectFile={(file) => void handleSelectFile(file)}
-        onUseDefault={() =>
-          update({ imageKind: 'default', imageDataUrl: null, imageSource: null })
-        }
         previewStyle={previewStyle}
       />
       <div className="app-settings-background-row">
@@ -258,6 +256,59 @@ export function BackgroundSettings(): ReactNode {
           value={backgroundPreferences.imageOpacity}
           valueText={`${Math.round(backgroundPreferences.imageOpacity * 100)}%`}
         />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A compact text-ink palette deliberately reuses the same 18 hue families
+ * and three neutral buckets as the asset color filter. The saved value is a
+ * stable preset id; rendering adapts that swatch to the active light/dark
+ * theme in the ThemeProvider.
+ */
+export function AppFontColorPicker(): ReactNode {
+  const t = useT();
+  const { fontColorId, setFontColorId } = useTheme();
+
+  return (
+    <div className="app-settings-font-color-control">
+      <div className="app-settings-row-copy">
+        <strong>{t('settings.appFontColorSection')}</strong>
+        <span>{t('settings.appFontColorHint')}</span>
+      </div>
+      <div
+        aria-label={t('settings.appFontColorSection')}
+        className="app-settings-font-color-palette"
+        role="radiogroup"
+      >
+        <button
+          aria-checked={fontColorId === 'auto'}
+          aria-label={t('settings.appFontColorAuto')}
+          className={`app-settings-font-color-swatch is-auto${fontColorId === 'auto' ? ' is-active' : ''}`}
+          onClick={() => setFontColorId('auto')}
+          role="radio"
+          title={t('settings.appFontColorAuto')}
+          type="button"
+        >
+          A
+        </button>
+        {COLOR_PRESETS.map((preset) => {
+          const selected = fontColorId === preset.id;
+          return (
+            <button
+              aria-checked={selected}
+              aria-label={t('settings.appFontColorOption', { color: preset.id })}
+              className={`app-settings-font-color-swatch${selected ? ' is-active' : ''}`}
+              key={preset.id}
+              onClick={() => setFontColorId(preset.id)}
+              role="radio"
+              style={{ '--app-font-color-swatch': preset.swatch } as CSSProperties}
+              title={t('settings.appFontColorOption', { color: preset.id })}
+              type="button"
+            />
+          );
+        })}
       </div>
     </div>
   );

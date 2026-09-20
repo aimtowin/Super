@@ -79,6 +79,16 @@ export {
   type AppFontSizePreferences,
 } from './font-size-preferences';
 export {
+  APP_FONT_COLOR_IDS,
+  APP_FONT_COLOR_PREFERENCES_KEY,
+  DEFAULT_APP_FONT_COLOR_ID,
+  applyAppFontColor,
+  loadAppFontColorPreferences,
+  saveAppFontColorId,
+  type AppFontColorId,
+  type AppFontColorPreferences,
+} from './font-color-preferences';
+export {
   DEFAULT_THEME_PROFILE,
   THEME_PROFILE_IDS,
   THEME_PROFILE_PREF_KEY,

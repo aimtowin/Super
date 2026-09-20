@@ -49,6 +49,12 @@ import {
   saveAppFontSizeLevel,
   type AppFontSizeLevel,
 } from './font-size-preferences';
+import {
+  applyAppFontColor,
+  loadAppFontColorPreferences,
+  saveAppFontColorId,
+  type AppFontColorId,
+} from './font-color-preferences';
 
 type ThemeContextValue = {
   readonly preference: ThemePreference;
@@ -57,6 +63,7 @@ type ThemeContextValue = {
   readonly themeProfile: ThemeProfile;
   readonly backgroundPreferences: BackgroundPreferences;
   readonly fontSizeLevel: AppFontSizeLevel;
+  readonly fontColorId: AppFontColorId;
   readonly themeRevision: number;
   readonly setTheme: (theme: ThemePreference) => void;
   readonly setCustomTheme: (theme: CustomTheme) => void;
@@ -64,6 +71,7 @@ type ThemeContextValue = {
   readonly setThemeProfile: (profile: ThemeProfileId) => void;
   readonly setBackgroundPreferences: (preferences: BackgroundPreferences) => boolean;
   readonly setFontSizeLevel: (level: AppFontSizeLevel) => void;
+  readonly setFontColorId: (colorId: AppFontColorId) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -91,6 +99,9 @@ export function ThemeProvider({
   const [backgroundPreferences, setBackgroundPreferencesState] = useState<BackgroundPreferences>(() => loadBackgroundPreferences(storage));
   const [fontSizeLevel, setFontSizeLevelState] = useState<AppFontSizeLevel>(
     () => loadAppFontSizePreferences(storage).level,
+  );
+  const [fontColorId, setFontColorIdState] = useState<AppFontColorId>(
+    () => loadAppFontColorPreferences(storage).colorId,
   );
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() =>
     readSystemTheme(),
@@ -131,6 +142,19 @@ export function ThemeProvider({
   useEffect(() => {
     applyAppFontSizeLevel(fontSizeLevel);
   }, [fontSizeLevel]);
+
+  useEffect(() => {
+    const composition = resolveEffectiveThemeTokens({
+      themeProfile,
+      customTheme,
+      resolved,
+    });
+    applyAppFontColor(fontColorId, resolved, {
+      primary: composition.tokens['--ui-content-primary'] ?? (resolved === 'dark' ? '#f1f2ef' : '#1c1e1c'),
+      secondary: composition.tokens['--ui-content-secondary'] ?? (resolved === 'dark' ? '#a9ada9' : '#5a5f5a'),
+      tertiary: composition.tokens['--ui-content-tertiary'] ?? (resolved === 'dark' ? '#777c79' : '#8a8f8a'),
+    });
+  }, [customTheme, fontColorId, resolved, themeProfile]);
 
   useEffect(() => {
     const signature = `${resolved}:${JSON.stringify(customTheme)}:${JSON.stringify(themeProfile)}:${JSON.stringify(backgroundPreferences)}`;
@@ -185,6 +209,11 @@ export function ThemeProvider({
     setFontSizeLevelState(next);
   }, [storage]);
 
+  const setFontColorId = useCallback((next: AppFontColorId) => {
+    if (!saveAppFontColorId(next, storage)) return;
+    setFontColorIdState(next);
+  }, [storage]);
+
   const value = useMemo(
     () => ({
       preference,
@@ -193,6 +222,7 @@ export function ThemeProvider({
       themeProfile,
       backgroundPreferences,
       fontSizeLevel,
+      fontColorId,
       themeRevision,
       setTheme,
       setCustomTheme,
@@ -200,8 +230,9 @@ export function ThemeProvider({
       setThemeProfile,
       setBackgroundPreferences,
       setFontSizeLevel,
+      setFontColorId,
     }),
-    [backgroundPreferences, customTheme, fontSizeLevel, preference, resetCustomTheme, resolved, setBackgroundPreferences, setCustomTheme, setFontSizeLevel, setTheme, setThemeProfile, themeProfile, themeRevision],
+    [backgroundPreferences, customTheme, fontColorId, fontSizeLevel, preference, resetCustomTheme, resolved, setBackgroundPreferences, setCustomTheme, setFontColorId, setFontSizeLevel, setTheme, setThemeProfile, themeProfile, themeRevision],
   );
 
   return (

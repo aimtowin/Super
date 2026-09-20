@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 /** Versioned renderer-owned persistence key for the application backdrop. */
-export const BACKGROUND_PREFERENCES_VERSION = 4 as const;
-export const BACKGROUND_PREFERENCES_KEY = 'superApi.background-preferences.v4';
+export const BACKGROUND_PREFERENCES_VERSION = 5 as const;
+export const BACKGROUND_PREFERENCES_KEY = 'superApi.background-preferences.v5';
 /**
  * Legacy persisted keys. v1 stored images without metadata and rejected user
  * files above ~3 MB; v2 added auto-compression and image provenance, kept a
@@ -11,19 +11,15 @@ export const BACKGROUND_PREFERENCES_KEY = 'superApi.background-preferences.v4';
  * slider (inverted semantics), and replaces `cover` with `fill`.
  */
 export const BACKGROUND_PREFERENCES_LEGACY_KEYS = [
+  'superApi.background-preferences.v4',
   'superApi.background-preferences.v3',
   'superApi.background-preferences.v2',
   'superApi.background-preferences.v1',
 ] as const;
 
-/** `default` is bundled with the app; `custom` stays local to the user. */
-export const BACKGROUND_IMAGE_KINDS = ['default', 'custom', 'none'] as const;
+/** A background is either supplied locally by the user or deliberately absent. */
+export const BACKGROUND_IMAGE_KINDS = ['custom', 'none'] as const;
 export type BackgroundImageKind = (typeof BACKGROUND_IMAGE_KINDS)[number];
-
-export const DEFAULT_BACKGROUND_IMAGE_URL = new URL(
-  './assets/default-wallpaper.png',
-  import.meta.url,
-).href;
 
 /**
  * Keep image data below the practical localStorage quota. This is the size of
@@ -60,11 +56,11 @@ const DATA_URL_PATTERN = /^data:([^;,\s]+);base64,([a-z0-9+/]*={0,2})$/iu;
 
 const defaultPreferences = (): BackgroundPreferences => ({
   version: BACKGROUND_PREFERENCES_VERSION,
-  imageKind: 'default',
+  imageKind: 'none',
   imageDataUrl: null,
   imageSource: null,
   mode: 'cover',
-  imageOpacity: 0.32,
+  imageOpacity: 0.8,
 });
 
 export const DEFAULT_BACKGROUND_PREFERENCES: BackgroundPreferences =
@@ -149,6 +145,10 @@ function normalizeBackgroundImageKind(
     if (value === 'custom' && imageDataUrl === null) return 'none';
     return value as BackgroundImageKind;
   }
+  // v4 offered a bundled wallpaper. It is intentionally removed in v5, so
+  // that old choice becomes the explicit no-background state while a user's
+  // custom image remains untouched.
+  if (value === 'default') return 'none';
   // v1–v3 had no kind. Preserve a user's custom image and old empty state.
   return imageDataUrl === null ? 'none' : 'custom';
 }
@@ -266,8 +266,8 @@ function resolveStorage(
 
 /**
  * Read safely; storage failures and malformed JSON never escape to the UI.
- * v1/v2 records are migrated in place to the v3 key so a user's existing
- * wallpaper survives the schema bump.
+ * Older records are migrated in place to the current key so a user's custom
+ * wallpaper survives the schema bump; legacy bundled wallpapers are retired.
  */
 export function loadBackgroundPreferences(
   storage?: BackgroundPreferencesStorage,
@@ -342,12 +342,9 @@ export function applyBackgroundPreferences(
   // The background color is gone in v3; let the token default (surface canvas)
   // own the variable so a stale v2 inline value cannot leak through.
   root.style.removeProperty('--ui-background-color');
-  const imageUrl =
-    normalized.imageKind === 'default'
-      ? DEFAULT_BACKGROUND_IMAGE_URL
-      : normalized.imageKind === 'custom'
-        ? normalized.imageDataUrl
-        : null;
+  const imageUrl = normalized.imageKind === 'custom'
+    ? normalized.imageDataUrl
+    : null;
   root.style.setProperty(
     '--ui-background-image',
     imageUrl === null ? 'none' : `url(${imageUrl})`,
@@ -370,7 +367,7 @@ export function applyBackgroundPreferences(
   );
   root.style.setProperty(
     '--ui-background-position',
-    normalized.imageKind === 'default' ? 'center 38%' : 'center',
+    'center',
   );
   root.style.setProperty('--ui-background-repeat', normalized.mode === 'tile' ? 'repeat' : 'no-repeat');
 }

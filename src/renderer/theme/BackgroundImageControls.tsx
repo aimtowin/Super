@@ -17,7 +17,7 @@ import type {
 } from './background-preferences';
 
 export type BackgroundImagePanelProps = {
-  /** Whether the image is built in, user-selected, or intentionally disabled. */
+  /** Whether the image is user-selected or intentionally disabled. */
   readonly imageKind: BackgroundImageKind;
   /** Provenance of the stored wallpaper; absent for legacy/empty state. */
   readonly imageSource: BackgroundImageSource | null;
@@ -33,8 +33,6 @@ export type BackgroundImagePanelProps = {
   readonly onSelectFile: (file: File) => void;
   /** Remove the wallpaper, keeping color/mode/opacity untouched. */
   readonly onRemove: () => void;
-  /** Restore the bundled wallpaper after a custom image or explicit opt-out. */
-  readonly onUseDefault: () => void;
 };
 
 /**
@@ -52,7 +50,6 @@ export function BackgroundImagePanel({
   notices,
   onSelectFile,
   onRemove,
-  onUseDefault,
 }: BackgroundImagePanelProps): ReactNode {
   const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -109,11 +106,6 @@ export function BackgroundImagePanel({
             <Button iconName="refresh" onClick={openPicker} size="sm" variant="secondary">
               {t('settings.backgroundReplaceImage')}
             </Button>
-            {imageKind === 'custom' ? (
-              <Button iconName="refresh" onClick={onUseDefault} size="sm" variant="quiet">
-                {t('settings.backgroundRestoreDefault')}
-              </Button>
-            ) : null}
             <Button iconName="trash" onClick={onRemove} size="sm" variant="quiet">
               {t('settings.backgroundRemoveImage')}
             </Button>
@@ -142,11 +134,7 @@ export function BackgroundImagePanel({
           type="file"
         />
       </div>
-      {imageKind === 'default' ? (
-        <p className="app-settings-background-meta">
-          {t('settings.backgroundBuiltInImage')}
-        </p>
-      ) : imageSource ? (
+      {imageSource ? (
         <p className="app-settings-background-meta">
           {`${imageSource.fileName} · ${imageSource.width}×${imageSource.height}`}
           {imageSource.encodedBytes < imageSource.originalBytes
@@ -156,17 +144,7 @@ export function BackgroundImagePanel({
               })}`
             : null}
         </p>
-      ) : (
-        <Button
-          className="app-settings-background-restore-default"
-          iconName="refresh"
-          onClick={onUseDefault}
-          size="sm"
-          variant="secondary"
-        >
-          {t('settings.backgroundUseDefault')}
-        </Button>
-      )}
+      ) : null}
       {notices.length > 0 ? (
         <p className="app-settings-background-notice">
           {notices.map((notice, index) => (
