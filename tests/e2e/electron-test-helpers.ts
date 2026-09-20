@@ -119,7 +119,7 @@ export async function closeLibraryViaSwitcher(
     name: `当前资源库 ${libraryName}`,
   });
   await switcher.click();
-  await window.getByRole('menuitem', { name: '关闭资源库' }).click();
+  await window.getByRole('menuitem', { name: '资源库索引' }).click();
   // A Playwright click resolves after the event handler is dispatched, not
   // after the async Worker close has committed. Waiting for the switcher to
   // disappear makes callers observe the completed library lifecycle instead

@@ -75,6 +75,7 @@ export const zhCN = {
     importEagleLibraryEllipsis: "导入 Eagle 资源库…",
     importBillfishLibraryEllipsis: "导入 Billfish 资源库…",
     closeLibrary: "关闭资源库",
+    libraryIndex: "资源库索引",
     removeLibrary: "移除资源库",
     removeLibraryHint: "关闭并从最近列表移除，不删除磁盘文件",
     forgetRecentLibrary: "从列表移除",

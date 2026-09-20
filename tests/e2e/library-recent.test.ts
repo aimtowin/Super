@@ -68,10 +68,10 @@ test("lists other recent libraries in the switcher and opens one directly", asyn
     // With only the current library in the store, the 其他资源库 section hides.
     await firstTrigger.click();
     await expect(
-      window.getByRole("menuitem", { name: "关闭资源库" }),
+      window.getByRole("menuitem", { name: "资源库索引" }),
     ).toBeVisible();
     await expect(window.getByText("其他资源库")).toHaveCount(0);
-    await window.getByRole("menuitem", { name: "关闭资源库" }).click();
+    await window.getByRole("menuitem", { name: "资源库索引" }).click();
     await expect(
       window.getByRole("heading", { name: "创建本地资源库" }),
     ).toBeVisible();

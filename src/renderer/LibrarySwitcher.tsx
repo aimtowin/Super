@@ -242,7 +242,7 @@ export function LibrarySwitcher({
             tabIndex={-1}
             type="button"
           >
-            {t("shell.closeLibrary")}
+            {t("shell.libraryIndex")}
           </button>
           <button
             className="library-switcher-item"

@@ -84,6 +84,7 @@ export const en = {
     importEagleLibraryEllipsis: "Import Eagle library…",
     importBillfishLibraryEllipsis: "Import Billfish library…",
     closeLibrary: "Close library",
+    libraryIndex: "Library index",
     removeLibrary: "Remove library",
     removeLibraryHint: "Close and remove from recents; disk files stay",
     forgetRecentLibrary: "Remove from list",
