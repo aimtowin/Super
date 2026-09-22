@@ -82,13 +82,24 @@ function SettingsToggleRow({
 export function GeneralSettingsPage({
   onOpenAppLog,
   onOpenExtensionReleases,
+  onQuickStart,
 }: {
+  onQuickStart?: () => void;
   onOpenAppLog?: () => void;
   onOpenExtensionReleases?: () => void;
 } = {}): ReactNode {
   const { t, preference: localePreference, setLocale } = useLocale();
   return (
     <>
+      {onQuickStart && <SettingsCard>
+        <div className="app-settings-action-row">
+          <div className="app-settings-row-copy">
+            <strong>{t("quickStart.title")}</strong>
+            <span>{t("quickStart.replayHint")}</span>
+          </div>
+          <button className="secondary-button" type="button" onClick={onQuickStart}>{t("quickStart.replay")}</button>
+        </div>
+      </SettingsCard>}
       <SettingsCard>
         <div className="app-settings-row app-settings-row-stack">
           <div className="app-settings-row-copy">

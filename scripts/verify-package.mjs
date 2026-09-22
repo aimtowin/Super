@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyPackagedFonts } from './package-font-verification.mjs';
 
 import {
   currentPlatformKey,
@@ -164,3 +165,5 @@ if (process.env.SUPER_MEDIA_SKIP_PROVENANCE === '1') {
 
 console.log(`Verified packaged runtime files in ${resourcesPath}`);
 console.log(`Verified Host utilities in app directory: ${requiredAsarEntries.join(', ')}`);
+const fonts = verifyPackagedFonts(appPath);
+console.log(`Verified ${fonts.fontReferences} packaged font references and preserved font licenses.`);

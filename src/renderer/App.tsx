@@ -67,6 +67,8 @@ import { useCollectionCommandShortcuts } from "./use-collection-command-shortcut
 import { ExportDialog } from "./ExportDialog";
 import { ImportDialog } from "./ImportDialog";
 import { ImportLibraryChooserDialog, OpenLibraryChooserDialog } from "./ImportLibraryChooserDialog";
+import { QuickStartGuide } from "./QuickStartGuide";
+import { useQuickStart } from "./use-quick-start";
 import {
   NavigationSidebar,
 } from "./NavigationSidebar";
@@ -681,6 +683,13 @@ function AppInner() {
   // saved scope and selection; otherwise the initial empty React state can
   // overwrite the last browsed asset in localStorage.
   const [browserSessionReady, setBrowserSessionReady] = useState(false);
+  const [recentLibrariesReady, setRecentLibrariesReady] = useState(false);
+  const quickStart = useQuickStart({
+    ready: browserSessionReady,
+    hasLibrary: library !== null,
+    recentReady: recentLibrariesReady,
+    hasRecent: recentLibraries.length > 0,
+  });
   const [uiState, setUiState] = useState<UiState>("booting");
   const uiStateRef = useRef(uiState);
   uiStateRef.current = uiState;
@@ -3790,6 +3799,8 @@ function AppInner() {
       );
     } catch {
       // 最近资源库列表读取失败不影响菜单主功能，保持现有列表。
+    } finally {
+      setRecentLibrariesReady(true);
     }
   }
 
@@ -8091,6 +8102,7 @@ function AppInner() {
   });
 
   const dialogFocusTrapActive = Boolean(
+    quickStart.active ||
     dialog ||
       conflicts ||
       assetRenameDialog ||
@@ -9627,6 +9639,30 @@ function AppInner() {
     <>
     <HoverTipHost />
     <EditTextContextMenuHost />
+    <QuickStartGuide
+      open={quickStart.active && !busy && browserSessionReady}
+      step={quickStart.step}
+      onSkip={quickStart.finish}
+      onNext={quickStart.next}
+      onBack={quickStart.back}
+      onCreate={() => {
+        setDialogValue(t("shell.myLibrary"));
+        setCreateLibraryPhase("form");
+        setDialog("library");
+      }}
+      onOpen={() => { void runLibraryOperation("open"); }}
+      onImport={() => { void importAssets("files"); }}
+      onLink={() => { void importFolderAsLinked(); }}
+      onSettings={(category) => {
+        setAppSettingsCategory(category);
+        setAppSettingsOpen(true);
+      }}
+      onHelp={(kind) => {
+        void shellApi?.openExternalUrl(kind === "feedback"
+          ? "https://github.com/aimtowin/Super/issues"
+          : `https://github.com/aimtowin/Super/blob/main/docs/user-guide/README${locale === "en" ? ".en" : ""}.md`);
+      }}
+    />
     <main
       className={`app-shell${leftOpen ? "" : " left-collapsed"}${rightOpen ? "" : " right-collapsed"}${panelResizing ? " is-resizing" : ""}`}
       style={panelResizeShellStyle as React.CSSProperties}
@@ -11733,6 +11769,7 @@ function AppInner() {
         onCancel={() => setRenameTarget(null)}
       />
       <AppSettingsDialog
+        onQuickStart={() => { setAppSettingsOpen(false); quickStart.start(); }}
         activeCategory={appSettingsCategory}
         aiConfigPanel={
           <AiConfigDialog
@@ -12014,7 +12051,7 @@ function AppInner() {
       />
       <CreateDialog
         busy={busy}
-        open={dialog === "library"}
+        open={dialog === "library" && !(createLibraryPhase === "start" && quickStart.status !== "done")}
         phase={createLibraryPhase}
         required={!library}
         value={dialogValue}

@@ -57,6 +57,16 @@ Source: "..\..\out\Super-win32-x64\*"; DestDir: "{app}"; Flags: ignoreversion re
 [InstallDelete]
 Type: files; Name: "{app}\resources\app.asar"
 Type: filesandordirs; Name: "{app}\resources\app.asar.unpacked"
+; v2.3.8: remove only the old build-time font package copies before copying
+; this release's metadata/licenses. Full upgrades must not retain the payload
+; pruned from fresh installs. Vite's live fonts and user libraries are outside
+; these exact package directories. Delta installers use their removed-file list.
+Type: filesandordirs; Name: "{app}\resources\app\node_modules\@fontsource-variable\noto-sans-sc"
+Type: filesandordirs; Name: "{app}\resources\app\node_modules\@fontsource\ibm-plex-mono"
+Type: filesandordirs; Name: "{app}\resources\app\node_modules\harmonyos-sans-sc-webfont-splitted"
+Type: filesandordirs; Name: "{app}\resources\app\node_modules\cn-font-split"
+Type: filesandordirs; Name: "{app}\resources\app\node_modules\@napi-rs\woff-build"
+Type: filesandordirs; Name: "{app}\resources\app\node_modules\@napi-rs\woff-build-win32-x64-msvc"
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"

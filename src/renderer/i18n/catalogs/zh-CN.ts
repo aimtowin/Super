@@ -15,6 +15,26 @@ import type { MessageTree } from '../types';
  *   call-site migration should compose with placeholders rather than one mega-template.
  */
 export const zhCN = {
+  quickStart: {
+    title: "快速开始", skip: "跳过引导", back: "上一步", next: "下一步",
+    continue: "继续 / 稍后添加", finish: "开始使用", workspace: "认识工作区",
+    create: "创建资源库", open: "打开已有资源库",
+    importAction: "导入素材", importHint: "复制文件到资源库，原文件保留。",
+    link: "链接文件夹", linkHint: "沿用已有目录，文件保留原位；请保持原目录可访问。",
+    appearance: "外观设置", appearanceHint: "调整主题、自定义背景和应用文字。",
+    ai: "AI 设置", aiHint: "配置服务后，可分析素材并用自然语言查找。",
+    optional: "以上配置均可稍后完成。Super Lib 免费，第三方 AI 服务可能收费；分析内容会发送至你选择的服务。",
+    manual: "使用手册", feedback: "反馈问题", replay: "重新查看引导",
+    replayHint: "了解建库、导入、浏览和可选设置。",
+    welcome: { title: "欢迎使用 Super Lib", body: "从一个资源库开始收纳素材。选择空间充足的本机磁盘，建议使用固态硬盘，并为素材和预览缓存留出空间。" },
+    import: { title: "放入第一批素材", body: "先用几份素材熟悉操作。你可以复制文件进入资源库，也可以链接已有素材目录。" },
+    tour: { title: "认识工作区", body: "跟随高亮区域，了解浏览和整理素材的基本操作。" },
+    personalize: { title: "调整为你喜欢的样子", body: "基础功能已经准备好。按需调整外观或配置 AI，也可以直接开始探索。" },
+    navigation: { title: "在左侧切换范围", body: "选择文件夹或合集，查看其中的素材。标签和合集帮助你按自己的方式整理内容。" },
+    browse: { title: "在中间浏览素材", body: "双击素材打开查看器，右键查看可用操作。图片和 PDF 还可以放入置顶悬浮小窗作为参考。" },
+    inspector: { title: "在右侧查看信息", body: "选中素材后，在这里查看文件信息、添加标签和评分。如果面板已收起，可用右上角按钮展开。" },
+    search: { title: "快速找到需要的内容", body: "用顶部搜索框查找素材，再用颜色、标签、格式等条件缩小范围。" },
+  },
   common: {
     cancel: "取消",
     save: "保存",

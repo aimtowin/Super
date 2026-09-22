@@ -24,6 +24,26 @@ type CatalogMessages<T> = {
 
  */
 export const en = {
+  quickStart: {
+    title: "Quick start", skip: "Skip guide", back: "Back", next: "Next",
+    continue: "Continue / Add later", finish: "Start exploring", workspace: "Your workspace",
+    create: "Create library", open: "Open existing library",
+    importAction: "Import files", importHint: "Copy files into the library. Originals stay where they are.",
+    link: "Link folder", linkHint: "Use an existing folder in place. Keep its original location accessible.",
+    appearance: "Appearance", appearanceHint: "Adjust the theme, custom background and app text.",
+    ai: "AI settings", aiHint: "Connect a service to analyze assets and search in natural language.",
+    optional: "Both are optional. Super Lib is free; third-party AI services may charge. Analysis content is sent to your chosen service.",
+    manual: "User manual", feedback: "Report an issue", replay: "Replay guide",
+    replayHint: "Learn about libraries, importing, browsing and optional settings.",
+    welcome: { title: "Welcome to Super Lib", body: "Start with a library for your assets. Choose a local drive with space for files and preview caches; an SSD is recommended." },
+    import: { title: "Add your first assets", body: "Start with a few files. Copy them into your library or link an existing asset folder." },
+    tour: { title: "Meet your workspace", body: "Follow the highlighted areas to learn the basics of browsing and organizing." },
+    personalize: { title: "Make it your own", body: "The essentials are ready. Adjust the appearance, connect an AI service, or start exploring." },
+    navigation: { title: "Choose a location on the left", body: "Select a folder or collection to browse its assets. Use tags and collections to organize your work." },
+    browse: { title: "Browse assets in the center", body: "Double-click to preview, or right-click for more actions. Images and PDFs can open in an always-on-top reference window." },
+    inspector: { title: "See details on the right", body: "Select an asset to view file details, add tags and rate it. If this panel is collapsed, reopen it with the top-right button." },
+    search: { title: "Find what you need", body: "Use the search field at the top, then narrow your results by color, tags, format and other filters." },
+  },
   common: {
     cancel: "Cancel",
     save: "Save",

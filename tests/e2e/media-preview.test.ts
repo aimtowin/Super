@@ -108,11 +108,11 @@ test("opens a PDF in the floating preview window", async () => {
   const libraryPath = path.join(temporaryRoot, libraryName);
   writeFileSync(sourcePath, createMinimalPdf());
 
-  const executablePath = resolveElectronExecutablePath();
+  const executablePath = process.env.SUPER_E2E_PACKAGED_EXECUTABLE ?? resolveElectronExecutablePath();
   const applicationDirectory =
     process.env.SUPER_E2E_APP_DIRECTORY ?? process.cwd();
   const application = await electron.launch({
-    args: [applicationDirectory],
+    args: process.env.SUPER_E2E_PACKAGED_EXECUTABLE ? [] : [applicationDirectory],
     cwd: applicationDirectory,
     executablePath,
     env: {
@@ -126,7 +126,15 @@ test("opens a PDF in the floating preview window", async () => {
   });
 
   try {
+    await application.evaluate(({ dialog }, paths) => {
+      dialog.showOpenDialog = async (...args: unknown[]) => {
+        const options = args.at(-1) as { properties?: string[] };
+        return { canceled: false, filePaths: [options.properties?.includes('openDirectory') ? paths.root : paths.source] };
+      };
+    }, { root: temporaryRoot, source: sourcePath });
     const window = await application.firstWindow();
+    await expect(window.locator('#quick-start-guide')).toBeVisible();
+    await window.getByRole('button', { name: '跳过引导', exact: true }).click();
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();

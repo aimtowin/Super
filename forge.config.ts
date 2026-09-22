@@ -19,6 +19,19 @@ function isPackagedDebugOrBuildArtifact(file: string): boolean {
   if (file.startsWith('/node_modules/.vite/')) return true;
   if (file.startsWith('/node_modules/@types/')) return true;
 
+  // Vite emits the referenced font subsets into renderer/assets. Never remove
+  // those assets: only omit the raw font/CSS copies from these exact packages.
+  // Keep package metadata, licenses and notices alongside the bundled fonts.
+  const fontPackage = /^\/node_modules\/(?:@fontsource-variable\/noto-sans-sc|@fontsource\/ibm-plex-mono|harmonyos-sans-sc-webfont-splitted)\//u;
+  if (fontPackage.test(file) && /\.(?:woff2?|ttf|otf|css)$/iu.test(file)) return true;
+
+  // These are transitive font-subsetting tools, not font rendering runtimes.
+  // Canvas/Sharp and every other native dependency remain untouched.
+  const fontTool = file.match(/^\/node_modules\/(?:cn-font-split|@napi-rs\/woff-build(?:-(?:win32|darwin|linux|android|wasm32)-[^/]+)?)\/(.+)$/u);
+  if (fontTool?.[1] && !/^(?:package\.json|(?:licen[cs]e|copying|notice|ofl|readme)(?:[.-][^/]*)?)$/iu.test(fontTool[1])) {
+    return true;
+  }
+
   // better-sqlite3 loads only build/Release/better_sqlite3.node at runtime.
   // Its copied C/C++ sources and linker intermediates otherwise account for
   // dozens of megabytes in every full update archive.

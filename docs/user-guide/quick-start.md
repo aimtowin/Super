@@ -8,7 +8,9 @@ Super Lib 完全免费。先创建一个本地资产库，就可以开始管理�
 
 ## 1. 下载并安装
 
-在 [GitHub Release](https://github.com/aimtowin/Super/releases/latest) 下载 `SuperSetup.exe`，运行安装程序并按提示完成。当前 `v2.2.8` 提供 Windows x64 安装包。
+在 [GitHub Release](https://github.com/aimtowin/Super/releases/latest) 下载 `SuperSetup.exe`，运行安装程序并按提示完成。正式发行包支持 Windows x64。
+
+从 v2.3.8 起，首次启动提供四步快速开始引导：创建或打开资源库、导入素材、认识工作区、选择配置外观和 AI。可以随时跳过，也可以在 **设置 → 常规 → 重新查看引导** 中再次打开；已有用户升级不会自动弹出。
 
 首次安装选择 EXE 即可。发布页里的完整更新 ZIP、增量 ZIP 和 SHA-256 文件是更新及校验附件，不需要全部下载。
 

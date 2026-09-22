@@ -8,7 +8,9 @@ Super Lib is free to use. Create a local library to get started; AI and appearan
 
 ## 1. Install
 
-Download `SuperSetup.exe` from the [latest GitHub Release](https://github.com/aimtowin/Super/releases/latest), run it, and follow the prompts. The current `v2.2.8` release provides a Windows x64 installer.
+Download `SuperSetup.exe` from the [latest GitHub Release](https://github.com/aimtowin/Super/releases/latest), run it, and follow the prompts. The release installer supports Windows x64.
+
+Starting with v2.3.8, a four-step first-run guide helps you create or open a library, import assets, explore the workspace, and optionally configure appearance and AI. You can skip it or replay it from **Settings → General**. Upgrading an existing profile does not automatically show the guide.
 
 You only need the EXE for a first installation. Full update ZIPs, delta ZIPs, and SHA-256 files are update and verification attachments.
 

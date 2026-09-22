@@ -89,6 +89,9 @@ export function useDialogEscapeDismiss({
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      // The guide is portalled and owns its own Escape/skip policy. The
+      // required no-library start surface may still have logical state here.
+      if (event.target instanceof Element && event.target.closest("#quick-start-guide")) return;
       if (isImeKeyboardEvent(event)) return;
       event.preventDefault();
       // Dialogs are the topmost interaction layer. Handle Escape during the

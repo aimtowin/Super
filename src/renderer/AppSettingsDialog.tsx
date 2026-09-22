@@ -45,6 +45,7 @@ export interface AppSettingsDialogProps {
   autoDetectImageSequences: boolean;
   onToggleAutoDetectImageSequences: () => void;
   onOpenAppLog?: () => void;
+  onQuickStart?: () => void;
   onOpenExtensionReleases?: () => void;
   pluginApi?: SuperPluginManagerApi;
   pluginContributionRefreshKey?: string | null;
@@ -75,6 +76,7 @@ export function AppSettingsDialog({
   autoDetectImageSequences,
   onToggleAutoDetectImageSequences,
   onOpenAppLog,
+  onQuickStart,
   onOpenExtensionReleases,
   pluginApi,
   pluginContributionRefreshKey,
@@ -177,6 +179,7 @@ export function AppSettingsDialog({
             ) : null}
             {!showingPluginSettings && activeCategory === "general" ? (
               <GeneralSettingsPage
+                onQuickStart={onQuickStart}
                 onOpenAppLog={onOpenAppLog}
                 onOpenExtensionReleases={onOpenExtensionReleases}
               />

@@ -46,6 +46,8 @@ test('the packaged application starts and completes a real Worker import', async
     );
 
     const window = await application.firstWindow();
+    await expect(window.locator('#quick-start-guide')).toBeVisible();
+    await window.getByRole('button', { name: '跳过引导', exact: true }).click();
     await expect(window.getByRole('heading', { name: '创建本地资源库' })).toBeVisible();
     expect(
       await window.evaluate(() => ({
@@ -62,6 +64,24 @@ test('the packaged application starts and completes a real Worker import', async
     await window.getByRole('button', { name: '导入文件', exact: true }).first().click();
     await expect(window.getByText('packaged-worker.txt', { exact: true }).first()).toBeVisible();
     expect(existsSync(path.join(libraryPath, 'Assets', 'packaged-worker.txt'))).toBe(true);
+
+    // Load the actual emitted subsets, not fallback/system fonts. These must
+    // work without the raw font payloads removed from production node_modules.
+    const fonts = await window.evaluate(async () => {
+      const requests = [
+        ['Noto Sans SC Variable', '资产图像ABC123'],
+        ['IBM Plex Mono', 'ABC123'],
+        ...(navigator.platform.startsWith('Win') ? [['HarmonyOS Sans SC', '资产图像ABC123']] : []),
+      ];
+      return Promise.all(requests.map(async ([family, sample]) => {
+        const loaded = await document.fonts.load(`14px "${family}"`, sample);
+        return { family, count: loaded.length, loaded: loaded.every(font => font.status === 'loaded') };
+      }));
+    });
+    for (const font of fonts) {
+      expect(font.count, `${font.family} bundled subsets`).toBeGreaterThan(0);
+      expect(font.loaded, font.family).toBe(true);
+    }
 
     const screenshotPath = test.info().outputPath('packaged-worker-import.png');
     await window.screenshot({ path: screenshotPath });
@@ -120,6 +140,8 @@ test('the packaged application FTS5 search finds and filters imported assets', a
     );
 
     const window = await application.firstWindow();
+    await expect(window.locator('#quick-start-guide')).toBeVisible();
+    await window.getByRole('button', { name: '跳过引导', exact: true }).click();
     await expect(window.getByRole('heading', { name: '创建本地资源库' })).toBeVisible();
 
     // Create library

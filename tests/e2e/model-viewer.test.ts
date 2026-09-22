@@ -25,9 +25,9 @@ async function launchWithModels(modelFiles: string[]) {
   const applicationDirectory =
     process.env.SUPER_E2E_APP_DIRECTORY ?? process.cwd();
   const application = await electron.launch({
-    args: [applicationDirectory],
+    args: process.env.SUPER_E2E_PACKAGED_EXECUTABLE ? [] : [applicationDirectory],
     cwd: applicationDirectory,
-    executablePath: resolveElectronExecutablePath(),
+    executablePath: process.env.SUPER_E2E_PACKAGED_EXECUTABLE ?? resolveElectronExecutablePath(),
     env: {
       ...process.env,
       SUPER_E2E: "1",
@@ -37,7 +37,15 @@ async function launchWithModels(modelFiles: string[]) {
       SUPER_E2E_IMPORT_FILES: modelFiles.join(path.delimiter),
     },
   });
+  await application.evaluate(({ dialog }, paths) => {
+    dialog.showOpenDialog = async (...args: unknown[]) => {
+      const options = args.at(-1) as { properties?: string[] };
+      return { canceled: false, filePaths: options.properties?.includes('openDirectory') ? [paths.root] : paths.files };
+    };
+  }, { root: temporaryRoot, files: modelFiles });
   const window = await application.firstWindow();
+  await expect(window.locator('#quick-start-guide')).toBeVisible();
+  await window.getByRole('button', { name: '跳过引导', exact: true }).click();
   window.on("console", (message) => {
     const text = message.text();
     if (/model|fbx|gltf|webgl|error|fail|super/i.test(text)) {
