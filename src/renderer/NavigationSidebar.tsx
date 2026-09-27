@@ -66,6 +66,9 @@ import {
   type NavTreePreferences,
 } from "./nav-tree-preferences";
 import { PaneSurface } from "./ui/surfaces";
+import { SidebarEmojiDialog } from "./SidebarEmojiDialog";
+import { emojiKey } from "./sidebar-emoji-preferences";
+import { useSidebarEmoji } from "./use-sidebar-emoji";
 
 // ---------------------------------------------------------------------------
 // NavRow — local presentational row
@@ -73,6 +76,7 @@ import { PaneSurface } from "./ui/surfaces";
 
 function NavRow({
   icon,
+  emoji,
   label,
   count,
   active,
@@ -95,11 +99,12 @@ function NavRow({
   navCollectionId,
 }: {
   icon: IconName;
+  emoji?: string;
   label: string;
   count?: number;
   active?: boolean;
   onClick?: () => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onDragOver?: (e: React.DragEvent<HTMLButtonElement>) => void;
   onDrop?: (e: React.DragEvent<HTMLButtonElement>) => void;
   onDragEnter?: (e: React.DragEvent<HTMLButtonElement>) => void;
@@ -146,7 +151,12 @@ function NavRow({
         title={hoverTitle}
         type="button"
       >
-        <Icon name={icon} size={15} color={iconColor} />
+        {emoji ? (
+          <span className="sidebar-emoji-glyph" aria-hidden="true">
+            {emoji}
+            {navFolderKind === "linked" ? <span className="sidebar-emoji-link-badge"><Icon name={icon} size={9} color={iconColor} /></span> : null}
+          </span>
+        ) : <Icon name={icon} size={15} color={iconColor} />}
         <span className="nav-row-label">{label}</span>
         {count !== undefined && (
           <span aria-hidden="true" className="nav-count">
@@ -788,6 +798,16 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
     onCopyManagedToLinked,
   } = props;
 
+  const { icons: emojiIcons, save: saveEmoji } = useSidebarEmoji(library?.libraryId);
+  const [emojiTarget, setEmojiTarget] = useState<{
+    libraryId: string; key: string; name: string; icon: IconName; returnFocus: HTMLElement | null;
+  } | null>(null);
+  const customizeEmoji = (key: string, name: string, icon: IconName, returnFocus: HTMLElement) => {
+    const libraryId = library?.libraryId;
+    return libraryId ? () => setEmojiTarget({ libraryId, key, name, icon, returnFocus }) : undefined;
+  };
+  if (emojiTarget && emojiTarget.libraryId !== library?.libraryId) setEmojiTarget(null);
+
   const browseNavFlags = {
     assetScope,
     showTrash,
@@ -1041,6 +1061,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
               ) : undefined
             }
             icon="folder"
+            emoji={emojiIcons[emojiKey("folder", entry.folderId)]}
             key={entry.folderId}
             label={entry.name}
             navFolderId={entry.folderId}
@@ -1063,6 +1084,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
               onOpenContextMenu(
                 {
                   type: "folder",
+                  onCustomizeEmoji: customizeEmoji(emojiKey("folder", entry.folderId), entry.name, "folder", event.currentTarget),
                   folderId: entry.folderId,
                   name: entry.name,
                   locationKind: "managed",
@@ -1127,6 +1149,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
             ) : undefined
           }
           icon={linkedAffordance.icon}
+          emoji={emojiIcons[emojiKey("folder", entry.folderId)]}
           iconColor={linkedAffordance.iconColor}
           key={entry.folderId}
           label={entry.name}
@@ -1163,6 +1186,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
             onOpenContextMenu(
               {
                 type: "folder",
+                onCustomizeEmoji: customizeEmoji(emojiKey("folder", entry.folderId), entry.name, linkedAffordance.icon, event.currentTarget),
                 folderId: linkedRootId,
                 name: entry.name,
                 locationKind: "linked",
@@ -1410,6 +1434,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
               ) : undefined
             }
             icon="collection"
+            emoji={emojiIcons[emojiKey("collection", c.collectionId)]}
             label={c.name}
             count={c.assetCount}
             active={activeCollectionId === c.collectionId && !activeTagId}
@@ -1450,6 +1475,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
               onOpenContextMenu(
                 {
                   type: "organization",
+                  onCustomizeEmoji: customizeEmoji(emojiKey("collection", c.collectionId), c.name, "collection", e.currentTarget),
                   id: c.collectionId,
                   name: c.name,
                 },
@@ -1662,6 +1688,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
                     active={activeSmartCollectionId === sc.collectionId}
                     count={sc.assetCount}
                     icon="smart"
+                    emoji={emojiIcons[emojiKey("smart-collection", sc.collectionId)]}
                     key={sc.collectionId}
                     label={sc.name}
                     onClick={() => void onChooseSmartCollection(sc.collectionId)}
@@ -1670,6 +1697,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
                       onOpenContextMenu(
                         {
                           type: "smart-collection",
+                          onCustomizeEmoji: customizeEmoji(emojiKey("smart-collection", sc.collectionId), sc.name, "smart", event.currentTarget),
                           id: sc.collectionId,
                           name: sc.name,
                         },
@@ -1688,6 +1716,12 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
         </Section>
       </nav>
       {footer ? <div className="navigation-footer">{footer}</div> : null}
+      {emojiTarget && emojiTarget.libraryId === library?.libraryId ? (
+        <SidebarEmojiDialog key={`${emojiTarget.libraryId}:${emojiTarget.key}`}
+          name={emojiTarget.name} defaultIcon={emojiTarget.icon} returnFocus={emojiTarget.returnFocus}
+          initialEmoji={emojiIcons[emojiTarget.key]}
+          onSave={emoji => saveEmoji(emojiTarget.key, emoji)} onClose={() => setEmojiTarget(null)} />
+      ) : null}
     </PaneSurface>
   );
 }

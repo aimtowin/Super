@@ -15,6 +15,18 @@ import type { MessageTree } from '../types';
  *   call-site migration should compose with placeholders rather than one mega-template.
  */
 export const zhCN = {
+  sidebarEmoji: {
+    menu: '设置 Emoji…',
+    title: '设置 Emoji 图标',
+    input: '输入或粘贴一个 Emoji',
+    help: '选择下方表情，或使用系统表情面板输入。设置仅保存在本机。',
+    presets: '常用 Emoji',
+    invalid: '请输入一个完整的 Emoji，支持肤色、旗帜和组合表情。',
+    saveError: '无法保存图标，请检查本机存储空间后重试。',
+    reset: '恢复默认',
+    save: '保存',
+    cancel: '取消',
+  },
   quickStart: {
     title: "快速开始", skip: "跳过引导", back: "上一步", next: "下一步",
     continue: "继续 / 稍后添加", finish: "开始使用", workspace: "认识工作区",

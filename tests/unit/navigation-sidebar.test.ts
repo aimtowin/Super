@@ -10,6 +10,9 @@ import {
   type NavigationSidebarProps,
 } from "../../src/renderer/NavigationSidebar";
 import { LocaleProvider } from "../../src/renderer/i18n";
+import type { ContextMenuDescriptor } from "../../src/renderer/context-menu";
+import { emojiKey, emojiStorageKey } from "../../src/renderer/sidebar-emoji-preferences";
+import * as emojiPreferences from "../../src/renderer/sidebar-emoji-preferences";
 
 function createNavigationProps(
   overrides: Partial<NavigationSidebarProps> = {},
@@ -86,6 +89,97 @@ function createNavigationProps(
     ...overrides,
   };
 }
+
+describe("NavigationSidebar emoji icons", () => {
+  let root: Root;
+  let container: HTMLDivElement;
+  const collection = { collectionId: "c", name: "Collection", parentId: null, description: null, coverAssetId: null, position: 0, assetCount: 0, childCollectionCount: 0 };
+  function props() {
+    return createNavigationProps({
+      folders: [{ folderId: "f", name: "Folder", relativePath: "Folder", parentFolderId: null, directAssetCount: 0, childFolderCount: 0 }],
+      collections: [collection], collectionTree: new Map([[null, [collection]]]),
+      smartCollections: [{ collectionId: "s", name: "Smart", queryDefinition: "{}", position: 0, assetCount: 0 }],
+      linkedFolders: [
+        { folderId: "l", displayName: "Linked", relativePath: "", absoluteRootPath: "C:/linked", status: "offline", assetCount: 0 },
+        { folderId: "lc", displayName: "Child", relativePath: "Child", linkedFolderId: "l", parentFolderId: "l", absoluteRootPath: "C:/linked", status: "offline", assetCount: 0 },
+      ],
+      onOpenContextMenu: vi.fn(),
+    });
+  }
+  async function render(p: NavigationSidebarProps) {
+    if (!container) {
+      container = document.createElement("div"); document.body.append(container); root = createRoot(container);
+    }
+    await act(async () => root.render(createElement(LocaleProvider, { initialPreference: "en", children: createElement(NavigationSidebar, p) })));
+  }
+  function row(name: string) {
+    return [...container.querySelectorAll<HTMLButtonElement>(".nav-row")].find(item => item.querySelector(".nav-row-label")?.textContent === name)!;
+  }
+  async function open(name: string, p: NavigationSidebarProps) {
+    await act(async () => row(name).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    const descriptor = vi.mocked(p.onOpenContextMenu).mock.lastCall?.[0] as ContextMenuDescriptor;
+    expect(descriptor).toHaveProperty("onCustomizeEmoji");
+    if ("onCustomizeEmoji" in descriptor) await act(async () => descriptor.onCustomizeEmoji?.());
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  }
+  async function click(label: string) {
+    const button = [...document.querySelectorAll<HTMLButtonElement>("#sidebar-emoji button")].find(item => item.textContent === label)!;
+    expect(button).toBeDefined();
+    await act(async () => button.click());
+  }
+  afterEach(async () => {
+    await act(async () => root?.unmount());
+    container?.remove();
+    container = undefined as unknown as HTMLDivElement;
+    localStorage.clear(); vi.restoreAllMocks();
+  });
+  it.each(["Folder", "Linked", "Child", "Collection", "Smart"])("sets and resets %s without navigating", async name => {
+    const p = props(); await render(p); await open(name, p);
+    await click("🎨");
+    expect(row(name).querySelector(".sidebar-emoji-glyph")).toBeNull();
+    await click("Save");
+    expect(row(name).querySelector(".sidebar-emoji-glyph")?.textContent).toBe("🎨");
+    expect(p.onChooseFolder).not.toHaveBeenCalled();
+    expect(p.onChooseCollection).not.toHaveBeenCalled();
+    if (name === "Linked" || name === "Child") expect(row(name).querySelector(".sidebar-emoji-link-badge svg")).not.toBeNull();
+    if (name === "Child") expect(row("Linked").querySelector(".sidebar-emoji-glyph")).toBeNull();
+    await open(name, p); await click("Restore default");
+    expect(row(name).querySelector(".sidebar-emoji-glyph")).toBeNull();
+  });
+  it("persists after remount and rename; isolates library switches and closes stale editors", async () => {
+    const p = props(); await render(p); await open("Folder", p); await click("📚"); await click("Save");
+    await act(async () => root.unmount()); root = createRoot(container);
+    p.folders[0] = { ...p.folders[0]!, name: "Renamed" };
+    await render(p); expect(row("Renamed").querySelector(".sidebar-emoji-glyph")?.textContent).toBe("📚");
+    await open("Renamed", p);
+    await render({ ...p, library: { ...p.library!, libraryId: "other" } });
+    expect(document.querySelector("#sidebar-emoji")).toBeNull();
+    expect(row("Renamed").querySelector(".sidebar-emoji-glyph")).toBeNull();
+    await render(p); expect(document.querySelector("#sidebar-emoji")).toBeNull();
+    expect(row("Renamed").querySelector(".sidebar-emoji-glyph")?.textContent).toBe("📚");
+  });
+  it("cancel and Escape do not write; save errors keep the editor open", async () => {
+    const p = props(); await render(p); await open("Folder", p); await click("🔥"); await click("Cancel");
+    expect(localStorage.getItem(emojiStorageKey("library-1"))).toBeNull();
+    await open("Folder", p);
+    await act(async () => document.querySelector("#sidebar-emoji-input")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(document.querySelector("#sidebar-emoji")).toBeNull();
+    await open("Folder", p); await click("🌍");
+    vi.spyOn(emojiPreferences, "saveEmojiPreference").mockImplementation(() => { throw new Error("quota"); });
+    await click("Save");
+    expect(document.querySelector("#sidebar-emoji-message")?.textContent).toContain("Could not save");
+    expect(document.querySelector("#sidebar-emoji")).not.toBeNull();
+    expect(row("Folder").querySelector(".sidebar-emoji-glyph")).toBeNull();
+  });
+  it("reacts to another window updating local preferences", async () => {
+    const p = props(); await render(p);
+    await act(async () => {
+      localStorage.setItem(emojiStorageKey("library-1"), JSON.stringify({ [emojiKey("folder", "f")]: "🇨🇳" }));
+      window.dispatchEvent(new Event("storage"));
+    });
+    expect(row("Folder").querySelector(".sidebar-emoji-glyph")?.textContent).toBe("🇨🇳");
+  });
+});
 
 describe("NavigationSidebar virtual library root", () => {
   let root: Root | undefined;

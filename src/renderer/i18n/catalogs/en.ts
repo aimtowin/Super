@@ -24,6 +24,18 @@ type CatalogMessages<T> = {
 
  */
 export const en = {
+  sidebarEmoji: {
+    menu: 'Set Emoji…',
+    title: 'Set Emoji icon',
+    input: 'Enter or paste one Emoji',
+    help: 'Choose below or use your system emoji picker. Saved on this device only.',
+    presets: 'Common Emoji',
+    invalid: 'Enter one complete Emoji. Skin tones, flags and combined emoji are supported.',
+    saveError: 'Could not save the icon. Check local storage and try again.',
+    reset: 'Restore default',
+    save: 'Save',
+    cancel: 'Cancel',
+  },
   quickStart: {
     title: "Quick start", skip: "Skip guide", back: "Back", next: "Next",
     continue: "Continue / Add later", finish: "Start exploring", workspace: "Your workspace",

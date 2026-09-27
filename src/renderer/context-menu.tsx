@@ -35,11 +35,13 @@ export type ContextMenuDescriptor =
       // Collections only. Tags were removed from the sidebar (REQ-TAG-001),
       // so the organization menu no longer has a tag branch.
       type: "organization";
+      onCustomizeEmoji?: () => void;
       id: string;
       name: string;
     }
   | {
       type: "smart-collection";
+      onCustomizeEmoji?: () => void;
       id: string;
       name: string;
     }
@@ -49,6 +51,7 @@ export type ContextMenuDescriptor =
       // Linked child paths (relativePath set) use trash / disk-delete like
       // managed (clarification #7). Offline linked roots disable path actions.
       type: "folder";
+      onCustomizeEmoji?: () => void;
       folderId: string;
       name: string;
       locationKind: "managed" | "linked";

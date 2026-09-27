@@ -672,6 +672,13 @@ export function AssetContextMenu(props: AssetContextMenuProps) {
           />
         ) : (
           <>
+        {"onCustomizeEmoji" in activeContextMenu.descriptor && activeContextMenu.descriptor.onCustomizeEmoji ? (
+          <ContextMenuItem
+            icon={<span aria-hidden="true">😀</span>}
+            label={t("sidebarEmoji.menu")}
+            onAction={activeContextMenu.descriptor.onCustomizeEmoji}
+          />
+        ) : null}
         {activeContextMenu.descriptor.type === "workspace" && (() => {
           const desc = activeContextMenu.descriptor;
           if (desc.type !== "workspace") return null;
