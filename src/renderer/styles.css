@@ -3949,6 +3949,9 @@ body.super-modal-open .app-shell {
   position: fixed;
   z-index: var(--ui-layer-menu);
   pointer-events: auto;
+  /* Electron's native caption hit test ignores DOM stacking. Subtract the
+     visible menu (including portaled submenus) from the toolbar drag region. */
+  -webkit-app-region: no-drag;
   /* Default to the current low acrylic treatment so menus remain polished
      even before the preference provider has mounted. */
   background: color-mix(in srgb, var(--menu-surface-background) 92%, transparent);

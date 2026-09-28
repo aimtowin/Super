@@ -1,6 +1,7 @@
 import { _electron as electron, expect, test, type Page } from "@playwright/test";
 
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -197,8 +198,38 @@ test("keeps a top-clamped folder context menu clickable above the toolbar", asyn
       expect(hitRole).toBe("menu");
     }
 
-    // Playwright performs a physical pointer click; this fails if the
-    // toolbar intercepts the overlap. The dialog confirms the action ran.
+    // CDP/Playwright input bypasses the OS non-client hit test. Verify the
+    // native window also routes this point to content, not caption dragging.
+    if (process.platform === "win32" && menuItem) {
+      const nativeWindow = await application.evaluate(({ BrowserWindow, screen }) => {
+        const main = BrowserWindow.getAllWindows().find((entry) => entry.isVisible());
+        if (!main) throw new Error("Missing test window");
+        const handle = main.getNativeWindowHandle();
+        return {
+          handle: (handle.length === 8 ? handle.readBigUInt64LE() : BigInt(handle.readUInt32LE())).toString(),
+          scale: screen.getDisplayMatching(main.getBounds()).scaleFactor * main.webContents.getZoomFactor(),
+        };
+      });
+      const hitTest = () => Number(execFileSync("powershell.exe", [
+        "-NoProfile", "-NonInteractive", "-File",
+        path.resolve("tests/e2e/native-window-hit-test.ps1"),
+        "-WindowHandle", nativeWindow.handle,
+        "-ClientX", String(Math.round((menuItem.x + menuItem.width / 2) * nativeWindow.scale)),
+        "-ClientY", String(Math.round((menuItem.y + menuItem.height / 2) * nativeWindow.scale)),
+      ], { encoding: "utf8", windowsHide: true, timeout: 10_000 }).trim());
+      await expect.poll(hitTest, { message: "Menu must be HTCLIENT, not HTCAPTION", timeout: 10_000 }).toBe(1);
+      await window.keyboard.press("Escape");
+      await expect(menu).toBeHidden();
+      await expect.poll(hitTest, { message: "Dismissed menu must restore title-bar dragging" }).toBe(2);
+      await sidebarFolderRow(window, "顶部菜单").evaluate((element) => {
+        element.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true, button: 2, cancelable: true, clientX: 48, clientY: 4,
+        }));
+      });
+      await expect(setIcon).toBeVisible();
+    }
+
+    // Separately verify the renderer action once native hit testing passes.
     await setIcon.click();
     await expect(window.locator(".sidebar-emoji-dialog")).toBeVisible();
   } finally {
