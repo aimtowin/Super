@@ -5297,8 +5297,19 @@ function AppInner() {
   async function reloadCurrentContent() {
     if (!library) return;
     if (activeSmartCollectionId) {
-      await chooseSmartCollection(activeSmartCollectionId);
-      return;
+      const collection = smartCollections.find(
+        (item) => item.collectionId === activeSmartCollectionId,
+      );
+      if (!collection) return;
+      if (hasConfiguredSmartCollectionQuery(collection.queryDefinition)) {
+        // Background events refresh results, not navigation. Re-entering the
+        // collection closes the viewer and clears selection/discovery state.
+        await refreshSmartCollectionResults(activeSmartCollectionId);
+        return;
+      }
+      // A draft uses the current discovery controls until its rule is saved.
+      // An empty draft must remain empty instead of displaying every asset.
+      if (!hasMeaningfulSmartCollectionCondition(currentQueryDefinition())) return;
     }
     if (showTrash) {
       await loadContent(library, "all", {
@@ -6059,6 +6070,15 @@ function AppInner() {
     }
   }
 
+  const isConfiguredSmartCollectionActive = Boolean(
+    activeSmartCollectionId &&
+      hasConfiguredSmartCollectionQuery(
+        smartCollections.find(
+          (collection) => collection.collectionId === activeSmartCollectionId,
+        )?.queryDefinition ?? "{}",
+      ),
+  );
+
   useEffect(() => {
     const hasDiscoveryInput = Boolean(
       searchValue.trim() ||
@@ -6087,15 +6107,6 @@ function AppInner() {
     const shouldClearPreviousResults =
       hadDiscoveryInput.current && !hasDiscoveryInput;
     hadDiscoveryInput.current = hasDiscoveryInput;
-    const activeSmartCollection = activeSmartCollectionId
-      ? smartCollections.find(
-          (collection) => collection.collectionId === activeSmartCollectionId,
-        )
-      : undefined;
-    const isConfiguredSmartCollectionActive = Boolean(
-      activeSmartCollection &&
-        hasConfiguredSmartCollectionQuery(activeSmartCollection.queryDefinition),
-    );
     if (
       !library ||
       showTrash ||
@@ -6120,12 +6131,14 @@ function AppInner() {
     // only discovery controls should restart the debounce timer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    library,
+    library?.libraryId,
     showTrash,
     showTagManagement,
     showPluginSidebarView,
     activeSmartCollectionId,
-    smartCollections,
+    // Sidebar hydration replaces the summaries after every background reload.
+    // Only the query ownership matters here, not array identity or counts.
+    isConfiguredSmartCollectionActive,
     searchValue,
     colorFilter,
     excludeColorFilter,
@@ -6185,6 +6198,11 @@ function AppInner() {
       setNotice(t("toast.smartCollectionNeedsCondition"));
       return;
     }
+    await refreshSmartCollectionResults(collectionId);
+  }
+
+  async function refreshSmartCollectionResults(collectionId: string) {
+    if (!api || !library) return;
     try {
       const result = await api.executeSmartCollection({
         libraryId: library.libraryId,
