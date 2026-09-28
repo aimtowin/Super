@@ -2280,7 +2280,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
     case 'asset.import.prepare': {
       const command = request.command;
       const prepared = await withMediaSchedulingSuspended(request.command.libraryId, () =>
-        libraryService.prepareOrExecuteImport(command));
+        libraryService.prepareOrExecuteImportAsync(command));
       if (!('importId' in prepared)) {
         scheduleThumbnailScene(
           request.command.libraryId,

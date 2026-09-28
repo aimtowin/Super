@@ -32,6 +32,7 @@ import {
   access as accessAsync,
   lstat as lstatAsync,
   opendir as opendirAsync,
+  open as openAsync,
   realpath as realpathAsync,
   rm as rmAsync,
 } from 'node:fs/promises';
@@ -3325,6 +3326,19 @@ interface SourceSnapshot {
   size: bigint;
 }
 
+type ImportStageResult = {
+  byteSize: number;
+  sha256?: string;
+  contentFingerprint?: string;
+};
+
+type ImportPreparationStep = {
+  entry: ImportSourceEntry;
+  stagedPath: string;
+  skipContentHash: boolean;
+  strictSnapshot: boolean;
+} | undefined;
+
 interface EagleCopiedThumbnail {
   artifactAbsPath: string;
   artifactId: string;
@@ -4582,6 +4596,10 @@ function sameSourceSnapshot(left: SourceSnapshot, right: SourceSnapshot): boolea
     left.mtimeNs === right.mtimeNs &&
     left.ctimeNs === right.ctimeNs
   );
+}
+
+function sameSourceIdentity(left: SourceSnapshot, right: SourceSnapshot): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
 }
 
 function sha256DescriptorSync(descriptor: number): string {
@@ -5870,6 +5888,7 @@ export class LibraryService {
   private readonly linkedWatchByKey = new Map<string, LinkedFolderWatch>();
   private readonly activeExports = new Map<string, TransferCancelState>();
   private readonly activeImports = new Map<string, TransferCancelState>();
+  private readonly importPreparations = new Map<string, Set<Promise<ImportConflictPlan>>>();
   private readonly activeExportByLibraryId = new Map<string, string>();
   private readonly activeImportBySource = new Map<string, string>();
   private readonly activeImportByDestination = new Map<string, string>();
@@ -10640,7 +10659,28 @@ export class LibraryService {
   private copySourceSnapshot(
     entry: ImportSourceEntry,
     stagedPath: string,
-    options?: { bulk?: boolean },
+    options?: { bulk?: boolean; strictSnapshot?: boolean },
+  ): number {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return this.copySourceSnapshotAttempt(entry, stagedPath, options);
+      } catch (error) {
+        this.diagnose('import.source-copy', error, {
+          sourcePath: entry.sourcePath, attempt,
+          retrying: !options?.strictSnapshot && attempt < 3
+            && error instanceof LibraryServiceError && error.reason === 'SOURCE_CHANGED',
+        });
+        if (options?.strictSnapshot || attempt >= 3
+          || !(error instanceof LibraryServiceError) || error.reason !== 'SOURCE_CHANGED') throw error;
+        rmSync(stagedPath, { force: true });
+      }
+    }
+  }
+
+  private copySourceSnapshotAttempt(
+    entry: ImportSourceEntry,
+    stagedPath: string,
+    options?: { bulk?: boolean; strictSnapshot?: boolean },
   ): number {
     this.options.beforeSourceSnapshotOpen?.(entry.sourcePath);
     if (options?.bulk === true) {
@@ -10684,7 +10724,8 @@ export class LibraryService {
       }
       const openedSnapshot = sourceSnapshot(openedStat);
       if (
-        !sameSourceSnapshot(entry.sourceSnapshot, openedSnapshot) ||
+        !sameSourceIdentity(entry.sourceSnapshot, openedSnapshot) ||
+        (options?.strictSnapshot === true && !sameSourceSnapshot(entry.sourceSnapshot, openedSnapshot)) ||
         !sameSourceSnapshot(sourceSnapshot(pathStat), openedSnapshot)
       ) {
         throw sourceChanged();
@@ -10696,13 +10737,18 @@ export class LibraryService {
         Number(openedStat.mode & 0o777n),
       );
       const buffer = Buffer.allocUnsafe(1024 * 1024);
-      for (;;) {
-        const bytesRead = readSync(sourceFd, buffer, 0, buffer.length, null);
-        if (bytesRead === 0) break;
+      let remaining = Number(openedSnapshot.size);
+      if (!Number.isSafeInteger(remaining) || remaining < 0) throw unsupportedSourceEntry('UNSUPPORTED_FILE_ENTRY');
+      while (remaining > 0) {
+        const bytesRead = readSync(sourceFd, buffer, 0, Math.min(buffer.length, remaining), null);
+        if (bytesRead === 0) throw sourceChanged();
         let written = 0;
         while (written < bytesRead) {
-          written += writeSync(stageFd, buffer, written, bytesRead - written);
+          const count = writeSync(stageFd, buffer, written, bytesRead - written);
+          if (count === 0) throw new Error('Import staging write made no progress.');
+          written += count;
         }
+        remaining -= bytesRead;
       }
       fsyncSync(stageFd);
       this.options.afterSourceSnapshotCopy?.(entry.sourcePath);
@@ -10711,16 +10757,112 @@ export class LibraryService {
       if (!sameSourceSnapshot(openedSnapshot, sourceSnapshot(finalSourceStat))) {
         throw sourceChanged();
       }
+      const finalPathStat = lstatSync(entry.sourcePath, { bigint: true });
+      if (finalPathStat.isSymbolicLink()) throw unsupportedSourceEntry('SYMBOLIC_LINK_NOT_ALLOWED');
+      if (!sameSourceSnapshot(openedSnapshot, sourceSnapshot(finalPathStat))) throw sourceChanged();
       const stagedStat = fstatSync(stageFd, { bigint: true });
       if (stagedStat.size !== openedSnapshot.size) throw sourceChanged();
       const byteSize = Number(stagedStat.size);
       if (!Number.isSafeInteger(byteSize)) {
         throw unsupportedSourceEntry('UNSUPPORTED_FILE_ENTRY');
       }
+      entry.sourceSnapshot = openedSnapshot;
       return byteSize;
     } finally {
       if (stageFd !== undefined) closeSync(stageFd);
       if (sourceFd !== undefined) closeSync(sourceFd);
+    }
+  }
+
+  /** Async I/O and streaming hashes keep status/preview requests runnable even for one huge file. */
+  private async stageImportSourceAsync(
+    step: NonNullable<ImportPreparationStep>,
+    assertActive: () => void,
+  ): Promise<ImportStageResult> {
+    const { entry, stagedPath, strictSnapshot } = step;
+    if (step.skipContentHash) throw new Error('Bulk staging uses the synchronous import adapter.');
+    for (let attempt = 1; ; attempt++) {
+      assertActive();
+      let source: Awaited<ReturnType<typeof openAsync>> | undefined;
+      let target: Awaited<ReturnType<typeof openAsync>> | undefined;
+      let phase = 'open';
+      let changedFields: string[] = [];
+      const checkSnapshot = (before: SourceSnapshot, after: SourceSnapshot): void => {
+        changedFields = (Object.keys(before) as Array<keyof SourceSnapshot>)
+          .filter((key) => before[key] !== after[key]);
+        if (changedFields.length > 0) throw sourceChanged();
+      };
+      let failure: unknown;
+      try {
+        this.options.beforeSourceSnapshotOpen?.(entry.sourcePath);
+        // Reject links before opening on Windows, where O_NOFOLLOW is unavailable.
+        const beforeOpen = await lstatAsync(entry.sourcePath, { bigint: true });
+        if (beforeOpen.isSymbolicLink()) throw unsupportedSourceEntry('SYMBOLIC_LINK_NOT_ALLOWED');
+        if (!beforeOpen.isFile()) throw unsupportedSourceEntry('UNSUPPORTED_FILE_ENTRY');
+        source = await openAsync(entry.sourcePath,
+          constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW));
+        const opened = await source.stat({ bigint: true });
+        const pathStat = await lstatAsync(entry.sourcePath, { bigint: true });
+        if (pathStat.isSymbolicLink()) throw unsupportedSourceEntry('SYMBOLIC_LINK_NOT_ALLOWED');
+        if (!opened.isFile() || !pathStat.isFile()) throw unsupportedSourceEntry('UNSUPPORTED_FILE_ENTRY');
+        const baseline = sourceSnapshot(opened);
+        phase = 'before-copy';
+        checkSnapshot(baseline, sourceSnapshot(pathStat));
+        // Refresh content metadata, never silently follow a different file or a
+        // substituted ancestor directory after enumeration.
+        if (strictSnapshot || !sameSourceIdentity(entry.sourceSnapshot, baseline)) {
+          checkSnapshot(entry.sourceSnapshot, baseline);
+        }
+        const byteSize = Number(opened.size);
+        if (!Number.isSafeInteger(byteSize) || byteSize < 0) throw unsupportedSourceEntry('UNSUPPORTED_FILE_ENTRY');
+        assertActive();
+        target = await openAsync(stagedPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
+          Number(opened.mode & 0o777n));
+        const sha256 = createHash('sha256');
+        const fingerprint = createHash('sha1');
+        const buffer = Buffer.allocUnsafe(1024 * 1024);
+        let copied = 0;
+        phase = 'copy';
+        // Bound the attempt to the opening size, so a continuously appended file cannot hang import.
+        while (copied < byteSize) {
+          assertActive();
+          const { bytesRead } = await source.read(buffer, 0, Math.min(buffer.length, byteSize - copied), null);
+          if (bytesRead === 0) throw sourceChanged();
+          let written = 0;
+          while (written < bytesRead) {
+            const result = await target.write(buffer, written, bytesRead - written, null);
+            if (result.bytesWritten === 0) throw new Error('Import staging write made no progress.');
+            written += result.bytesWritten;
+          }
+          sha256.update(buffer.subarray(0, bytesRead));
+          fingerprint.update(buffer.subarray(0, bytesRead));
+          copied += bytesRead;
+        }
+        await target.sync();
+        this.options.afterSourceSnapshotCopy?.(entry.sourcePath);
+        phase = 'after-copy';
+        checkSnapshot(baseline, sourceSnapshot(await source.stat({ bigint: true })));
+        const finalPath = await lstatAsync(entry.sourcePath, { bigint: true });
+        if (finalPath.isSymbolicLink()) throw unsupportedSourceEntry('SYMBOLIC_LINK_NOT_ALLOWED');
+        checkSnapshot(baseline, sourceSnapshot(finalPath));
+        if ((await target.stat({ bigint: true })).size !== opened.size) throw sourceChanged();
+        assertActive();
+        entry.sourceSnapshot = baseline;
+        return { byteSize, sha256: sha256.digest('hex'), contentFingerprint: fingerprint.digest('hex') };
+      } catch (error) {
+        failure = hasErrorCode(error, 'ELOOP') ? unsupportedSourceEntry('SYMBOLIC_LINK_NOT_ALLOWED', error) : error;
+      } finally {
+        // Always close both handles before cleanup/retry (especially on Windows).
+        try { await target?.close(); } finally { await source?.close(); }
+      }
+      const retrying = !strictSnapshot && attempt < 3
+        && failure instanceof LibraryServiceError && failure.reason === 'SOURCE_CHANGED';
+      this.diagnose('import.source-copy', failure, {
+        sourcePath: entry.sourcePath, phase, changedFields, attempt, retrying,
+      });
+      if (!retrying) throw failure;
+      await rmAsync(stagedPath, { force: true });
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
   }
 
@@ -10911,6 +11053,15 @@ export class LibraryService {
     expandImageSequences?: boolean;
     sourcePageUrl?: string;
   }): { directories: string[]; entries: ImportSourceEntry[] } {
+    const steps = this.enumerateImportSourceSteps(input);
+    let next = steps.next();
+    while (!next.done) next = steps.next();
+    return next.value;
+  }
+
+  private *enumerateImportSourceSteps(
+    input: Parameters<LibraryService['enumerateImportSources']>[0],
+  ): Generator<undefined, { directories: string[]; entries: ImportSourceEntry[] }> {
     const directories = new Set<string>();
     const pathsByIdentity = new Map<string, { kind: 'directory' | 'file'; path: string }>();
     const entries: ImportSourceEntry[] = [];
@@ -10975,7 +11126,7 @@ export class LibraryService {
       });
     };
 
-    const visitDirectory = (directoryPath: string, relativeDirectory: string): void => {
+    const visitDirectory = function* (directoryPath: string, relativeDirectory: string): Generator<undefined> {
       let directoryStat: BigIntStats;
       try {
         directoryStat = lstatSync(directoryPath, { bigint: true });
@@ -11010,6 +11161,8 @@ export class LibraryService {
       // hostile writer can still replace an ancestor between individual calls.
       // Revalidate every directory at access time and every child again before
       // opening it; no imported bytes are accepted from a pathname-only read.
+      // Directory timestamps/size change when unrelated siblings arrive. Only
+      // replacement of the directory identity invalidates this captured listing.
       let directoryAfterRead: BigIntStats;
       try {
         directoryAfterRead = lstatSync(directoryPath, { bigint: true });
@@ -11021,11 +11174,12 @@ export class LibraryService {
       }
       if (
         !directoryAfterRead.isDirectory() ||
-        !sameSourceSnapshot(sourceSnapshot(directoryStat), sourceSnapshot(directoryAfterRead))
+        directoryStat.dev !== directoryAfterRead.dev || directoryStat.ino !== directoryAfterRead.ino
       ) {
         throw sourceChanged();
       }
       for (const child of children) {
+        yield undefined;
         const childKind = child.isDirectory() ? 'directory' : 'file';
         if (isDefaultIgnoredAssetEntry(child.name, childKind)) continue;
         assertSupportedSourceSegment(child.name);
@@ -11036,7 +11190,7 @@ export class LibraryService {
             reason: 'SYMBOLIC_LINK_NOT_ALLOWED',
           });
         }
-        if (child.isDirectory()) visitDirectory(childSourcePath, childRelativePath);
+        if (child.isDirectory()) yield* visitDirectory(childSourcePath, childRelativePath);
         else if (child.isFile()) addFile(childSourcePath, childRelativePath);
         else {
           throw new LibraryServiceError('INVALID_IMPORT_SOURCE', {
@@ -11055,6 +11209,7 @@ export class LibraryService {
       const selectedFiles: string[] = [];
       const selectedDirectories: string[] = [];
       for (const rawSourcePath of input.sourcePaths) {
+        yield undefined;
         let sourcePath: string;
         try {
           sourcePath = normalizeAbsolutePath(rawSourcePath);
@@ -11084,6 +11239,7 @@ export class LibraryService {
         ? this.expandImageSequenceSourcePaths(selectedFiles)
         : selectedFiles;
       for (const sourcePath of filePaths) {
+        yield undefined;
         addFile(sourcePath, path.posix.join(input.targetPrefix, path.basename(sourcePath)));
       }
       for (const sourcePath of selectedDirectories) {
@@ -11092,7 +11248,7 @@ export class LibraryService {
             reason: 'ROOT_NOT_ALLOWED',
           });
         }
-        visitDirectory(
+        yield* visitDirectory(
           sourcePath,
           path.posix.join(input.targetPrefix, path.basename(sourcePath)),
         );
@@ -11112,7 +11268,7 @@ export class LibraryService {
           reason: 'ROOT_NOT_ALLOWED',
         });
       }
-      visitDirectory(
+      yield* visitDirectory(
         sourcePath,
         path.posix.join(input.targetPrefix, path.basename(sourcePath)),
       );
@@ -34643,7 +34799,90 @@ export class LibraryService {
     suppressAssetChangeEvents?: boolean;
     /** Shared destination identity map for multi-batch Eagle/Billfish conversion. */
     destinationIndex?: Map<string, ExistingDestination>;
+    /** Automation confirmation binds the source bytes to its earlier preview. */
+    strictSourceSnapshot?: boolean;
+    expectedSourceStates?: Array<{ sourcePath: string; stateToken: string }>;
   }): ImportConflictPlan {
+    const steps = this.prepareImportSteps(input);
+    let next = steps.next();
+    while (!next.done) {
+      let staged: ImportStageResult | undefined;
+      try {
+        if (next.value) {
+          const step = next.value;
+          const byteSize = this.copySourceSnapshot(step.entry, step.stagedPath, {
+            bulk: step.skipContentHash, strictSnapshot: step.strictSnapshot,
+          });
+          staged = {
+            byteSize,
+            ...(step.skipContentHash ? {} : sha256AndContentFingerprintFileAtPath(step.stagedPath)),
+          };
+        }
+      } catch (error) {
+        next = steps.throw(error);
+        continue;
+      }
+      next = steps.next(staged);
+    }
+    return next.value;
+  }
+
+  async prepareImportAsync(input: Parameters<LibraryService['prepareImport']>[0]): Promise<ImportConflictPlan> {
+    const openLibrary = this.requireOpenLibrary(input.libraryId);
+    const assertActive = (): void => {
+      if (this.openById.get(input.libraryId) !== openLibrary || this.closingWatchedLibraries.has(openLibrary)) {
+        throw new LibraryServiceError('CANCELLED');
+      }
+    };
+    assertActive();
+    const task = (async () => {
+      const lease = await this.acquireWriteLease(input.libraryId);
+      const heartbeat = lease.startHeartbeat();
+      const check = (): void => {
+        assertActive();
+        if (heartbeat.error) throw heartbeat.error;
+        lease.assertCurrent();
+      };
+      const steps = this.prepareImportSteps(input);
+      try {
+        check();
+        let next = steps.next();
+        let yieldedAt = performance.now();
+        while (!next.done) {
+          let staged: ImportStageResult | undefined;
+          try {
+            check();
+            if (next.value) {
+              staged = await this.stageImportSourceAsync(next.value, check);
+            } else if (performance.now() - yieldedAt >= 8) {
+              await new Promise<void>((resolve) => setImmediate(resolve));
+              yieldedAt = performance.now();
+            }
+            check();
+          } catch (error) {
+            next = steps.throw(error);
+            continue;
+          }
+          next = steps.next(staged);
+        }
+        return next.value;
+      } finally {
+        heartbeat.stop();
+        if (this.openById.get(input.libraryId) === openLibrary) lease.release();
+      }
+    })();
+    let tasks = this.importPreparations.get(input.libraryId);
+    if (!tasks) { tasks = new Set(); this.importPreparations.set(input.libraryId, tasks); }
+    tasks.add(task);
+    try { return await task; } finally {
+      tasks.delete(task);
+      if (tasks.size === 0) this.importPreparations.delete(input.libraryId);
+    }
+  }
+
+  private *prepareImportSteps(
+    input: Parameters<LibraryService['prepareImport']>[0],
+  ): Generator<ImportPreparationStep, ImportConflictPlan, ImportStageResult | undefined> {
     const openLibrary = this.requireOpenLibrary(input.libraryId);
     if (this.linkedFolderRowForImport(openLibrary, input.targetFolderId)) {
       // Linked imports skip the managed staging pipeline; callers should use
@@ -34658,7 +34897,7 @@ export class LibraryService {
           directories: input.sourceDirectories ?? [],
           entries: input.sourceEntries,
         }
-      : this.enumerateImportSources({
+      : yield* this.enumerateImportSourceSteps({
           sourceKind: input.sourceKind,
           sourcePaths: input.sourcePaths,
           targetPrefix: targetFolder?.relative_path ?? '',
@@ -34679,10 +34918,10 @@ export class LibraryService {
       : undefined;
     let preparingManifest: OperationManifest;
     try {
-      preparingManifest = {
-        version: 1,
-        phase: 'staging',
-        files: entries.map((entry, index) => ({
+      const files: OperationManifest['files'] = [];
+      for (const [index, entry] of entries.entries()) {
+        yield undefined;
+        files.push({
           backupName: String(index),
           destinationRelativePath: entry.destinationRelativePath,
           hadDestination:
@@ -34692,14 +34931,19 @@ export class LibraryService {
               destinationIndex,
             ) !== undefined,
           stageName: String(index),
-        })),
-        directories: directories.map((relativePath) => ({
+        });
+      }
+      const manifestDirectories: OperationManifest['directories'] = [];
+      for (const relativePath of directories) {
+        yield undefined;
+        manifestDirectories.push({
           existed: skipContentHash
             ? existsSync(this.folderPath(openLibrary, relativePath))
             : this.portableDiskDestination(openLibrary, relativePath) !== undefined,
           relativePath,
-        })),
-      };
+        });
+      }
+      preparingManifest = { version: 1, phase: 'staging', files, directories: manifestDirectories };
     } catch (error) {
       throw serviceError(error, 'INVALID_IMPORT_SOURCE');
     }
@@ -34717,15 +34961,25 @@ export class LibraryService {
     }
     let stagedEntries: ImportSourceEntry[];
     try {
+      const expectedStates = input.expectedSourceStates === undefined
+        ? undefined : new Map(input.expectedSourceStates.map((state) => [state.sourcePath, state.stateToken]));
+      if (expectedStates && (entries.length !== input.expectedSourceStates!.length
+        || entries.some((entry) => !expectedStates.has(entry.sourcePath)))) {
+        throw new LibraryServiceError('VERSION_CONFLICT');
+      }
       mkdirSync(stagePath, { recursive: true });
       stagedEntries = [];
-      entries.forEach((entry, index) => {
+      for (const [index, entry] of entries.entries()) {
         const stagedPath = path.join(stagePath, String(index));
-        const byteSize = this.copySourceSnapshot(
-          entry,
-          stagedPath,
-          skipContentHash ? { bulk: true } : undefined,
-        );
+        const stagedResult = yield { entry, stagedPath, skipContentHash,
+          strictSnapshot: input.strictSourceSnapshot === true };
+        if (!stagedResult) throw new Error('Import staging did not return a snapshot.');
+        const { byteSize } = stagedResult;
+        if (expectedStates) {
+          const stateToken = createHash('sha256')
+            .update(`${entry.sourcePath}\0${byteSize}\0${stagedResult.sha256}`, 'utf8').digest('hex');
+          if (expectedStates.get(entry.sourcePath) !== stateToken) throw new LibraryServiceError('VERSION_CONFLICT');
+        }
         if (skipContentHash) {
           const staged: ImportSourceEntry = {
             ...entry,
@@ -34748,27 +35002,26 @@ export class LibraryService {
           }
           stagedEntries.push(staged);
         } else {
-          const hashes = sha256AndContentFingerprintFileAtPath(stagedPath);
           stagedEntries.push({
             ...entry,
             byteSize,
-            sha256: hashes.sha256,
-            contentFingerprint: hashes.contentFingerprint,
+            sha256: stagedResult.sha256,
+            contentFingerprint: stagedResult.contentFingerprint,
             sourcePath: stagedPath,
           });
         }
         input.onStagedEntry?.(index + 1, byteSize);
         if (index === 0) this.failAt('crash-during-prepare-stage');
-      });
+      }
     } catch (error) {
-      if (error instanceof LibraryServiceError && error.code === 'CANCELLED') throw error;
       if (error instanceof SimulatedCrashError) {
         throw new LibraryServiceError('INVALID_IMPORT_SOURCE', { cause: error });
       }
       this.removeOperation(operationPath);
-      openLibrary.connection
+      if (this.openById.get(input.libraryId) === openLibrary) openLibrary.connection
         .prepare("UPDATE file_operations SET status = 'failed', error_code = 'PREPARE_FAILED', updated_at = ? WHERE operation_id = ?")
         .run(new Date().toISOString(), importId);
+      if (error instanceof LibraryServiceError && (error.code === 'CANCELLED' || error.code === 'VERSION_CONFLICT')) throw error;
       throw new LibraryServiceError('INVALID_IMPORT_SOURCE', { cause: error });
     }
     const seenDestinations = new Map<string, number>();
@@ -34791,6 +35044,7 @@ export class LibraryService {
 
     try {
       for (const entry of stagedEntries) {
+        yield undefined;
         const entrySha256 = skipContentHash
           ? `bulk:${portablePathIdentity(entry.destinationRelativePath)}`
           : (entry.sha256 ?? sha256FileAtPath(entry.sourcePath));
@@ -34895,7 +35149,7 @@ export class LibraryService {
       }
     } catch (error) {
       this.removeOperation(operationPath);
-      openLibrary.connection
+      if (this.openById.get(input.libraryId) === openLibrary) openLibrary.connection
         .prepare("UPDATE file_operations SET status = 'failed', error_code = 'PREPARE_FAILED', updated_at = ? WHERE operation_id = ?")
         .run(new Date().toISOString(), importId);
       throw serviceError(error, 'INVALID_IMPORT_SOURCE');
@@ -34942,6 +35196,22 @@ export class LibraryService {
     return plan;
   }
 
+  async prepareOrExecuteImportAsync(
+    input: Parameters<LibraryService['prepareOrExecuteImport']>[0],
+  ): Promise<ImportConflictPlan | ImportCompletion> {
+    // Linked folders have their own import/indexing workflow; keep its semantics unchanged.
+    if (this.linkedFolderRowForImport(this.requireOpenLibrary(input.libraryId), input.targetFolderId)) {
+      return this.prepareOrExecuteImport(input);
+    }
+    if (input.automationPlan !== undefined) this.validateAutomationImportPlan(input);
+    const plan = await this.prepareImportAsync({ ...input, strictSourceSnapshot: input.automationPlan !== undefined,
+      expectedSourceStates: input.automationPlan?.sourceStates });
+    const openLibrary = this.requireOpenLibrary(input.libraryId);
+    if (this.closingWatchedLibraries.has(openLibrary)) throw new LibraryServiceError('CANCELLED');
+    if (input.automationPlan === undefined && (plan.suspectedDuplicateCount !== 0 || plan.nameConflictCount !== 0)) return plan;
+    return this.resolveImport({ importId: plan.importId, suspectedDuplicate: 'skip', nameConflict: 'keep-both' });
+  }
+
   prepareOrExecuteImport(input: {
     libraryId: string;
     targetFolderId?: string;
@@ -34976,7 +35246,8 @@ export class LibraryService {
         imageSequenceFps: input.imageSequenceFps,
       });
     }
-    const plan = this.prepareImport(input);
+    const plan = this.prepareImport({ ...input, strictSourceSnapshot: input.automationPlan !== undefined,
+      expectedSourceStates: input.automationPlan?.sourceStates });
     // An MCP/Desktop automation plan has already been shown to the user and
     // fenced against the readonly preview above.  Resolve the staged batch
     // with the same safe defaults as the normal no-conflict path so a
@@ -40311,6 +40582,7 @@ export class LibraryService {
     const openLibrary = this.openById.get(libraryId);
     if (!openLibrary) throw new LibraryServiceError('LIBRARY_NOT_OPEN');
     this.closingWatchedLibraries.add(openLibrary);
+    await Promise.allSettled([...(this.importPreparations.get(libraryId) ?? [])]);
     const reconciliation = this.reconciliationByLibrary.get(libraryId);
     reconciliation?.controller.abort();
     this.watchedRefreshTasks.get(libraryId)?.controller.abort();
