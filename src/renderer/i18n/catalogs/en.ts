@@ -25,7 +25,7 @@ type CatalogMessages<T> = {
  */
 export const en = {
   sidebarEmoji: {
-    menu: 'Set Emoji…',
+    menu: 'Set folder icon',
     title: 'Set Emoji icon',
     input: 'Enter or paste one Emoji',
     help: 'Choose below or use your system emoji picker. Saved on this device only.',

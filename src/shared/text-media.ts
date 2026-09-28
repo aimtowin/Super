@@ -129,15 +129,34 @@ export function textMimeForExtension(extension: string): string | null {
 }
 
 /**
- * Expand format-filter tokens for SQL. The special `text` token becomes every
- * known text/code extension (without a leading dot); other tokens pass through.
+ * Normalizes the compact format tokens carried over the Renderer → Main →
+ * Worker protocol. In particular, `text` remains one token here; expanding it
+ * before validation would turn one UI choice into a much larger request
+ * payload and consume unnecessary protocol capacity.
  */
-export function expandFormatFilterTokens(tokens: readonly string[]): string[] {
+export function normalizeFormatFilterTokens(tokens: readonly string[]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const raw of tokens) {
     const token = raw.trim().replace(/^\./, "").toLowerCase();
     if (!token) continue;
+    if (seen.has(token)) continue;
+    seen.add(token);
+    out.push(token);
+  }
+  return out;
+}
+
+/**
+ * Expand format-filter tokens for SQL. The special `text` token becomes every
+ * known text/code extension (without a leading dot); other tokens pass through.
+ * This must run only in the Worker, after the compact request has been
+ * validated at the process boundary.
+ */
+export function expandFormatFilterTokens(tokens: readonly string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const token of normalizeFormatFilterTokens(tokens)) {
     if (token === FORMAT_TEXT_TOKEN) {
       for (const ext of TEXT_EXTENSIONS) {
         const bare = ext.slice(1);
@@ -161,9 +180,12 @@ export function expandFormatFilterTokens(tokens: readonly string[]): string[] {
       }
       continue;
     }
-    if (seen.has(token)) continue;
-    seen.add(token);
-    out.push(token);
+    // Normalization already deduplicated literal tokens. Image/video aliases
+    // may overlap one another, so retain this set for their expanded members.
+    if (!seen.has(token)) {
+      seen.add(token);
+      out.push(token);
+    }
   }
   return out;
 }

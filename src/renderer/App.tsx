@@ -345,7 +345,7 @@ import {
   hasConfiguredSmartCollectionQuery,
   hasMeaningfulSmartCollectionCondition,
 } from "../shared/smart-collection-query";
-import { expandFormatFilterTokens } from "../shared/text-media";
+import { normalizeFormatFilterTokens } from "../shared/text-media";
 import type {
   SuperLibraryApi,
   LibraryApiResult,
@@ -5102,7 +5102,9 @@ function AppInner() {
       durationRange,
     };
     const filters: FilterClause[] = [];
-    const formats = expandFormatFilterTokens(
+    // Keep compact tokens (notably `text`) across the Renderer → Main → Worker
+    // boundary. The Worker expands them only while assembling the SQL query.
+    const formats = normalizeFormatFilterTokens(
       filtersState.formatFilter
         .split(",")
         .map((value) => value.trim().replace(/^\./, ""))

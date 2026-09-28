@@ -16,7 +16,7 @@ import type { MessageTree } from '../types';
  */
 export const zhCN = {
   sidebarEmoji: {
-    menu: '设置 Emoji…',
+    menu: '设置文件夹图标',
     title: '设置 Emoji 图标',
     input: '输入或粘贴一个 Emoji',
     help: '选择下方表情，或使用系统表情面板输入。设置仅保存在本机。',

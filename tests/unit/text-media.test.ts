@@ -7,6 +7,7 @@ import {
   FORMAT_TEXT_TOKEN,
   FORMAT_VIDEO_TOKEN,
   isTextFileName,
+  normalizeFormatFilterTokens,
   textCardPreviewSnippet,
   textMimeForExtension,
 } from "../../src/shared/text-media";
@@ -51,6 +52,12 @@ test("expandFormatFilterTokens expands the unified text token", () => {
   expect(expanded).toContain("png");
   expect(expanded).not.toContain("text");
   expect(expandFormatFilterTokens(["PNG", ".JPG"])).toEqual(["png", "jpg"]);
+});
+
+test("normalizeFormatFilterTokens keeps text compact for the IPC request", () => {
+  expect(
+    normalizeFormatFilterTokens([" .TXT ", FORMAT_TEXT_TOKEN, "TEXT", ".txt"]),
+  ).toEqual(["txt", FORMAT_TEXT_TOKEN]);
 });
 
 test("expandFormatFilterTokens expands broad image and video classes returned by AI search", () => {

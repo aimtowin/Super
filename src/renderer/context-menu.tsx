@@ -218,10 +218,14 @@ export function ContextMenuBackdrop({
     return () => window.removeEventListener("blur", dismiss);
   }, [dismiss]);
 
-  return (
-    <div className="context-menu-backdrop">
-      {children}
-    </div>
+  // The application shell establishes an isolated stacking context. Rendering
+  // the root menu inside it lets the toolbar win hit-testing where they
+  // overlap, even though the menu has a larger local z-index. Portal the
+  // overlay to body just as nested submenus do, so a top-clamped menu remains
+  // both visible and clickable above the toolbar.
+  return createPortal(
+    <div className="context-menu-backdrop">{children}</div>,
+    document.body,
   );
 }
 

@@ -37,6 +37,20 @@ async function createLibrary(window: Page, libraryName: string) {
   await window.getByRole("button", { name: "创建", exact: true }).click();
 }
 
+async function dismissQuickStartIfOpen(window: Page) {
+  const skip = window.getByRole("button", { name: "跳过引导" });
+  // The guide can transition from its pending state just after a library is
+  // created, so wait briefly rather than sampling visibility only once.
+  const isOpen = await expect(skip)
+    .toBeVisible({ timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (isOpen) {
+    await skip.click();
+    await expect(window.locator(".quick-start-layer")).toBeHidden();
+  }
+}
+
 /**
  * Fills the open inline folder edit row and commits with Enter, then waits
  * for the row to leave edit mode (REQ-FOLDER-007: folder create/rename is
@@ -127,6 +141,71 @@ async function openFolderRenameInline(window: Page, folderName: string) {
   await expect(input).toBeVisible({ timeout: 5_000 });
   return input;
 }
+
+// ---------------------------------------------------------------------------
+// Context-menu layer — a menu clamped against the upper viewport edge must
+// still receive the click instead of the app toolbar layered beneath it.
+// ---------------------------------------------------------------------------
+
+test("keeps a top-clamped folder context menu clickable above the toolbar", async () => {
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), "super-folder-menu-top-"));
+  const libraryName = "Folder Menu Top Layer";
+  const libraryPath = path.join(temporaryRoot, libraryName);
+
+  const application = await launchApp(temporaryRoot, libraryPath);
+
+  try {
+    const window = await application.firstWindow();
+    await createLibrary(window, libraryName);
+    await dismissQuickStartIfOpen(window);
+    await createFolderViaSidebar(window, "顶部菜单");
+
+    // Dispatch from a top-edge pointer coordinate so the menu's first item
+    // occupies the same viewport band as .app-toolbar.
+    await sidebarFolderRow(window, "顶部菜单").evaluate((element) => {
+      element.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          button: 2,
+          buttons: 2,
+          cancelable: true,
+          clientX: 48,
+          clientY: 4,
+        }),
+      );
+    });
+
+    const menu = window.getByRole("menu", {
+      name: "文件夹操作：顶部菜单",
+      exact: true,
+    });
+    const setIcon = menu.getByRole("menuitem", { name: "设置文件夹图标" });
+    await expect(setIcon).toBeVisible({ timeout: 5_000 });
+
+    const [toolbar, menuItem] = await Promise.all([
+      window.locator(".app-toolbar").boundingBox(),
+      setIcon.boundingBox(),
+    ]);
+    expect(toolbar).toBeTruthy();
+    expect(menuItem).toBeTruthy();
+    if (toolbar && menuItem) {
+      expect(menuItem.y).toBeLessThan(toolbar.y + toolbar.height);
+      const hitRole = await window.evaluate(
+        ({ x, y }) => document.elementFromPoint(x, y)?.closest(".context-menu")?.getAttribute("role"),
+        { x: menuItem.x + menuItem.width / 2, y: menuItem.y + menuItem.height / 2 },
+      );
+      expect(hitRole).toBe("menu");
+    }
+
+    // Playwright performs a physical pointer click; this fails if the
+    // toolbar intercepts the overlap. The dialog confirms the action ran.
+    await setIcon.click();
+    await expect(window.locator(".sidebar-emoji-dialog")).toBeVisible();
+  } finally {
+    await application.close();
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+});
 
 /**
  * Ordered markers of the sidebar folder rows: nav rows by their text, the

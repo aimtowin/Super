@@ -674,7 +674,6 @@ export function AssetContextMenu(props: AssetContextMenuProps) {
           <>
         {"onCustomizeEmoji" in activeContextMenu.descriptor && activeContextMenu.descriptor.onCustomizeEmoji ? (
           <ContextMenuItem
-            icon={<span aria-hidden="true">😀</span>}
             label={t("sidebarEmoji.menu")}
             onAction={activeContextMenu.descriptor.onCustomizeEmoji}
           />

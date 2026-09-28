@@ -362,6 +362,13 @@ export const sortDefinitionSchema = z.strictObject({
 
 export type SortDefinition = z.infer<typeof sortDefinitionSchema>;
 
+/**
+ * Every currently exposed format category can be selected together. Keep this
+ * cap above that product surface while retaining a bounded IPC payload.
+ */
+export const MAX_FORMAT_FILTER_VALUES = 64;
+export const MAX_OTHER_CATEGORICAL_FILTER_VALUES = 32;
+
 const categoricalFilterClauseSchema = z.strictObject({
   field: z.enum([
     'format',
@@ -373,8 +380,19 @@ const categoricalFilterClauseSchema = z.strictObject({
     'analysis_status',
     'color',
   ]),
-  values: z.array(boundedSearchValue).max(32),
+  values: z.array(boundedSearchValue).max(MAX_FORMAT_FILTER_VALUES),
   exclude: z.boolean(),
+}).superRefine((filter, context) => {
+  if (
+    filter.field !== 'format'
+    && filter.values.length > MAX_OTHER_CATEGORICAL_FILTER_VALUES
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['values'],
+      message: `Only format filters may contain more than ${MAX_OTHER_CATEGORICAL_FILTER_VALUES} values.`,
+    });
+  }
 });
 
 const numericRangeSchema = z.strictObject({
