@@ -2312,7 +2312,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
     case 'asset.import.resolve': {
       const command = request.command;
       const completion = await withMediaSchedulingSuspended(undefined, () =>
-        libraryService.resolveImport(command));
+        libraryService.resolveImportAsync(command));
       if (completion.assets.length > 0) {
         // The matching library already owns these opaque asset ids; schedule
         // through each open library without exposing paths to Main/Renderer.

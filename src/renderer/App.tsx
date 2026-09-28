@@ -117,6 +117,7 @@ import type { AiApiFormat } from "../shared/ai-endpoints";
 import type { ApplicationMenuCommand } from "../shared/application-menu";
 import type { SuperMcpSettingsApi } from "../shared/mcp";
 import type { HistoryStatus } from "../shared/protocol/responses";
+import { createCoalescedRefresh } from "./coalesced-refresh";
 import { isEditableTextTarget } from "../shared/edit-context-menu";
 import type { SearchQuery } from "../shared/asset-types";
 import {
@@ -783,6 +784,8 @@ function AppInner() {
     useState<RememberedNameConflictDecision>("keep-both");
   const [rememberNameConflict, setRememberNameConflict] = useState(false);
   const [rememberDuplicate, setRememberDuplicate] = useState(false);
+  const importConfirmationInFlight = useRef(false);
+  const [importConfirmationSubmitting, setImportConfirmationSubmitting] = useState(false);
   const resolveImportConflictsRef = useRef<
     (
       plan: ImportConflictPlan,
@@ -1102,20 +1105,34 @@ function AppInner() {
     document.addEventListener("focusin", onFocusIn);
     return () => document.removeEventListener("focusin", onFocusIn);
   }, []);
+  const historyRefreshRef = useRef<ReturnType<typeof createCoalescedRefresh> | null>(null);
   const refreshOperationHistory = useCallback(async () => {
-    if (!api || !library) {
-      setOperationHistory(null);
-      return;
-    }
-    const result = await api.getOperationHistoryStatus({ libraryId: library.libraryId });
-    if (result.ok) setOperationHistory(result.value);
-  }, [api, library]);
+    await historyRefreshRef.current?.refresh();
+  }, []);
+  const historyLibraryId = library?.libraryId;
   useEffect(() => {
+    let disposed = false;
+    const controller = createCoalescedRefresh(async () => {
+      if (!api || !historyLibraryId) return;
+      try {
+        const result = await api.getOperationHistoryStatus({ libraryId: historyLibraryId });
+        if (!disposed && result.ok) setOperationHistory(result.value);
+      } catch {
+        // A failed background read must not create a retry/error notification storm.
+      }
+    });
+    historyRefreshRef.current = controller;
     const refreshTimer = window.setTimeout(() => {
-      void refreshOperationHistory();
+      setOperationHistory(null);
+      void controller.refresh();
     }, 0);
-    return () => window.clearTimeout(refreshTimer);
-  }, [refreshOperationHistory]);
+    return () => {
+      disposed = true;
+      controller.dispose();
+      if (historyRefreshRef.current === controller) historyRefreshRef.current = null;
+      window.clearTimeout(refreshTimer);
+    };
+  }, [api, historyLibraryId]);
   const [imageSequenceDialog, setImageSequenceDialog] = useState<{
     assetIds: string[];
     mode: "create" | "update";
@@ -6514,7 +6531,9 @@ function AppInner() {
     name: RememberedNameConflictDecision,
     duplicate: RememberedDuplicateDecision,
   ) {
-    if (!api || !library) return;
+    if (!api || !library || importConfirmationInFlight.current) return;
+    importConfirmationInFlight.current = true;
+    setImportConfirmationSubmitting(true);
     setUiState("importing");
     try {
       const result = await api.resolveImport({
@@ -6527,18 +6546,22 @@ function AppInner() {
       setNotice(importSummaryMessage(result.value, locale));
       await revealAfterImport(result.value);
     } catch (caught) {
+      // A consumed/failed plan cannot be submitted again from the stale dialog.
+      clearImportConflictsUi();
       showBlockingError(
         t("dialog.blockingError.importContinueFailed"),
         toMessage(caught, t("toast.continueImportFailed"), locale),
       );
     } finally {
+      importConfirmationInFlight.current = false;
+      setImportConfirmationSubmitting(false);
       setUiState("ready");
     }
   }
   resolveImportConflictsRef.current = resolveImportConflictsWith;
 
   function confirmNameConflictDialog() {
-    if (!conflicts) return;
+    if (!conflicts || importConfirmationInFlight.current) return;
     if (rememberNameConflict) {
       rememberNameConflictDecision(nameDecision);
     }
@@ -6556,7 +6579,7 @@ function AppInner() {
   }
 
   function confirmContentDuplicateDialog() {
-    if (!conflicts) return;
+    if (!conflicts || importConfirmationInFlight.current) return;
     if (rememberDuplicate) {
       rememberDuplicateDecision(duplicateDecision);
     }
@@ -6568,7 +6591,7 @@ function AppInner() {
   }
 
   async function abandonConflicts() {
-    if (!api || !conflicts) return;
+    if (!api || !conflicts || importConfirmationInFlight.current) return;
     const plan = conflicts;
     clearImportConflictsUi();
     try {
@@ -7879,7 +7902,7 @@ function AppInner() {
         libraryId: library.libraryId,
         ids: new Map(),
       });
-      void refreshOperationHistory();
+      scheduleHistoryRefresh();
       // Super-yqrl: while a user import is applying, each committed asset
       // triggers a silent canvas refresh so cards appear one-by-one.
       if (uiStateRef.current === "importing" || importProgressRef.current) {
@@ -8044,6 +8067,7 @@ function AppInner() {
       fatalAlertOpen: Boolean(fatalAlertMessage),
       aiConnectionFailureOpen: aiConnectionFailureGate.open,
       conflictsImportId: conflictPhase ? (conflicts?.importId ?? null) : null,
+      conflictsSubmitting: importConfirmationSubmitting,
     };
   }, [
     assetRenameDialog,
@@ -8071,6 +8095,7 @@ function AppInner() {
     fatalAlertMessage,
     aiConnectionFailureGate.open,
     conflicts?.importId,
+    importConfirmationSubmitting,
     conflictPhase,
   ]);
 
@@ -12142,6 +12167,7 @@ function AppInner() {
       />
       {conflicts && conflictPhase === "name" && library && (
         <NameConflictDialog
+          submitting={importConfirmationSubmitting}
           conflicts={conflicts}
           libraryId={library.libraryId}
           decision={nameDecision}
@@ -12154,6 +12180,7 @@ function AppInner() {
       )}
       {conflicts && conflictPhase === "duplicate" && library && (
         <ContentDuplicateDialog
+          submitting={importConfirmationSubmitting}
           conflicts={conflicts}
           libraryId={library.libraryId}
           decision={duplicateDecision}

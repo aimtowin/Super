@@ -35,6 +35,11 @@ const empty: DialogEscapeSnapshot = {
 };
 
 describe("dialog-escape-stack", () => {
+  it("consumes Escape without abandoning an import while confirmation is applying", () => {
+    const snapshot = { ...empty, conflictsImportId: 'pending', conflictsSubmitting: true };
+    expect(isDialogEscapeLayerActive(snapshot)).toBe(true);
+    expect(resolveDialogEscapeAction(snapshot)).toEqual({ kind: 'wait-import' });
+  });
   it("returns none when no layer is open", () => {
     expect(resolveDialogEscapeAction(empty)).toEqual({ kind: "none" });
     expect(isDialogEscapeLayerActive(empty)).toBe(false);

@@ -5889,6 +5889,12 @@ export class LibraryService {
   private readonly activeExports = new Map<string, TransferCancelState>();
   private readonly activeImports = new Map<string, TransferCancelState>();
   private readonly importPreparations = new Map<string, Set<Promise<ImportConflictPlan>>>();
+  private readonly importApplications = new Map<string, {
+    libraryId: string;
+    decisions: string;
+    promise: Promise<ImportCompletion>;
+    settledAt?: number;
+  }>();
   private readonly activeExportByLibraryId = new Map<string, string>();
   private readonly activeImportBySource = new Map<string, string>();
   private readonly activeImportByDestination = new Map<string, string>();
@@ -35209,7 +35215,7 @@ export class LibraryService {
     const openLibrary = this.requireOpenLibrary(input.libraryId);
     if (this.closingWatchedLibraries.has(openLibrary)) throw new LibraryServiceError('CANCELLED');
     if (input.automationPlan === undefined && (plan.suspectedDuplicateCount !== 0 || plan.nameConflictCount !== 0)) return plan;
-    return this.resolveImport({ importId: plan.importId, suspectedDuplicate: 'skip', nameConflict: 'keep-both' });
+    return this.resolveImportAsync({ importId: plan.importId, suspectedDuplicate: 'skip', nameConflict: 'keep-both' });
   }
 
   prepareOrExecuteImport(input: {
@@ -36212,6 +36218,9 @@ export class LibraryService {
   }
 
   abandonImport(importId: string): string {
+    if (this.importApplications.get(importId)?.settledAt === undefined && this.importApplications.has(importId)) {
+      throw new LibraryServiceError('LIBRARY_BUSY');
+    }
     const pending = this.pendingImports.get(importId);
     if (!pending) throw new LibraryServiceError('IMPORT_NOT_FOUND');
     this.pendingImports.delete(importId);
@@ -36226,6 +36235,78 @@ export class LibraryService {
     suspectedDuplicate: SuspectedDuplicateDecision;
     nameConflict: NameConflictDecision;
   }): ImportCompletion {
+    if (this.importApplications.has(input.importId)) throw new LibraryServiceError('LIBRARY_BUSY');
+    const steps = this.resolveImportSteps(input);
+    let next = steps.next();
+    while (!next.done) next = steps.next();
+    return next.value;
+  }
+
+  /** Repeated IPC confirmations share one application, including its recent outcome. */
+  resolveImportAsync(input: Parameters<LibraryService['resolveImport']>[0]): Promise<ImportCompletion> {
+    const now = Date.now();
+    for (const [id, entry] of this.importApplications) {
+      if (entry.settledAt !== undefined && now - entry.settledAt > 15 * 60_000) this.importApplications.delete(id);
+    }
+    const decisions = JSON.stringify([input.suspectedDuplicate, input.nameConflict]);
+    const existing = this.importApplications.get(input.importId);
+    if (existing) {
+      return existing.decisions === decisions
+        ? existing.promise
+        : Promise.reject(new LibraryServiceError('INVALID_IMPORT_DECISION'));
+    }
+    const pending = this.pendingImports.get(input.importId);
+    if (!pending) return Promise.reject(new LibraryServiceError('IMPORT_NOT_FOUND'));
+    // Reserve the plan immediately, including while waiting for the writer lease.
+    this.cancelImportExpiry(pending);
+    const task = (async () => {
+      const openLibrary = this.requireOpenLibrary(pending.libraryId);
+      const lease = await this.acquireWriteLease(pending.libraryId);
+      const heartbeat = lease.startHeartbeat();
+      try {
+        if (this.closingWatchedLibraries.has(openLibrary)) throw new LibraryServiceError('CANCELLED');
+        const steps = this.resolveImportSteps(input);
+        let next = steps.next();
+        let yieldedAt = performance.now();
+        while (!next.done) {
+          try {
+            if (performance.now() - yieldedAt >= 8) {
+              await new Promise<void>((resolve) => setImmediate(resolve));
+              yieldedAt = performance.now();
+            }
+            if (heartbeat.error) throw heartbeat.error;
+            lease.assertCurrent();
+          } catch (error) {
+            next = steps.throw(error);
+            continue;
+          }
+          next = steps.next();
+        }
+        return next.value;
+      } finally {
+        heartbeat.stop();
+        lease.release();
+      }
+    })();
+    const entry = { libraryId: pending.libraryId, decisions, promise: task, settledAt: undefined as number | undefined };
+    this.importApplications.set(input.importId, entry);
+    const finish = () => {
+      entry.settledAt = Date.now();
+      if (this.pendingImports.has(input.importId)) {
+        // Acquisition/close failed before application consumed the plan: it remains retryable.
+        this.importApplications.delete(input.importId);
+        this.scheduleImportExpiry(input.importId, pending);
+      }
+      const settled = [...this.importApplications].filter(([, item]) => item.settledAt !== undefined);
+      for (const [id] of settled.slice(0, Math.max(0, settled.length - 32))) this.importApplications.delete(id);
+    };
+    void task.then(finish, finish);
+    return task;
+  }
+
+  private *resolveImportSteps(
+    input: Parameters<LibraryService['resolveImport']>[0],
+  ): Generator<void, ImportCompletion, void> {
     const pending = this.pendingImports.get(input.importId);
     if (!pending) throw new LibraryServiceError('IMPORT_NOT_FOUND');
     this.pendingImports.delete(input.importId);
@@ -36243,9 +36324,10 @@ export class LibraryService {
     const directoryByIdentity = new Map<string, string>();
     let resolvedDirectories: string[];
     try {
-      resolvedDirectories = [...pending.directories]
-        .sort((left, right) => left.split('/').length - right.split('/').length)
-        .map((relativeDirectory) => {
+      resolvedDirectories = [];
+      for (const relativeDirectory of [...pending.directories]
+        .sort((left, right) => left.split('/').length - right.split('/').length)) {
+        yield;
         const parent = path.posix.dirname(relativeDirectory);
         const resolvedParent =
           parent === '.' ? '.' : (directoryByIdentity.get(portablePathIdentity(parent)) ?? parent);
@@ -36261,8 +36343,8 @@ export class LibraryService {
         }
         const resolved = existing?.actualRelativePath ?? candidate;
         directoryByIdentity.set(portablePathIdentity(relativeDirectory), resolved);
-          return resolved;
-        });
+        resolvedDirectories.push(resolved);
+      }
     } catch (error) {
       this.removeOperation(pending.operationPath);
       throw serviceError(error, 'IMPORT_APPLY_FAILED');
@@ -36318,6 +36400,7 @@ export class LibraryService {
         }
       }
       for (const entry of pending.entries) {
+        yield;
         const entrySha256 = pending.skipContentHash
           ? `bulk:${portablePathIdentity(entry.destinationRelativePath)}`
           : (entry.sha256 ?? sha256FileAtPath(entry.sourcePath));
@@ -36596,6 +36679,7 @@ export class LibraryService {
       this.failAt('after-stage');
 
       for (const relativeDirectory of sortedDirectories) {
+        yield;
         const directoryPath = this.folderPath(openLibrary, relativeDirectory);
         if (!existsSync(directoryPath)) {
           mkdirSync(directoryPath);
@@ -36605,18 +36689,20 @@ export class LibraryService {
         }
       }
 
-      actions.forEach((action, index) => {
-        if (pending.skipContentHash) return;
+      for (const [index, action] of actions.entries()) {
+        yield;
+        if (pending.skipContentHash) continue;
         const destinationPath = this.folderPath(openLibrary, action.destinationRelativePath);
         if (existsSync(destinationPath)) {
           const existingBackupPath = path.join(backupPath, String(index));
           renameSync(destinationPath, existingBackupPath);
           backups.push({ backupPath: existingBackupPath, destinationPath });
         }
-      });
+      }
       this.failAt('after-backup');
       this.failAt('crash-after-backup');
-      actions.forEach((action, index) => {
+      for (const [index, action] of actions.entries()) {
+        yield;
         const destinationPath = this.folderPath(openLibrary, action.destinationRelativePath);
         renameSync(stagedPaths[index]!, destinationPath);
         const sourceModifiedAtMs = action.entry.eagleMetadata?.sourceModifiedAtMs;
@@ -36634,7 +36720,7 @@ export class LibraryService {
         }
         placedPaths.push(destinationPath);
         if (index === 0) this.failAt('after-first-place');
-      });
+      }
       this.failAt('after-place');
       this.failAt('crash-after-place');
 
@@ -36696,8 +36782,7 @@ export class LibraryService {
       }> = [];
       const bulkCommit = pending.skipContentHash === true;
       const collectionNextPosition = bulkCommit ? new Map<string, number>() : undefined;
-      const commitImportedAssets = (): void => {
-      for (const action of actions) {
+      const commitImportedAsset = (action: ImportAction): void => {
         this.failAt('before-db-commit');
         let committedAssetId: string | null = null;
         let committedRevisionId: string | null = null;
@@ -36876,11 +36961,12 @@ export class LibraryService {
             });
           }
         }
-      }
       };
 
       if (bulkCommit) {
-        openLibrary.connection.transaction(commitImportedAssets)();
+        openLibrary.connection.transaction(() => {
+          for (const action of actions) commitImportedAsset(action);
+        })();
         this.noteClientFilesystemMutation();
         const copiedThumbs: Array<{
           copied: EagleCopiedThumbnail;
@@ -36919,7 +37005,11 @@ export class LibraryService {
           }
         }
       } else {
-        commitImportedAssets();
+        for (const action of actions) {
+          yield;
+          jobLease.assertCurrent();
+          commitImportedAsset(action);
+        }
       }
 
       jobLease.assertCurrent();
@@ -40583,6 +40673,8 @@ export class LibraryService {
     if (!openLibrary) throw new LibraryServiceError('LIBRARY_NOT_OPEN');
     this.closingWatchedLibraries.add(openLibrary);
     await Promise.allSettled([...(this.importPreparations.get(libraryId) ?? [])]);
+    await Promise.allSettled([...this.importApplications.values()]
+      .filter((entry) => entry.libraryId === libraryId).map((entry) => entry.promise));
     const reconciliation = this.reconciliationByLibrary.get(libraryId);
     reconciliation?.controller.abort();
     this.watchedRefreshTasks.get(libraryId)?.controller.abort();
@@ -40599,6 +40691,12 @@ export class LibraryService {
   closeLibrary(libraryId: string): void {
     const openLibrary = this.openById.get(libraryId);
     if (!openLibrary) throw new LibraryServiceError('LIBRARY_NOT_OPEN');
+    if ([...this.importApplications.values()].some((entry) => entry.libraryId === libraryId && entry.settledAt === undefined)) {
+      throw new LibraryServiceError('LIBRARY_BUSY');
+    }
+    for (const [id, entry] of this.importApplications) {
+      if (entry.libraryId === libraryId) this.importApplications.delete(id);
+    }
     this.closingWatchedLibraries.add(openLibrary);
     this.reconciliationByLibrary.get(libraryId)?.controller.abort();
     this.watchedRefreshTasks.get(libraryId)?.controller.abort();

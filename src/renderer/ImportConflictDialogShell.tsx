@@ -4,6 +4,7 @@ import { useT } from "./i18n";
 import { DialogShell } from "./ui/patterns";
 
 export type ImportConflictDialogShellProps = {
+  submitting?: boolean;
   titleId: string;
   title: string;
   summary: ReactNode;
@@ -27,6 +28,7 @@ export type ImportConflictDialogShellProps = {
  * (Super-79c7). Keeps both flows visually identical.
  */
 export function ImportConflictDialogShell({
+  submitting = false,
   titleId,
   title,
   summary,
@@ -66,6 +68,7 @@ export function ImportConflictDialogShell({
         style={{ padding: 0 }}
         title={title}
       >
+        <fieldset disabled={submitting} aria-busy={submitting} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <p className="conflict-summary-line">{summary}</p>
         <label className="decision-field" htmlFor={decisionControlId}>
           <span>{decisionLabel}</span>
@@ -90,13 +93,14 @@ export function ImportConflictDialogShell({
           )
         ) : null}
         <div className="dialog-actions">
-          <button className="secondary-button" onClick={onCancel} type="button">
+          <button className="secondary-button" disabled={submitting} onClick={onCancel} type="button">
             {t("dialog.conflicts.cancelImport")}
           </button>
-          <button className="primary-button" onClick={onConfirm} type="button">
-            {confirmLabel}
+          <button className="primary-button" disabled={submitting} onClick={onConfirm} type="button">
+            {submitting ? t("dialog.imageSequenceImport.importing") : confirmLabel}
           </button>
         </div>
+        </fieldset>
       </DialogShell>
     </div>
   );

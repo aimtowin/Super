@@ -6,6 +6,7 @@ import type { RememberedDuplicateDecision } from "./import-conflict-preferences"
 import { ImportConflictDialogShell } from "./ImportConflictDialogShell";
 
 export interface ContentDuplicateDialogProps {
+  submitting?: boolean;
   conflicts: ImportConflictPlan;
   libraryId: string;
   decision: RememberedDuplicateDecision;
@@ -18,6 +19,7 @@ export interface ContentDuplicateDialogProps {
 
 /** Library / content duplicates only (Super-glua / zp8q / 79c7 / thuy). */
 export function ContentDuplicateDialog({
+  submitting = false,
   conflicts,
   libraryId,
   decision,
@@ -107,6 +109,7 @@ export function ContentDuplicateDialog({
       examplesContent={examplesContent}
       onCancel={onCancel}
       onConfirm={onConfirm}
+      submitting={submitting}
       onRememberChange={onRememberChange}
       remember={remember}
       rememberId="content-duplicate-remember"

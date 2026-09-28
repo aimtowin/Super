@@ -35,9 +35,11 @@ export type DialogEscapeSnapshot = {
   aiConnectionFailureOpen: boolean;
   /** When set, Escape abandons this pending import conflict plan. */
   conflictsImportId: string | null;
+  conflictsSubmitting?: boolean;
 };
 
 export type DialogEscapeAction =
+  | { kind: "wait-import" }
   | { kind: "none" }
   | { kind: "cancel-asset-rename" }
   | { kind: "close-image-sequence-import" }
@@ -120,6 +122,7 @@ export function resolveDialogEscapeAction(
     return { kind: "dismiss-plugin-trust-prompt" };
   }
   if (snapshot.conflictsImportId) {
+    if (snapshot.conflictsSubmitting) return { kind: "wait-import" };
     return { kind: "abandon-import", importId: snapshot.conflictsImportId };
   }
   return { kind: "none" };

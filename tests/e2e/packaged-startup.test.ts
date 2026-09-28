@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { _electron as electron, expect, test } from '@playwright/test';
+import type { SuperLibraryApi } from '../../src/shared/library-api';
 
 test('the packaged application starts and completes a real Worker import', async () => {
   const executablePath = process.env.SUPER_E2E_PACKAGED_EXECUTABLE;
@@ -64,6 +65,22 @@ test('the packaged application starts and completes a real Worker import', async
     await window.getByRole('button', { name: '导入文件', exact: true }).first().click();
     await expect(window.getByText('packaged-worker.txt', { exact: true }).first()).toBeVisible();
     expect(existsSync(path.join(libraryPath, 'Assets', 'packaged-worker.txt'))).toBe(true);
+
+    // Exercise the shipped IPC/Worker boundary, not only the service test seam.
+    const confirmations = await window.evaluate(async () => {
+      const api = (globalThis as typeof globalThis & { super: { library: SuperLibraryApi } }).super.library;
+      const libraries = await api.listOpen();
+      if (!libraries.ok || !libraries.value[0]) throw new Error('No open library');
+      const prepared = await api.importFiles({ libraryId: libraries.value[0].libraryId });
+      if (!prepared.ok || !prepared.value || !('importId' in prepared.value)) throw new Error('Expected conflicts');
+      const input = { importId: prepared.value.importId, suspectedDuplicate: 'create-copy' as const, nameConflict: 'keep-both' as const };
+      const results = [...await Promise.all([api.resolveImport(input), api.resolveImport(input)])];
+      results.push(await api.resolveImport(input));
+      return results;
+    });
+    expect(confirmations.every((result) => result.ok)).toBe(true);
+    expect(confirmations[1]).toEqual(confirmations[0]);
+    expect(confirmations[2]).toEqual(confirmations[0]);
 
     // Load the actual emitted subsets, not fallback/system fonts. These must
     // work without the raw font payloads removed from production node_modules.

@@ -101,6 +101,7 @@ export function useDialogEscapeDismiss({
       const action = resolveDialogEscapeAction(snapshot);
       switch (action.kind) {
         case "none":
+        case "wait-import":
           return;
         case "dismiss-fatal-alert":
           onDismissFatalAlert?.();

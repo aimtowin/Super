@@ -6,6 +6,7 @@ import type { RememberedNameConflictDecision } from "./import-conflict-preferenc
 import { ImportConflictDialogShell } from "./ImportConflictDialogShell";
 
 export interface NameConflictDialogProps {
+  submitting?: boolean;
   conflicts: ImportConflictPlan;
   libraryId: string;
   decision: RememberedNameConflictDecision;
@@ -18,6 +19,7 @@ export interface NameConflictDialogProps {
 
 /** Same-folder name conflicts only (Super-9iyi / zp8q / 79c7 / 793k). */
 export function NameConflictDialog({
+  submitting = false,
   conflicts,
   libraryId,
   decision,
@@ -109,6 +111,7 @@ export function NameConflictDialog({
       examples={examples}
       onCancel={onCancel}
       onConfirm={onConfirm}
+      submitting={submitting}
       onRememberChange={onRememberChange}
       remember={remember}
       rememberId="name-conflict-remember"
