@@ -16,6 +16,7 @@ export function FilterPresetChips({
   selected,
   onToggle,
   disabled,
+  excluding = false,
 }: {
   label: string;
   presets: readonly { label: string; range: RangeStrings }[];
@@ -23,9 +24,10 @@ export function FilterPresetChips({
   selected: readonly RangeStrings[];
   onToggle: (range: RangeStrings, shiftKey: boolean) => void;
   disabled?: boolean;
+  excluding?: boolean;
 }) {
   return (
-    <div aria-label={label} className="filter-presets" role="group">
+    <div aria-label={label} className={`filter-presets${excluding ? " is-excluding" : ""}`} role="group">
       {presets.map((preset) => {
         const active = isPresetRangeSelected(selected, preset.range);
         return (

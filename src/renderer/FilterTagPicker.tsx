@@ -94,6 +94,7 @@ export function FilterTagPicker({
             <span className="filter-tag-chip" key={name}>
               {name}
               <button
+                disabled={disabled}
                 aria-label={t("filter.removeTagFilter", { name })}
                 title={t("filter.removeTagFilter", { name })}
                 onClick={() => remove(name)}

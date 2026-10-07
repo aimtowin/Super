@@ -8,6 +8,8 @@ export type ActiveFilterChip = {
   label?: string;
   /** Values shown after the dimension name, e.g. "png, jpg" */
   detail?: string;
+  /** Semantic state; never encode exclusion as punctuation in user values. */
+  excluding?: boolean;
 };
 
 export type DiscoveryFilterSnapshot = {
@@ -67,7 +69,8 @@ export function buildActiveFilterChips(
     chips.push({
       id: "color",
       labelKey: "filter.dimColor",
-      detail: `${snapshot.excludeColorFilter ? "−" : ""}${colors
+      excluding: snapshot.excludeColorFilter,
+      detail: `${colors
         .map((color) => options?.colorLabel?.(color) ?? color)
         .join(", ")}`,
     });
@@ -85,7 +88,8 @@ export function buildActiveFilterChips(
     chips.push({
       id: "format",
       labelKey: "filter.formatField",
-      detail: `${snapshot.excludeFormatFilter ? "−" : ""}${detailTokens.join(", ")}`,
+      excluding: snapshot.excludeFormatFilter,
+      detail: detailTokens.join(", "),
     });
   }
 
@@ -97,7 +101,8 @@ export function buildActiveFilterChips(
     chips.push({
       id: "tag",
       labelKey: "filter.tagField",
-      detail: `${snapshot.excludeTagFilter ? "−" : ""}${tags.join(", ")}`,
+      excluding: snapshot.excludeTagFilter,
+      detail: tags.join(", "),
     });
   }
 
@@ -109,7 +114,8 @@ export function buildActiveFilterChips(
     chips.push({
       id: "rating",
       labelKey: "filter.ratingField",
-      detail: `${snapshot.excludeRatingFilter ? "−" : ""}${ratings.join(", ")}`,
+      excluding: snapshot.excludeRatingFilter,
+      detail: ratings.join(", "),
     });
   }
 
@@ -132,13 +138,13 @@ export function buildActiveFilterChips(
         snapshot.availabilityFilter === "available"
           ? "filter.available"
           : "filter.missing",
-      detail: snapshot.excludeAvailabilityFilter ? "−" : undefined,
+      excluding: snapshot.excludeAvailabilityFilter,
     });
   }
   if (snapshot.analysisStatusFilter && snapshot.analysisStatusFilter !== "any") {
     chips.push({
       id: "analysis_status",
-      label: snapshot.analysisStatusFilter === "analyzed" ? "已分析" : "未分析",
+      labelKey: snapshot.analysisStatusFilter === "analyzed" ? "filter.analyzed" : "filter.unanalyzed",
     });
   }
 
@@ -158,7 +164,8 @@ export function buildActiveFilterChips(
     chips.push({
       id: "aspect_ratio",
       labelKey: "filter.aspectRatio",
-      detail: `${snapshot.aspectRatioRange.exclude ? "−" : ""}${detailBody}`,
+      excluding: snapshot.aspectRatioRange.exclude,
+      detail: detailBody,
     });
   }
 
@@ -166,7 +173,8 @@ export function buildActiveFilterChips(
     chips.push({
       id: "long_edge",
       labelKey: "filter.longEdgePx",
-      detail: `${snapshot.longEdgeRange.exclude ? "−" : ""}${formatRangeDetail(snapshot.longEdgeRange)}`,
+      excluding: snapshot.longEdgeRange.exclude,
+      detail: formatRangeDetail(snapshot.longEdgeRange),
     });
   }
 
@@ -174,7 +182,8 @@ export function buildActiveFilterChips(
     chips.push({
       id: "width",
       labelKey: "filter.widthPx",
-      detail: `${snapshot.widthRange.exclude ? "−" : ""}${formatRangeDetail(snapshot.widthRange)}`,
+      excluding: snapshot.widthRange.exclude,
+      detail: formatRangeDetail(snapshot.widthRange),
     });
   }
 
@@ -182,7 +191,8 @@ export function buildActiveFilterChips(
     chips.push({
       id: "height",
       labelKey: "filter.heightPx",
-      detail: `${snapshot.heightRange.exclude ? "−" : ""}${formatRangeDetail(snapshot.heightRange)}`,
+      excluding: snapshot.heightRange.exclude,
+      detail: formatRangeDetail(snapshot.heightRange),
     });
   }
 
@@ -190,7 +200,8 @@ export function buildActiveFilterChips(
     chips.push({
       id: "duration",
       labelKey: "filter.durationSec",
-      detail: `${snapshot.durationRange.exclude ? "−" : ""}${formatRangeDetail(snapshot.durationRange)}`,
+      excluding: snapshot.durationRange.exclude,
+      detail: formatRangeDetail(snapshot.durationRange),
     });
   }
 

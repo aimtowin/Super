@@ -1,7 +1,7 @@
 // Foreground updater for installations started with /SILENT or /VERYSILENT.
 // It deliberately lives in Inno rather than Super: the application can exit
 // before files are replaced, while this window remains responsible for the
-// final, user-controlled launch.
+// completion notification and automatic, original-user launch.
 
 var
   SilentUpdateForm: TSetupForm;
@@ -22,9 +22,12 @@ var
   SilentUpdateClose: TBitmapButton;
   SilentUpdateButtonState: Integer;
   SilentUpdateFinished: Boolean;
+  SilentUpdateLaunchInProgress: Boolean;
+  SilentUpdateAutoLaunchTimer: UINT_PTR;
   ForegroundAdvanceTimer: UINT_PTR;
 #ifdef SuperUpdatePreview
   PreviewProgressPinned: Boolean;
+  PreviewLaunchAttempts: Integer;
 #endif
 
 function IsForegroundUpdate(): Boolean;
@@ -172,10 +175,10 @@ begin
   Bitmap.Canvas.Font.Size := 10;
   Bitmap.Canvas.Font.Style := [fsBold];
   Bitmap.Canvas.Font.Color := UpdateText;
-  Text := '启动 Super Lib';
+  Text := '重试打开';
   if State = 0 then
   begin
-    Text := '正在更新…';
+    Text := '正在打开…';
     Bitmap.Canvas.Font.Color := UpdateMuted;
   end;
   Bitmap.Canvas.TextOut((Bitmap.Width - Bitmap.Canvas.TextWidth(Text)) div 2,
@@ -190,7 +193,11 @@ end;
 
 procedure SilentUpdateCloseQuery(Sender: TObject; var CanClose: Boolean);
 begin
-  CanClose := SilentUpdateFinished;
+  CanClose := SilentUpdateFinished and (SilentUpdateAutoLaunchTimer = 0) and
+    not SilentUpdateLaunchInProgress;
+#ifdef SuperUpdatePreview
+  if PreviewProgressPinned then CanClose := True;
+#endif
 end;
 
 procedure KeepForegroundWizardHidden(Arg1: HWND; Arg2: UINT; Arg3: UINT_PTR; Arg4: DWORD);
@@ -228,39 +235,91 @@ begin
   SetForegroundWindow(SilentUpdateForm.Handle);
 end;
 
+procedure StopAutoLaunchTimer();
+begin
+  if SilentUpdateAutoLaunchTimer <> 0 then
+  begin
+    KillTimer(0, SilentUpdateAutoLaunchTimer);
+    SilentUpdateAutoLaunchTimer := 0;
+  end;
+end;
+
+procedure ShowSilentUpdateLaunchFailure(ResultCode: Integer);
+begin
+  SilentUpdateLaunchInProgress := False;
+  SilentUpdateTitle.Caption := '更新完成，暂时无法打开';
+  SilentUpdateStatus.Caption := '新版本已安装。请重试打开，或从开始菜单启动 Super Lib。';
+  SilentUpdateFooter.Caption := '更新已保存，无须重新下载安装。';
+  SilentUpdateFooter.Width := ScaleX(292);
+  SilentUpdateFooter.Top := ScaleY(223);
+  SilentUpdateDivider.Visible := False;
+  SilentUpdateLaunchSurface.Visible := True;
+  SilentUpdateLaunchSurface.Enabled := True;
+  SilentUpdateClose.Visible := True;
+  SilentUpdateForm.ActiveControl := SilentUpdateLaunchSurface;
+  PaintUpdateButton();
+  Log('Update window: launch failed, code ' + IntToStr(ResultCode) + '.');
+end;
+
 procedure SilentUpdateLaunchClick(Sender: TObject);
 var
   ResultCode: Integer;
+  Launched: Boolean;
 begin
-  if not SilentUpdateFinished then
+  if not SilentUpdateFinished or SilentUpdateLaunchInProgress then
     Exit;
+  // Disarm before Exec or any nested message loop: never launch twice.
+  StopAutoLaunchTimer();
+  SilentUpdateLaunchInProgress := True;
   SilentUpdateLaunchSurface.Enabled := False;
+  SilentUpdateClose.Visible := False;
+  SilentUpdateStatus.Caption := '正在打开 Super Lib，请稍候。';
   PaintUpdateButton();
+  ResultCode := 0;
+  Launched := False;
+  try
 #ifdef SuperUpdatePreview
-  // The isolated preview never starts or updates an installed application.
-  SilentUpdateForm.Close;
-  Exit;
+    // The isolated preview never starts or updates an installed application.
+    PreviewLaunchAttempts := PreviewLaunchAttempts + 1;
+    Log('Update window: preview launch attempt ' + IntToStr(PreviewLaunchAttempts) + '.');
+    Launched := not ((ExpandConstant('{param:PREVIEWLAUNCHFAIL|0}') = '1') and
+      (PreviewLaunchAttempts = 1));
+    if not Launched then ResultCode := 2;
+#else
+    Launched := ExecAsOriginalUser(
+      ExpandConstant('{app}\Super.exe'),
+      '--updated',
+      ExpandConstant('{app}'),
+      SW_SHOWNORMAL,
+      ewNoWait,
+      ResultCode
+    );
 #endif
-  if not ExecAsOriginalUser(
-    ExpandConstant('{app}\Super.exe'),
-    '--updated',
-    ExpandConstant('{app}'),
-    SW_SHOWNORMAL,
-    ewNoWait,
-    ResultCode
-  ) then
+  except
+    Log('Update window: launch exception: ' + GetExceptionMessage);
+  end;
+  if not Launched then
   begin
-    SilentUpdateLaunchSurface.Enabled := True;
-    SilentUpdateStatus.Caption := '启动失败，请从开始菜单重新打开 Super Lib。';
-    PaintUpdateButton();
+    ShowSilentUpdateLaunchFailure(ResultCode);
     Exit;
   end;
+  Log('Update window: launch succeeded.');
+  SilentUpdateLaunchInProgress := False;
   SilentUpdateForm.Close;
+end;
+
+procedure AutoLaunchUpdatedApp(Arg1: HWND; Arg2: UINT; Arg3: UINT_PTR; Arg4: DWORD);
+begin
+  // KillTimer does not remove an already queued WM_TIMER. Ignore stale
+  // callbacks, especially after a failed launch exposes manual retry.
+  if (SilentUpdateAutoLaunchTimer = 0) or (Arg3 <> SilentUpdateAutoLaunchTimer) then Exit;
+  SilentUpdateLaunchClick(SilentUpdateForm);
 end;
 
 procedure SilentUpdateKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  if not SilentUpdateFinished then Exit;
+  if not SilentUpdateFinished or (SilentUpdateAutoLaunchTimer <> 0) or
+    SilentUpdateLaunchInProgress then Exit;
   if (Key = 27) or (((Key = 13) or (Key = 32)) and SilentUpdateClose.Focused) then
   begin
     Key := 0;
@@ -297,7 +356,7 @@ begin
 
   WizardForm.Hide;
 
-  SilentUpdateForm := CreateCustomForm(ScaleX(560), ScaleY(332), False, False);
+  SilentUpdateForm := CreateCustomForm(ScaleX(500), ScaleY(260), False, False);
   // A frameless surface avoids the white, native setup title bar. The quiet
   // dark palette deliberately leaves the installer as a utility, not a card.
   SilentUpdateForm.Caption := 'Super Lib 更新';
@@ -306,8 +365,8 @@ begin
   SilentUpdateForm.BorderStyle := bsNone;
   // CreateCustomForm applies its own dialog/font scaling. Set the final
   // client size explicitly so it matches the ScaleX/ScaleY control layout.
-  SilentUpdateForm.ClientWidth := ScaleX(560);
-  SilentUpdateForm.ClientHeight := ScaleY(332);
+  SilentUpdateForm.ClientWidth := ScaleX(500);
+  SilentUpdateForm.ClientHeight := ScaleY(260);
   SilentUpdateForm.BorderIcons := [];
   SilentUpdateForm.FormStyle := fsStayOnTop;
   SilentUpdateForm.StyleElements := [];
@@ -325,7 +384,7 @@ begin
   // Subtle native translucency. Text and controls retain near-full opacity.
   UpdateSetWindowLong(SilentUpdateForm.Handle, -20,
     UpdateGetWindowLong(SilentUpdateForm.Handle, -20) or $00080000);
-  UpdateSetLayeredAttributes(SilentUpdateForm.Handle, 0, 248, 2);
+  UpdateSetLayeredAttributes(SilentUpdateForm.Handle, 0, 252, 2);
 
   SilentUpdateCard := TPanel.Create(SilentUpdateForm);
   SilentUpdateCard.Parent := SilentUpdateForm;
@@ -335,22 +394,22 @@ begin
   SilentUpdateCard.StyleElements := [];
   SilentUpdateCard.BevelOuter := bvNone;
 
-  SilentUpdateBrand := UpdateLabel(32, 26, 260, 24, 10, 'Super Lib  /  软件更新', UpdateMuted);
-  SilentUpdateVersion := UpdateLabel(354, 26, 130, 24, 10, 'v{#AppVersion}', UpdateMuted);
+  SilentUpdateBrand := UpdateLabel(24, 22, 260, 24, 10, 'Super Lib  /  软件更新', UpdateMuted);
+  SilentUpdateVersion := UpdateLabel(316, 22, 126, 24, 10, 'v{#AppVersion}', UpdateMuted);
   SilentUpdateVersion.Alignment := taRightJustify;
-  SilentUpdateTitle := UpdateLabel(32, 80, 496, 40, 20, '正在更新 Super Lib', UpdateText);
+  SilentUpdateTitle := UpdateLabel(24, 65, 452, 36, 17, '正在更新 Super Lib', UpdateText);
   SilentUpdateTitle.Font.Style := [fsBold];
-  SilentUpdateStatus := UpdateLabel(32, 130, 496, 42, 10, '正在安装已下载的更新，请稍候。', UpdateMuted);
+  SilentUpdateStatus := UpdateLabel(24, 110, 452, 42, 10, '正在安装已下载的更新，请稍候。', UpdateMuted);
   SilentUpdateStatus.WordWrap := True;
-  SilentUpdateProgressText := UpdateLabel(32, 186, 390, 24, 10, '准备安装', UpdateMuted);
-  SilentUpdatePercent := UpdateLabel(438, 186, 90, 24, 10, '准备中', UpdateText);
+  SilentUpdateProgressText := UpdateLabel(24, 163, 346, 24, 10, '准备安装', UpdateMuted);
+  SilentUpdatePercent := UpdateLabel(386, 163, 90, 24, 10, '准备中', UpdateText);
   SilentUpdatePercent.Alignment := taRightJustify;
 
   // A flat track avoids OS themes overriding the application's blue with
   // the native green progress bar (including when its handle is recreated).
   SilentUpdateProgress := TPanel.Create(SilentUpdateForm);
   SilentUpdateProgress.Parent := SilentUpdateCard;
-  SilentUpdateProgress.SetBounds(ScaleX(32), ScaleY(218), ScaleX(496), ScaleY(4));
+  SilentUpdateProgress.SetBounds(ScaleX(24), ScaleY(195), ScaleX(452), ScaleY(6));
   SilentUpdateProgress.BevelOuter := bvNone;
   SilentUpdateProgress.ParentBackground := False;
   SilentUpdateProgress.StyleElements := [];
@@ -366,28 +425,30 @@ begin
 
   SilentUpdateDivider := TPanel.Create(SilentUpdateForm);
   SilentUpdateDivider.Parent := SilentUpdateCard;
-  SilentUpdateDivider.SetBounds(ScaleX(32), ScaleY(248), ScaleX(496), ScaleY(1));
+  SilentUpdateDivider.SetBounds(ScaleX(24), ScaleY(218), ScaleX(452), ScaleY(1));
   SilentUpdateDivider.BevelOuter := bvNone;
   SilentUpdateDivider.ParentBackground := False;
   SilentUpdateDivider.StyleElements := [];
   SilentUpdateDivider.Color := $00453D35;
-  SilentUpdateFooter := UpdateLabel(32, 275, 280, 24, 9, '完成后，由你决定何时启动。', UpdateMuted);
+  SilentUpdateFooter := UpdateLabel(24, 230, 452, 38, 9, '更新完成后将自动打开软件，无须再次点击。', UpdateMuted);
+  SilentUpdateFooter.WordWrap := True;
 
   SilentUpdateLaunchSurface := TBitmapButton.Create(SilentUpdateForm);
   SilentUpdateLaunchSurface.Parent := SilentUpdateCard;
-  SilentUpdateLaunchSurface.SetBounds(ScaleX(360), ScaleY(266), ScaleX(168), ScaleY(42));
+  SilentUpdateLaunchSurface.SetBounds(ScaleX(332), ScaleY(212), ScaleX(144), ScaleY(36));
   SilentUpdateLaunchSurface.BackColor := UpdateSurface;
-  SilentUpdateLaunchSurface.Caption := '启动 Super Lib';
+  SilentUpdateLaunchSurface.Caption := '重试打开';
   SilentUpdateLaunchSurface.Cursor := crHandPoint;
   SilentUpdateLaunchSurface.TabStop := True;
   SilentUpdateLaunchSurface.Enabled := False;
+  SilentUpdateLaunchSurface.Visible := False;
   SilentUpdateLaunchSurface.OnClick := @SilentUpdateLaunchClick;
   SilentUpdateButtonState := -1;
   PaintUpdateButton();
 
   SilentUpdateClose := TBitmapButton.Create(SilentUpdateForm);
   SilentUpdateClose.Parent := SilentUpdateCard;
-  SilentUpdateClose.SetBounds(ScaleX(500), ScaleY(24), ScaleX(28), ScaleY(28));
+  SilentUpdateClose.SetBounds(ScaleX(448), ScaleY(20), ScaleX(28), ScaleY(28));
   SilentUpdateClose.BackColor := UpdateSurface;
   SilentUpdateClose.Caption := '稍后启动';
   SilentUpdateClose.Hint := '关闭更新窗口，稍后启动';
@@ -443,7 +504,7 @@ begin
 #ifdef SuperUpdatePreview
   if PreviewProgressPinned then Exit;
 #endif
-  if not IsForegroundUpdate() or not Assigned(SilentUpdateForm) then
+  if SilentUpdateFinished or not IsForegroundUpdate() or not Assigned(SilentUpdateForm) then
     Exit;
   if MaxProgress <= 0 then
   begin
@@ -476,17 +537,34 @@ begin
   SilentUpdateProgressFill.Left := 0;
   SilentUpdateProgressFill.Width := SilentUpdateProgress.Width;
   SilentUpdateTitle.Caption := '更新已完成';
-  SilentUpdateStatus.Caption := 'Super Lib v{#AppVersion} 已准备就绪，可以继续使用。';
+  SilentUpdateStatus.Caption := '正在打开 Super Lib v{#AppVersion}，即将返回工作区。';
   SilentUpdateProgressText.Caption := '安装完成';
   SilentUpdatePercent.Caption := '100%';
-  SilentUpdateFooter.Caption := '也可以关闭此窗口，稍后启动。';
-  SilentUpdateLaunchSurface.Visible := True;
-  SilentUpdateLaunchSurface.Enabled := True;
-  SilentUpdateClose.Visible := True;
-  SilentUpdateForm.ActiveControl := SilentUpdateLaunchSurface;
-  PaintUpdateButton();
+  SilentUpdateFooter.Caption := '软件打开后，此窗口会自动关闭。';
+  SilentUpdateLaunchSurface.Visible := False;
+  SilentUpdateClose.Visible := False;
   // The form is already shown modelessly while files are copied. Inno cannot
   // convert a visible form directly into a modal one, so hide it first.
   SilentUpdateForm.Hide;
+  // Let the completed state paint before opening the app. This timer runs
+  // inside ShowModal's message loop, without blocking painting or input.
+#ifdef SuperUpdatePreview
+  if ExpandConstant('{param:PREVIEWCOMPLETIONHOLD|0}') <> '1' then
+#endif
+  begin
+    SilentUpdateAutoLaunchTimer := SetTimer(0, 0, 1000, CreateCallback(@AutoLaunchUpdatedApp));
+    if SilentUpdateAutoLaunchTimer = 0 then ShowSilentUpdateLaunchFailure(0);
+  end;
   SilentUpdateForm.ShowModal;
+  StopAutoLaunchTimer();
+end;
+
+procedure DeinitializeSetup();
+begin
+  StopAutoLaunchTimer();
+  if ForegroundAdvanceTimer <> 0 then
+  begin
+    KillTimer(0, ForegroundAdvanceTimer);
+    ForegroundAdvanceTimer := 0;
+  end;
 end;

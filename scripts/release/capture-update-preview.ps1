@@ -1,4 +1,4 @@
-param([string]$Name = 'completed')
+﻿param([string]$Name = 'completed', [int]$ProcessId = 0)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
@@ -13,7 +13,7 @@ public static class UpdatePreviewWindow {
 }
 '@
 [UpdatePreviewWindow]::SetProcessDPIAware() | Out-Null
-$preview = Get-Process -Name 'SuperUpdatePreview.tmp' | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+$preview = Get-Process -Name 'SuperUpdatePreview.tmp' | Where-Object { $_.MainWindowTitle -eq 'Super Lib 更新' -and ($ProcessId -eq 0 -or $_.Id -eq $ProcessId) } | Select-Object -First 1
 $window = $preview.MainWindowHandle
 if ($window -eq [IntPtr]::Zero) { throw 'Open the isolated updater preview first.' }
 [UpdatePreviewWindow]::SetForegroundWindow($window) | Out-Null

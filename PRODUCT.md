@@ -24,7 +24,7 @@ User feedback rejects oversized update windows, white native title bars, decorat
 
 - Make progress and the next action obvious.
 - Keep typography and controls consistent with the workspace.
-- Show completion before asking the user to launch the updated application.
+- Show update completion, then automatically open the updated application; reserve manual launch controls for retrying a failed launch.
 - Use decoration sparingly and preserve space for long status messages.
 
 ## Accessibility & Inclusion

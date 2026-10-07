@@ -48,6 +48,7 @@ import {
   type ColorPresetId,
 } from "../shared/color-filter-presets";
 import { TechnicalRangeFilter } from "./TechnicalRangeFilter";
+import { FilterModeControl, FilterPanelHeader } from "./FilterModeControl";
 import { SortModeControl, type SortFieldOption } from "./SortModeControl";
 import { useT } from "./i18n";
 import type { TagSummary } from "../shared/asset-types";
@@ -194,6 +195,7 @@ function DimensionButton({
   disabled?: boolean;
   onClick: () => void;
 }) {
+  const t = useT();
   return (
     <button
       aria-expanded={open || undefined}
@@ -201,10 +203,12 @@ function DimensionButton({
       className={`dimension-filter-btn${active ? " is-active" : ""}${open ? " is-open" : ""}${excluding ? " is-excluding" : ""}`}
       disabled={disabled}
       onClick={onClick}
+      title={open === undefined ? undefined : t("filter.dimensionToggleHint")}
       type="button"
     >
       <Icon name={icon} size={14} />
       <span>{label}</span>
+      {excluding && <span className="dimension-filter-mode-badge">{t("filter.exclude")}</span>}
     </button>
   );
 }
@@ -509,6 +513,8 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
     heightRange.max !== "" ||
     durationRange.min !== "" ||
     durationRange.max !== "";
+  const moreExcluding = chips.some((chip) => chip.excluding &&
+    ["availability", "long_edge", "width", "height", "duration"].includes(chip.id));
 
   const toggleColor = (id: ColorPresetId, shiftKey: boolean) => {
     const next = applyDimensionSelectionClick(
@@ -663,10 +669,12 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
           {openDimension === "color" && (
             <PortaledPopover
               anchorRef={colorDimRef}
-              className="dimension-filter-popover"
+              className={`dimension-filter-popover${excludeColorFilter && colorActive ? " is-excluding" : ""}`}
               data-dimension="color"
+              aria-label={t("filter.dimColor")}
               role="dialog"
             >
+              <FilterPanelHeader label={t("filter.dimColor")} excluding={excludeColorFilter} active={colorActive} disabled={controlsDisabled} onChange={setExcludeColorFilter} />
               <div className="dimension-palette-heading">
                 <span>{t("filter.palette")}</span>
                 <span className="dimension-palette-selection">
@@ -675,7 +683,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                     : t("filter.paletteSelectHint")}
                 </span>
               </div>
-              <div className="dimension-color-palette" role="listbox" aria-label={t("filter.dimColor")}>
+              <div className="dimension-color-palette" role="listbox" aria-label={t("filter.dimColor")} aria-multiselectable="true">
                 {COLOR_PRESETS.map((preset) => (
                   <button
                     aria-label={t(`filter.color.${preset.id}`)}
@@ -691,18 +699,6 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                   />
                 ))}
               </div>
-              <label className="dimension-filter-check">
-                <input
-                  checked={excludeColorFilter}
-                  disabled={disabled || selectedColors.size === 0}
-                  onChange={(event) =>
-                    setExcludeColorFilter(event.target.checked)
-                  }
-                  type="checkbox"
-                />
-                {t("filter.exclude")}
-              </label>
-              <p className="dimension-filter-hint">{t("filter.shiftMultiSelectHint")}</p>
             </PortaledPopover>
           )}
         </div>
@@ -720,10 +716,12 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
           {openDimension === "tags" && (
             <PortaledPopover
               anchorRef={tagsDimRef}
-              className="dimension-filter-popover"
+              className={`dimension-filter-popover${excludeTagFilter && tagActive ? " is-excluding" : ""}`}
               data-dimension="tags"
+              aria-label={t("filter.dimTags")}
               role="dialog"
             >
+              <FilterPanelHeader label={t("filter.dimTags")} excluding={excludeTagFilter} active={tagActive} disabled={controlsDisabled} onChange={setExcludeTagFilter} />
               <FilterTagPicker
                 disabled={controlsDisabled}
                 onChange={handleTagNamesChange}
@@ -731,18 +729,6 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                 selectedNames={selectedTagNames}
                 tags={tags}
               />
-              <label className="dimension-filter-check">
-                <input
-                  checked={excludeTagFilter}
-                  disabled={disabled || selectedTagNames.length === 0}
-                  onChange={(event) =>
-                    setExcludeTagFilter(event.target.checked)
-                  }
-                  type="checkbox"
-                />
-                {t("filter.exclude")}
-              </label>
-              <p className="dimension-filter-hint">{t("filter.shiftMultiSelectHint")}</p>
             </PortaledPopover>
           )}
         </div>
@@ -751,6 +737,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
           <DimensionButton
             active={shapeActive}
             disabled={controlsDisabled}
+            excluding={aspectRatioRange.exclude && shapeActive}
             icon="grid"
             label={t("filter.dimShape")}
             onClick={handleShapeDimensionClick}
@@ -759,10 +746,12 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
           {openDimension === "shape" && (
             <PortaledPopover
               anchorRef={shapeDimRef}
-              className="dimension-filter-popover"
+              className={`dimension-filter-popover${aspectRatioRange.exclude && shapeActive ? " is-excluding" : ""}`}
               data-dimension="shape"
+              aria-label={t("filter.dimShape")}
               role="dialog"
             >
+              <FilterPanelHeader label={t("filter.dimShape")} excluding={aspectRatioRange.exclude} active={shapeActive} disabled={controlsDisabled} onChange={(exclude) => setAspectRatioRange((current) => ({ ...current, exclude }))} />
               <FilterPresetChips
                 disabled={controlsDisabled}
                 label={t("filter.orientation")}
@@ -787,6 +776,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                 selected={shapeSelectedRanges}
               />
               <TechnicalRangeFilter
+                disabled={controlsDisabled}
                 label={t("filter.aspectRatio")}
                 range={aspectRatioRange}
                 setRange={(next) => {
@@ -800,8 +790,8 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                   );
                 }}
                 step="0.01"
+                showMode={false}
               />
-              <p className="dimension-filter-hint">{t("filter.shiftMultiSelectHint")}</p>
             </PortaledPopover>
           )}
         </div>
@@ -819,10 +809,12 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
           {openDimension === "rating" && (
             <PortaledPopover
               anchorRef={ratingDimRef}
-              className="dimension-filter-popover"
+              className={`dimension-filter-popover${excludeRatingFilter && ratingActive ? " is-excluding" : ""}`}
               data-dimension="rating"
+              aria-label={t("filter.dimRating")}
               role="dialog"
             >
+              <FilterPanelHeader label={t("filter.dimRating")} excluding={excludeRatingFilter} active={ratingActive} disabled={controlsDisabled} onChange={setExcludeRatingFilter} />
               <div className="dimension-rating-row" role="group">
                 {[5, 4, 3, 2, 1, 0].map((star) => (
                   <button
@@ -837,18 +829,6 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                   </button>
                 ))}
               </div>
-              <label className="dimension-filter-check">
-                <input
-                  checked={excludeRatingFilter}
-                  disabled={disabled || selectedRatings.size === 0}
-                  onChange={(event) =>
-                    setExcludeRatingFilter(event.target.checked)
-                  }
-                  type="checkbox"
-                />
-                {t("filter.exclude")}
-              </label>
-              <p className="dimension-filter-hint">{t("filter.shiftMultiSelectHint")}</p>
             </PortaledPopover>
           )}
         </div>
@@ -911,10 +891,12 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
           {openDimension === "format" && (
             <PortaledPopover
               anchorRef={formatDimRef}
-              className="dimension-filter-popover is-wide format-filter-popover"
+              className={`dimension-filter-popover is-wide format-filter-popover${excludeFormatFilter && formatActive ? " is-excluding" : ""}`}
               data-dimension="format"
+              aria-label={t("filter.dimFormat")}
               role="dialog"
             >
+              <FilterPanelHeader label={t("filter.dimFormat")} excluding={excludeFormatFilter} active={formatActive} disabled={controlsDisabled} onChange={setExcludeFormatFilter} />
               <input
                 aria-label={t("filter.format")}
                 className="text-field"
@@ -941,7 +923,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                         )
                       }
                     />
-                    <div className="filter-presets" role="group">
+                    <div className="filter-presets" role="group" aria-label={t(group.labelKey)}>
                       {group.extensions.map((ext) => {
                         const active = formatTokensHas(formatFilter, ext);
                         return (
@@ -981,7 +963,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                     )
                   }
                 />
-                <div className="filter-presets" role="group">
+                <div className="filter-presets" role="group" aria-label={t("filter.formatGroupOther")}>
                   {otherFormatTokens.map((ext) => {
                     const active = formatTokensHas(formatFilter, ext);
                     return (
@@ -1009,18 +991,6 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                   })}
                 </div>
               </div>
-              <label className="dimension-filter-check">
-                <input
-                  checked={excludeFormatFilter}
-                  disabled={disabled || !formatFilter.trim()}
-                  onChange={(event) =>
-                    setExcludeFormatFilter(event.target.checked)
-                  }
-                  type="checkbox"
-                />
-                {t("filter.exclude")}
-              </label>
-              <p className="dimension-filter-hint">{t("filter.shiftMultiSelectHint")}</p>
             </PortaledPopover>
           )}
         </div>
@@ -1029,7 +999,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
           <DimensionButton
             active={moreActive}
             disabled={controlsDisabled}
-            excluding={excludeAvailabilityFilter && moreActive}
+            excluding={moreExcluding}
             icon="menu"
             label={t("filter.dimMore")}
             onClick={handleMoreDimensionClick}
@@ -1040,8 +1010,13 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
               anchorRef={moreDimRef}
               className="dimension-filter-popover is-wide"
               data-dimension="more"
+              aria-label={t("filter.dimMore")}
               role="dialog"
             >
+              <div className="dimension-filter-header">
+                <span className="dimension-filter-title">{t("filter.dimMore")}</span>
+                <p className="dimension-filter-mode-hint">{t("filter.combinationHint")}</p>
+              </div>
               <label>
                 {t("filter.favoriteField")}
                 <select
@@ -1078,8 +1053,11 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                   <option value="no">{t("filter.noSourceUrl")}</option>
                 </select>
               </label>
-              <label>
-                {t("filter.availabilityField")}
+              <div className={`technical-range-filter${excludeAvailabilityFilter && availabilityFilter !== "any" ? " is-excluding" : ""}`} role="group" aria-label={t("filter.availabilityField")}>
+                <div className="dimension-filter-heading">
+                  <span className="dimension-filter-title">{t("filter.availabilityField")}</span>
+                  <FilterModeControl label={t("filter.availabilityField")} excluding={excludeAvailabilityFilter} disabled={controlsDisabled || availabilityFilter === "any"} onChange={setExcludeAvailabilityFilter} />
+                </div>
                 <select
                   aria-label={t("filter.availability")}
                   className="text-field"
@@ -1095,20 +1073,10 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                   <option value="available">{t("filter.available")}</option>
                   <option value="missing">{t("filter.missing")}</option>
                 </select>
-              </label>
-              <label className="dimension-filter-check">
-                <input
-                  checked={excludeAvailabilityFilter}
-                  disabled={disabled || availabilityFilter === "any"}
-                  onChange={(event) =>
-                    setExcludeAvailabilityFilter(event.target.checked)
-                  }
-                  type="checkbox"
-                />
-                {t("filter.exclude")}
-              </label>
+              </div>
               <FilterPresetChips
                 disabled={controlsDisabled}
+                excluding={longEdgeRange.exclude}
                 label={t("filter.resolutionPresets")}
                 onToggle={(range, shiftKey) => {
                   if (shiftKey) {
@@ -1162,21 +1130,25 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
                 }
               />
               <TechnicalRangeFilter
+                disabled={controlsDisabled}
                 label={t("filter.longEdgePx")}
                 range={longEdgeRange}
                 setRange={setLongEdgeRange}
               />
               <TechnicalRangeFilter
+                disabled={controlsDisabled}
                 label={t("filter.widthPx")}
                 range={widthRange}
                 setRange={setWidthRange}
               />
               <TechnicalRangeFilter
+                disabled={controlsDisabled}
                 label={t("filter.heightPx")}
                 range={heightRange}
                 setRange={setHeightRange}
               />
               <TechnicalRangeFilter
+                disabled={controlsDisabled}
                 label={t("filter.durationSec")}
                 range={durationRange}
                 setRange={setDurationRange}
@@ -1200,25 +1172,26 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
       {chips.length > 0 && (
         <div className="dimension-filter-chips" aria-label={t("filter.activeFilters")}>
           {chips.map((chip) => {
-            const label = labelForActiveChip(chip.id, t);
+            const label = chip.labelKey ? t(chip.labelKey) : chip.label ?? chip.id;
+            const summary = `${chip.excluding ? `${t("filter.exclude")} ` : ""}${label}${chip.detail ? ` · ${chip.detail}` : ""}`;
             return (
               <button
-                className="dimension-active-chip"
+                aria-label={t("filter.clearChipAria", { label: summary })}
+                className={`dimension-active-chip${chip.excluding ? " is-excluding" : ""}`}
+                disabled={controlsDisabled}
                 key={chip.id}
                 onClick={() => onClearFilter(chip.id as ClearableFilterId)}
                 type="button"
-                title={t("filter.clearChip")}
+                title={t("filter.clearChipAria", { label: summary })}
               >
-                <span>
-                  {label}
-                  {chip.detail ? ` · ${chip.detail}` : ""}
-                </span>
+                <span>{summary}</span>
                 <Icon name="close" size={10} />
               </button>
             );
           })}
           <button
             className="dimension-active-chip is-clear-all"
+            disabled={controlsDisabled}
             onClick={() => onClearFilter("all")}
             type="button"
           >
@@ -1228,35 +1201,4 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
       )}
     </div>
   );
-}
-
-function labelForActiveChip(id: string, t: ReturnType<typeof useT>): string {
-  switch (id) {
-    case "color":
-      return t("filter.dimColor");
-    case "format":
-      return t("filter.formatField");
-    case "tag":
-      return t("filter.tagField");
-    case "rating":
-      return t("filter.ratingField");
-    case "favorite":
-      return t("filter.favoriteField");
-    case "source_url":
-      return t("filter.sourceUrlField");
-    case "availability":
-      return t("filter.availabilityField");
-    case "aspect_ratio":
-      return t("filter.aspectRatio");
-    case "long_edge":
-      return t("filter.longEdgePx");
-    case "width":
-      return t("filter.widthPx");
-    case "height":
-      return t("filter.heightPx");
-    case "duration":
-      return t("filter.durationSec");
-    default:
-      return id;
-  }
 }

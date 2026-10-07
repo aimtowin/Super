@@ -49,6 +49,7 @@ test('organizes, finds, trashes, and restores an imported asset through the UI',
 
   try {
     const window = await application.firstWindow();
+    await window.getByRole('button', { name: '跳过引导', exact: true }).click();
     await window.getByRole('button', { name: '创建资源库' }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole('button', { name: '创建', exact: true }).click();
@@ -258,20 +259,12 @@ test('organizes, finds, trashes, and restores an imported asset through the UI',
     await expect(window.locator('.search-snippet')).toBeVisible();
     await expect(window.locator('.search-snippet mark').first()).toBeVisible();
 
-    // Save the current query as a smart collection via the sidebar inline
-    // create; creating auto-opens the settings dialog. Rename it there (仅保存名称)
-    // and write the active query (保存当前条件) in the same dialog — the rename
-    // menu item reuses this settings dialog.
+    // Inline creation already saves the current query. The current UX does
+    // not open an extra settings dialog; renaming is tested separately below.
     await window.getByRole('button', { name: '新建智能合集' }).click();
     await window.getByLabel('新智能合集名称').fill('英雄精选');
     await window.getByLabel('新智能合集名称').press('Enter');
-    const smartSettings = window.getByRole('dialog');
-    await expect(smartSettings).toBeVisible();
-    await smartSettings.getByLabel('名称').fill('英雄精选');
-    // Plain Enter follows the shared modal default-action contract; this
-    // dialog is intentionally not a form so the host keyboard path is tested.
-    await smartSettings.getByLabel('名称').press('Enter');
-    await expect(smartSettings).toBeHidden();
+    await expect(window.getByRole('dialog')).toHaveCount(0);
     const smartCollectionRow = sidebarSmartCollectionRow(window, '英雄精选');
     await expect(smartCollectionRow).toBeVisible();
     await smartCollectionRow.click();
@@ -345,6 +338,7 @@ test('multi-select performs batch organization, trash, restore, and permanent de
   try {
     const window = await application.firstWindow();
     const additiveModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await window.getByRole('button', { name: '跳过引导', exact: true }).click();
     await window.getByRole('button', { name: '创建资源库' }).click();
     await window.getByRole("textbox", { name: "名称" }).fill('批量组织验收');
     await window.getByRole('button', { name: '创建', exact: true }).click();
@@ -579,6 +573,7 @@ test('critical confirmation windows focus cancel and require red confirmation', 
 
   try {
     const window = await application.firstWindow();
+    await window.getByRole('button', { name: '跳过引导', exact: true }).click();
     await window.getByRole('button', { name: '创建资源库' }).click();
     await window.getByRole('textbox', { name: '名称' }).fill('对话框焦点验收');
     await window.getByRole('button', { name: '创建', exact: true }).click();
@@ -636,6 +631,7 @@ test('collection recursion toggle immediately refreshes the visible collection s
 
   try {
     const window = await application.firstWindow();
+    await window.getByRole('button', { name: '跳过引导', exact: true }).click();
     await window.getByRole('button', { name: '创建资源库' }).click();
     await window.getByRole("textbox", { name: "名称" }).fill('合集递归验收');
     await window.getByRole('button', { name: '创建', exact: true }).click();
