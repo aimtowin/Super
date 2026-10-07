@@ -341,6 +341,13 @@ export function useBrowsePagination(
   );
 
   const refreshHasMore = useCallback((total: number, filled: ReadonlySet<number>) => {
+    // Summaries can finish before the compact geometry (e.g. 173 assets with
+    // a deferred first-page count). Keep the probe until both are complete;
+    // otherwise loaded tail summaries have no slots and disappear forever.
+    if (total > 0 && !layoutHydrationCompleteRef.current) {
+      setHasMorePages(true);
+      return;
+    }
     for (let offset = 0; offset < total; offset += BROWSE_PAGE_SIZE) {
       if (!filled.has(offset)) {
         setHasMorePages(true);
@@ -356,6 +363,7 @@ export function useBrowsePagination(
       const offset = layoutRef.current.length;
       if (offset >= totalRef.current) {
         layoutHydrationCompleteRef.current = true;
+        refreshHasMore(totalRef.current, filledOffsetsRef.current);
         setLayoutHydrationVersion((version) => version + 1);
         return;
       }
@@ -368,11 +376,15 @@ export function useBrowsePagination(
           offset,
           limit: Math.min(BROWSE_LAYOUT_CHUNK_SIZE, totalRef.current - offset),
         });
+        if (browseDiagnosticsEnabled) window.dispatchEvent(new CustomEvent("super:e2e-browse-layout", {
+          detail: { offset, count: page?.layout.length, total: page?.total, generation, currentGeneration: generationRef.current },
+        }));
         if (generation !== generationRef.current) return;
         if (!page || (page.layout.length === 0 && page.total > offset)) {
           // Do not strand the current browse scope if a non-critical geometry
           // response fails. The already-painted section still paginates.
           layoutHydrationCompleteRef.current = true;
+          refreshHasMore(totalRef.current, filledOffsetsRef.current);
           setLayoutHydrationVersion((version) => version + 1);
           return;
         }
@@ -386,6 +398,7 @@ export function useBrowsePagination(
         layoutRef.current = nextLayout;
         layoutHydrationCompleteRef.current =
           nextLayout.length >= page.total || page.layout.length === 0;
+        refreshHasMore(page.total, filledOffsetsRef.current);
         setBrowseLayout(nextLayout);
         setLayoutHydrationVersion((version) => version + 1);
         applyTarget(definition)((current) =>
@@ -395,7 +408,7 @@ export function useBrowsePagination(
         layoutFetchInFlightRef.current = false;
       }
     },
-    [api, applyTarget, setBrowseLayout, setSearchTotal],
+    [api, applyTarget, refreshHasMore, setBrowseLayout, setSearchTotal],
   );
 
   const beginPage = useCallback(
@@ -677,6 +690,9 @@ export function useBrowsePagination(
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
+          if (browseDiagnosticsEnabled) window.dispatchEvent(new CustomEvent("super:e2e-browse-sentinel", {
+            detail: { intersecting: entry.isIntersecting, nearTail: isBrowseRootNearTail(root), inFlight: inFlightOffsetsRef.current.size, layoutComplete: layoutHydrationCompleteRef.current, total: totalRef.current },
+          }));
           if (
             entry.isIntersecting
             && isBrowseRootNearTail(root)
@@ -695,7 +711,10 @@ export function useBrowsePagination(
     );
     observer.observe(sentinelNode);
     return () => observer.disconnect();
-  }, [appendNextPage, layoutHydrationVersion, sentinelNode]);
+    // IntersectionObserver only reports threshold crossings. A visible probe
+    // suppressed by an interactive page request needs another observation
+    // once that request settles, even if the scroll position did not change.
+  }, [appendNextPage, layoutHydrationVersion, loadingMore, sentinelNode]);
 
   return {
     beginPage,

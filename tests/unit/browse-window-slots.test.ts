@@ -110,4 +110,37 @@ describe("browse window virtualization (Super-sa65)", () => {
       height: 1080,
     });
   });
+
+  it("keeps replacement identity and stable unknown order, including repeated layout IDs", () => {
+    const replacement = { ...asset("a"), rating: 5 };
+    const loaded = mergeLoadedBrowsePage({
+      current: [asset("unknown1"), asset("a"), asset("b"), asset("unknown2")],
+      items: [replacement, asset("unknown3")],
+      layout: [
+        { assetId: "a", width: 1, height: 1 },
+        { assetId: "b", width: 1, height: 1 },
+        { assetId: "a", width: 2, height: 2 },
+      ],
+    });
+    expect(loaded.map((item) => item.assetId)).toEqual(["b", "a", "unknown1", "unknown2", "unknown3"]);
+    expect(loaded[1]).toBe(replacement);
+  });
+
+  it("matches the previous algorithm for paged forward/backward loading and reordered scopes", () => {
+    const previous = (current: AssetSummary[], items: AssetSummary[], layout: Array<{ assetId: string; width: number; height: number }>) => {
+      const byId = new Map(current.map((item) => [item.assetId, item]));
+      for (const item of items) byId.set(item.assetId, item);
+      const rank = new Map(layout.map((entry, index) => [entry.assetId, index]));
+      return [...byId.values()].sort((a, b) => (rank.get(a.assetId) ?? Infinity) - (rank.get(b.assetId) ?? Infinity));
+    };
+    const layout = Array.from({ length: 1_000 }, (_, i) => ({ assetId: String(i), width: 1, height: 1 }));
+    let loaded: AssetSummary[] = [];
+    for (const offset of [700, 0, 300, 100, 900, 700]) {
+      const items = Array.from({ length: 100 }, (_, i) => asset(String(offset + i)));
+      expect(mergeLoadedBrowsePage({ current: loaded, items, layout })).toEqual(previous(loaded, items, layout));
+      loaded = mergeLoadedBrowsePage({ current: loaded, items, layout });
+    }
+    const reversed = layout.toReversed();
+    expect(mergeLoadedBrowsePage({ current: loaded, items: [], layout: reversed })).toEqual(previous(loaded, [], reversed));
+  });
 });

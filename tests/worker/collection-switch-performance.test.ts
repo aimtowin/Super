@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,6 +7,7 @@ import { performance } from "node:perf_hooks";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { LibraryService } from "../../src/worker/library-service";
+import { BROWSE_LAYOUT_CHUNK_SIZE } from "../../src/shared/browse-scope";
 
 interface TestDatabase {
   close(): void;
@@ -63,7 +64,8 @@ function captureCollectionScopeQueries<T>(
   return result;
 }
 
-function createLargeCollectionFixture(): {
+function createLargeCollectionFixture(onDbStatement?: (sql: string) => void): {
+  root: string;
   libraryId: string;
   folderId: string;
   rootCollectionId: string;
@@ -73,7 +75,10 @@ function createLargeCollectionFixture(): {
   const root = mkdtempSync(path.join(tmpdir(), "super-collection-switch-"));
   temporaryRoots.push(root);
   const statements: string[] = [];
-  const service = newService((sql) => statements.push(sql));
+  const service = newService((sql) => {
+    statements.push(sql);
+    onDbStatement?.(sql);
+  });
   const library = service.createLibrary({
     displayName: "Collection switch performance",
     selectedParentPath: root,
@@ -162,6 +167,7 @@ function createLargeCollectionFixture(): {
   service.openLibrary(library.libraryPath);
   statements.length = 0;
   return {
+    root,
     libraryId: library.libraryId,
     folderId: managedFolder.folderId,
     rootCollectionId,
@@ -178,7 +184,83 @@ afterEach(() => {
 });
 
 describe("collection switch performance", () => {
-  it("profiles first-page and full-layout collection switching on 20k assets", () => {
+  it('profiles sidebar reuse during job progress on 20k assets', () => {
+    const fixture = createLargeCollectionFixture();
+    const service = services.at(-1)!;
+    const libraryId = fixture.libraryId;
+    service.createSmartCollection({ libraryId, name: 'PNG', queryDefinitionJson: JSON.stringify({ filters: [{ field: 'format', values: ['png'], exclude: false }] }) });
+    const open = (service as unknown as { openById: Map<string, {
+      connection: TestDatabase;
+      folderCountCache?: unknown; collectionCountCache?: unknown; smartCollectionCountCache?: unknown;
+    }> }).openById.get(libraryId)!;
+    const now = new Date().toISOString();
+    open.connection.prepare(`INSERT INTO jobs
+      (job_id, library_id, asset_id, revision_id, kind, status, priority, progress, attempt_count, created_at, updated_at)
+      VALUES ('cache-perf-job', ?, 'asset-0', 'revision-0', 'generate_thumbnail', 'queued', 0, 0, 0, ?, ?)`)
+      .run(libraryId, now, now);
+    const hydrate = () => {
+      service.listManagedFolders(libraryId);
+      service.listCollections(libraryId);
+      return service.listSmartCollections(libraryId);
+    };
+    expect(hydrate()[0]?.assetCount).toBe(ASSET_COUNT);
+    const caches = [open.folderCountCache, open.collectionCountCache, open.smartCollectionCountCache];
+    fixture.statements.length = 0;
+    open.connection.prepare("UPDATE jobs SET progress = 0.5 WHERE job_id = 'cache-perf-job'").run();
+    expect(hydrate()[0]?.assetCount).toBe(ASSET_COUNT);
+    expect(fixture.statements.some((sql) => sql.includes('SELECT COUNT(*) AS total') || sql.includes('WITH RECURSIVE collection_tree'))).toBe(false);
+    for (const [index, cache] of [open.folderCountCache, open.collectionCountCache, open.smartCollectionCountCache].entries()) expect(cache).toBe(caches[index]);
+    const reuseMs = benchmark(hydrate);
+    // Compare the same queries with the previous invalidation policy, not
+    // unrelated startup/import work or a different fixture.
+    const invalidatedMs = benchmark(() => {
+      open.folderCountCache = undefined;
+      open.collectionCountCache = undefined;
+      open.smartCollectionCountCache = undefined;
+      return hydrate();
+    });
+    console.info('[sidebar-cache-performance]', JSON.stringify({ assets: ASSET_COUNT, reuseMedianMs: Number(reuseMs.toFixed(2)), invalidatedMedianMs: Number(invalidatedMs.toFixed(2)) }));
+  });
+
+  it("profiles one-asset import completion against the previous full-library result pipeline", () => {
+    let resultQueryStartedAt: number | undefined;
+    const fixture = createLargeCollectionFixture((sql) => {
+      if (resultQueryStartedAt === undefined && sql.includes('AS thumbnail_status') && sql.includes('a.asset_id IN (')) {
+        resultQueryStartedAt = performance.now();
+      }
+    });
+    const service = services.at(-1)!;
+    const source = path.join(fixture.root, 'one-new-import.txt');
+    writeFileSync(source, 'a unique new asset in a twenty-thousand-row library');
+    const plan = service.prepareImport({ libraryId: fixture.libraryId, sourceKind: 'files', sourcePaths: [source] });
+    fixture.statements.length = 0;
+    const startedAt = performance.now();
+    const completion = service.resolveImport({ importId: plan.importId, suspectedDuplicate: 'create-copy', nameConflict: 'keep-both' });
+    const completeImportMs = performance.now() - startedAt;
+    expect(resultQueryStartedAt).toBeDefined();
+    // Start at the SQL trace and include summary enrichment and final logical
+    // counters. Do not mistake whole-import time (filesystem/commit included)
+    // for just the result hydration cost targeted by this optimization.
+    const scopedResultAndFinalCountersMs = performance.now() - resultQueryStartedAt!;
+    const resultQueries = fixture.statements.filter((sql) => sql.includes('AS thumbnail_status') && sql.includes('ORDER BY a.relative_file_path'));
+    expect(resultQueries).toHaveLength(1);
+    expect(resultQueries[0]).toContain('a.asset_id IN (');
+    expect(completion.assets).toHaveLength(1);
+    const ids = new Set(completion.assets.map((asset) => asset.assetId));
+    const oldResultPipeline = () => service.listAssets({ libraryId: fixture.libraryId, recursive: true })
+      .filter((asset) => ids.has(asset.assetId));
+    const fullLibraryResultMs = benchmark(oldResultPipeline);
+    expect(completion.assets).toEqual(oldResultPipeline());
+    console.info('[import-completion-performance]', JSON.stringify({
+      libraryAssets: ASSET_COUNT + 1,
+      affectedAssets: 1,
+      completeImportMs: Number(completeImportMs.toFixed(1)),
+      scopedResultAndFinalCountersMs: Number(scopedResultAndFinalCountersMs.toFixed(1)),
+      previousFullLibraryResultMedianMs: Number(fullLibraryResultMs.toFixed(1)),
+    }));
+  });
+
+  it("profiles first-page switching and verifies complete paged layouts on 20k assets", () => {
     const fixture = createLargeCollectionFixture();
     const service = services.at(-1)!;
 
@@ -205,7 +287,7 @@ describe("collection switch performance", () => {
       limit: 100,
       offset: 0,
     }));
-    const recursiveLayoutMs = benchmark(() => service.searchAssets({
+    const recursiveLayoutChunkMs = benchmark(() => service.searchAssets({
       libraryId: fixture.libraryId,
       scope: { kind: "collection", collectionId: fixture.rootCollectionId, recursive: true },
       layoutOnly: true,
@@ -252,14 +334,31 @@ describe("collection switch performance", () => {
       folderMs: Number(folderMs.toFixed(1)),
       directMs: Number(directMs.toFixed(1)),
       recursiveMs: Number(recursiveMs.toFixed(1)),
-      recursiveLayoutMs: Number(recursiveLayoutMs.toFixed(1)),
+      recursiveLayoutChunkMs: Number(recursiveLayoutChunkMs.toFixed(1)),
     }));
     expect(folderPage.total).toBe(ASSET_COUNT);
     expect(folderPage.items).toHaveLength(100);
     expect(recursivePage.total).toBe(ASSET_COUNT);
     expect(recursivePage.items).toHaveLength(100);
-    expect(recursiveLayout.layout).toHaveLength(ASSET_COUNT);
+    expect(recursiveLayout.total).toBe(ASSET_COUNT);
+    expect(recursiveLayout.layout).toHaveLength(BROWSE_LAYOUT_CHUNK_SIZE);
     expect(recursiveIds.assetIds).toHaveLength(ASSET_COUNT);
+    const layoutIds = recursiveLayout.layout!.map((entry) => entry.assetId);
+    for (let offset = layoutIds.length; offset < ASSET_COUNT; offset += BROWSE_LAYOUT_CHUNK_SIZE) {
+      const chunk = service.searchAssets({
+        libraryId: fixture.libraryId,
+        scope: { kind: "collection", collectionId: fixture.rootCollectionId, recursive: true },
+        layoutOnly: true,
+        offset,
+        limit: BROWSE_LAYOUT_CHUNK_SIZE,
+      });
+      expect(chunk.total).toBe(ASSET_COUNT);
+      expect(chunk.offset).toBe(offset);
+      expect(chunk.layout).toHaveLength(Math.min(BROWSE_LAYOUT_CHUNK_SIZE, ASSET_COUNT - offset));
+      layoutIds.push(...chunk.layout!.map((entry) => entry.assetId));
+    }
+    expect(new Set(layoutIds).size).toBe(ASSET_COUNT);
+    expect(layoutIds).toEqual(recursiveIds.assetIds);
     expect(recursiveMs).toBeLessThan(500);
   });
 });

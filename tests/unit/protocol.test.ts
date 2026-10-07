@@ -2293,6 +2293,13 @@ describe('renderer-safe import plans', () => {
 });
 
 describe('background asset change events', () => {
+  it('accepts precise ID invalidation and rejects empty or oversized lists', () => {
+    const event = { type: 'asset.changed', libraryId: 'library-01', changedCount: 1, missingCount: 0 };
+    expect(parseAssetChangeEvent({ ...event, assetIds: ['asset-01'] }).assetIds).toEqual(['asset-01']);
+    expect(() => parseAssetChangeEvent({ ...event, assetIds: [] })).toThrow();
+    expect(() => parseAssetChangeEvent({ ...event, assetIds: [' '] })).toThrow();
+    expect(() => parseAssetChangeEvent({ ...event, assetIds: Array(501).fill('asset') })).toThrow();
+  });
   it('accepts semantic summaries and rejects paths or asset payloads', () => {
     expect(parseAssetChangeEvent({
       type: 'asset.changed',

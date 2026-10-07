@@ -72,11 +72,17 @@ export function mergeLoadedBrowsePage(input: {
   items: readonly AssetSummary[];
   layout: readonly BrowseLayoutEntry[];
 }): AssetSummary[] {
-  const byId = new Map(input.current.map((asset) => [asset.assetId, asset]));
+  const byId = new Map<string, AssetSummary>();
+  for (const asset of input.current) byId.set(asset.assetId, asset);
   for (const asset of input.items) byId.set(asset.assetId, asset);
-  const rank = new Map(
-    input.layout.map((entry, index) => [entry.assetId, index] as const),
-  );
+  // Only loaded summaries participate in this merge. Do not allocate a full
+  // scope-sized map plus an intermediate array of [id, rank] tuples for each
+  // 100-item page (or each geometry chunk). Keep summaries/selection intact.
+  const rank = new Map<string, number>();
+  for (let index = 0; index < input.layout.length; index += 1) {
+    const id = input.layout[index]!.assetId;
+    if (byId.has(id)) rank.set(id, index);
+  }
   return [...byId.values()].sort((left, right) => {
     const leftRank = rank.get(left.assetId);
     const rightRank = rank.get(right.assetId);

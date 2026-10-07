@@ -92,7 +92,8 @@ for (const scope of ["all", "filtered", "smart-collection", "draft-smart-collect
         { channel: "super:asset:changed", payload: { type: "asset.changed", libraryId, source: "watcher", changedCount: 1, missingCount: 0 } },
         { channel: "super:ai:completed", payload: { type: "ai.analysis.completed", libraryId, assetId, fieldCount: 1, tagCount: 0 } },
         { channel: "super:ai:cleared", payload: { type: "ai.content.cleared", libraryId, affectedAssetCount: 1, affectedAssetIds: [assetId] } },
-        { channel: "super:asset:changed", payload: { type: "asset.changed", libraryId, source: "text-save", changedCount: 1, missingCount: 0 } },
+        { channel: "super:asset:changed", payload: { type: "asset.changed", libraryId, source: "text-save", changedCount: 1, missingCount: 0, assetIds: [assetId] } },
+        { channel: "super:asset:changed", payload: { type: "asset.changed", libraryId, source: "client", changedCount: 1, missingCount: 0, assetIds: [assetId] } },
       ];
       for (const event of events) {
         await application.evaluate(({ BrowserWindow }, event) => {

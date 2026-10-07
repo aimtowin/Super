@@ -353,6 +353,8 @@ export const assetChangeEventSchema = z.strictObject({
   libraryId: nonBlankString,
   changedCount: z.number().int().positive(),
   missingCount: z.number().int().nonnegative(),
+  /** Optional precise invalidation; older/watcher events retain full reconciliation. */
+  assetIds: z.array(nonBlankString).min(1).max(500).optional(),
   /**
    * `watcher` = external disk reconciliation (only this shows the disk-sync toast).
    * `text-save` / `client` / `content-replace` = in-app mutations; UI should use

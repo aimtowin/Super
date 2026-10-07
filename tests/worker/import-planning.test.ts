@@ -6,6 +6,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  renameSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
@@ -1409,12 +1410,45 @@ describe('managed asset refresh', () => {
     service.resolveImport({ importId: plan.importId, suspectedDuplicate: 'skip', nameConflict: 'keep-both' });
     missing = true;
 
-    expect(service.refreshManagedAssets(library.libraryId, { includeAssets: true })).toMatchObject({
-      changedCount: 1,
-      missingCount: 1,
-      assets: [{ availability: 'missing' }],
-    });
-    service.closeAll();
+    try {
+      expect(service.refreshManagedAssets(library.libraryId, { includeAssets: true })).toMatchObject({
+        changedCount: 1,
+        missingCount: 1,
+        assets: [{ availability: 'missing' }],
+      });
+      expect(service.refreshManagedAssets(library.libraryId)).toMatchObject({ changedCount: 0, missingCount: 0 });
+      missing = false;
+      expect(service.refreshManagedAssets(library.libraryId, { includeAssets: true }).assets[0]?.availability).toBe('available');
+    } finally {
+      service.closeAll();
+    }
+  });
+
+  it('preserves identity and user metadata when a parent becomes a file and is restored', () => {
+    const root = temporaryRoot();
+    const source = path.join(root, 'recover-parent.txt');
+    writeFileSync(source, 'persistent content');
+    const service = new LibraryService();
+    try {
+      const library = service.createLibrary({ displayName: 'Recover ancestor', selectedParentPath: root });
+      const folder = service.createManagedFolder({ libraryId: library.libraryId, name: 'parent' });
+      const plan = service.prepareImport({ libraryId: library.libraryId, sourceKind: 'files', sourcePaths: [source], targetFolderId: folder.folderId });
+      const original = service.resolveImport({ importId: plan.importId, suspectedDuplicate: 'skip', nameConflict: 'keep-both' }).assets[0]!;
+      const metadata = service.getAssetMetadata({ libraryId: library.libraryId, assetId: original.assetId });
+      service.setAssetMetadata({ libraryId: library.libraryId, assetId: original.assetId, expectedVersion: metadata.entityVersion, rating: 4, favorite: true });
+      const parent = path.join(library.libraryPath, 'Assets', 'parent');
+      const backup = path.join(root, 'parent-backup');
+      renameSync(parent, backup);
+      writeFileSync(parent, 'temporarily replaced directory');
+      const unavailable = service.refreshManagedAssets(library.libraryId, { includeAssets: true });
+      expect(unavailable.assets.find((asset) => asset.assetId === original.assetId)).toMatchObject({ availability: 'missing', rating: 4, favorite: true, currentRevisionId: original.currentRevisionId });
+      rmSync(parent);
+      renameSync(backup, parent);
+      const recovered = service.refreshManagedAssets(library.libraryId, { includeAssets: true });
+      expect(recovered.assets.find((asset) => asset.assetId === original.assetId)).toMatchObject({ availability: 'available', rating: 4, favorite: true, currentRevisionId: original.currentRevisionId });
+    } finally {
+      service.closeAll();
+    }
   });
 });
 

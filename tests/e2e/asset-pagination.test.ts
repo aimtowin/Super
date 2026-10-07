@@ -14,6 +14,33 @@ function sidebarFolderRow(window: Page, folderName: string) {
     .locator("xpath=ancestor::button[contains(@class, 'nav-row')]");
 }
 
+async function recordBrowseDiagnostics(page: Page) {
+  await page.evaluate(() => {
+    const events: unknown[] = [];
+    (globalThis as unknown as { browseEvents: unknown[] }).browseEvents = events;
+    for (const type of ["super:e2e-browse-request", "super:e2e-browse-result", "super:e2e-browse-page", "super:e2e-browse-layout", "super:e2e-browse-sentinel"]) {
+      globalThis.addEventListener(type, (event) => {
+        events.push({ type, detail: (event as CustomEvent).detail });
+        if (events.length > 100) events.shift();
+      });
+    }
+  });
+}
+
+async function logBrowseFailure(page: Page) {
+  console.log("browse failure snapshot", JSON.stringify(await page.evaluate(() => {
+    const canvas = document.querySelector(".workspace-canvas");
+    if (!canvas) return { body: document.body.textContent?.slice(0, 2000) };
+    return {
+      events: (globalThis as unknown as { browseEvents: unknown[] }).browseEvents,
+      scroll: { top: canvas.scrollTop, height: canvas.scrollHeight, client: canvas.clientHeight },
+      sentinel: document.querySelector(".browse-load-more")?.getBoundingClientRect().toJSON(),
+      cards: [...canvas.querySelectorAll(".asset-card")].slice(-5).map((card) => ({ id: card.getAttribute("data-asset-id"), text: card.textContent?.slice(0, 100), top: card.getBoundingClientRect().top })),
+      grids: [...canvas.querySelectorAll(".masonry-columns, .justified-rows")].map((grid) => ({ height: grid.getBoundingClientRect().height })),
+    };
+  }), null, 2));
+}
+
 test("ordinary browsing continuously appends every asset without page controls", async () => {
   const temporaryRoot = mkdtempSync(
     path.join(tmpdir(), "superApi-pagination-e2e-"),
@@ -48,7 +75,19 @@ test("ordinary browsing continuously appends every asset without page controls",
   });
 
   try {
+    // Production builds intentionally disable development picker overrides.
+    // Select only this isolated fixture through Electron's native dialog.
+    if (process.env.SUPER_E2E_PACKAGED_EXECUTABLE) {
+      await application.evaluate(({ dialog }, paths) => {
+        dialog.showOpenDialog = async (...args: unknown[]) => {
+          const options = args.at(-1) as { properties?: string[] };
+          return { canceled: false, filePaths: options.properties?.includes("openDirectory") ? [paths.root] : paths.files };
+        };
+      }, { root: temporaryRoot, files: sourcePaths });
+    }
     const window = await application.firstWindow();
+    await recordBrowseDiagnostics(window);
+    await window.getByRole("button", { name: "跳过引导", exact: true }).click();
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();
@@ -119,6 +158,7 @@ test("ordinary browsing continuously appends every asset without page controls",
     const maxSizeIndex = Number(await sizeControl.getAttribute("max"));
     const middleSizeIndex = Math.min(3, maxSizeIndex);
     await sizeControl.fill(String(middleSizeIndex));
+    await expect(workspaceCanvas).not.toHaveAttribute('data-card-size-restoring', 'true');
     const anchorCard = window.locator(".asset-card").nth(30);
     await anchorCard.scrollIntoViewIfNeeded();
     const anchorAssetId = await anchorCard.getAttribute("data-asset-id");
@@ -131,6 +171,23 @@ test("ordinary browsing continuously appends every asset without page controls",
     await window.mouse.move(anchorPoint.x, anchorPoint.y);
     await window.mouse.wheel(0, -120);
     await expect(sizeControl).toHaveValue(String(sizeBeforeWheel));
+    // The current wheel contract anchors the canvas center (keyboard zoom
+    // does too), not the mouse card chosen before the ordinary scroll.
+    // Wait for that scroll's paint and capture the same center target the
+    // production handler will use; a one-column zoom can hide other cards.
+    const centerAnchorAssetId = await window.evaluate(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const root = document.querySelector('.workspace-canvas')!;
+      const rect = root.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const pointed = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-asset-id]');
+      if (pointed && root.contains(pointed)) return pointed.dataset.assetId;
+      return [...root.querySelectorAll<HTMLElement>('[data-asset-id]')]
+        .map((card) => ({ card, box: card.getBoundingClientRect() }))
+        .filter(({ box }) => box.bottom > rect.top && box.top < rect.bottom)
+        .sort((left, right) => Math.hypot(left.box.left + left.box.width / 2 - x, left.box.top + left.box.height / 2 - y) - Math.hypot(right.box.left + right.box.width / 2 - x, right.box.top + right.box.height / 2 - y))[0]?.card.dataset.assetId;
+    });
     await window.keyboard.down("Control");
     await window.mouse.wheel(0, -120);
     await window.keyboard.up("Control");
@@ -138,14 +195,21 @@ test("ordinary browsing continuously appends every asset without page controls",
       .poll(async () => Number(await sizeControl.inputValue()))
       .toBeGreaterThan(sizeBeforeWheel);
     expect(anchorAssetId).not.toBeNull();
+    expect(centerAnchorAssetId).toBeTruthy();
     await expect(
-      window.locator(`[data-asset-id="${anchorAssetId}"]`),
+      window.locator(`[data-asset-id="${centerAnchorAssetId}"]`),
     ).toBeInViewport();
 
-    const firstCard = window.locator(".asset-card").first();
+    const firstCard = window.locator(".asset-card").filter({ hasText: "asset-000.txt" });
     await sizeControl.fill("0");
+    await expect(workspaceCanvas).not.toHaveAttribute('data-card-size-restoring', 'true');
+    await workspaceCanvas.evaluate((element) => element.scrollTo(0, 0));
+    await expect(firstCard).toBeInViewport();
     const initialWidth = (await firstCard.boundingBox())!.width;
     await sizeControl.fill(String(maxSizeIndex));
+    await expect(workspaceCanvas).not.toHaveAttribute('data-card-size-restoring', 'true');
+    await workspaceCanvas.evaluate((element) => element.scrollTo(0, 0));
+    await expect(firstCard).toBeInViewport();
     await expect
       .poll(async () => (await firstCard.boundingBox())!.width)
       .toBeGreaterThan(initialWidth);
@@ -157,7 +221,7 @@ test("ordinary browsing continuously appends every asset without page controls",
     // masonry changes the column geometry. Explicitly bring the first card
     // back into view before checking the first-row layout instead of racing
     // that restoration effect with a raw scrollTop assertion.
-    await firstCard.scrollIntoViewIfNeeded();
+    await expect(firstCard).toBeInViewport();
     const [canvasBox, masonryFirstBox] = await Promise.all([
       window.locator(".workspace-canvas").boundingBox(),
       firstCard.boundingBox(),
@@ -211,6 +275,7 @@ test("ordinary browsing continuously appends every asset without page controls",
       );
       for (const cardSize of [0, maxSizeIndex]) {
         await sizeControl.fill(String(cardSize));
+        await expect(workspaceCanvas).not.toHaveAttribute('data-card-size-restoring', 'true');
         await expect(sizeControl).toHaveValue(String(cardSize));
         for (const scrollFraction of [0.25, 0.5, 1]) {
           let visibleAsset: {
@@ -570,6 +635,9 @@ test("ordinary browsing continuously appends every asset without page controls",
     await expect(window.locator(".asset-card").first()).toBeVisible();
     await window.getByRole("button", { name: /所有资产/ }).click();
     await expect(window.locator(".asset-card")).toHaveCount(0);
+  } catch (error) {
+    await logBrowseFailure(await application.firstWindow()).catch(() => undefined);
+    throw error;
   } finally {
     await application.close();
     rmSync(temporaryRoot, { force: true, recursive: true });
@@ -613,7 +681,17 @@ test("bottom-scroll appends assets beyond the first page (Super-ws4k)", async ()
   });
 
   try {
+    if (process.env.SUPER_E2E_PACKAGED_EXECUTABLE) {
+      await application.evaluate(({ dialog }, paths) => {
+        dialog.showOpenDialog = async (...args: unknown[]) => {
+          const options = args.at(-1) as { properties?: string[] };
+          return { canceled: false, filePaths: options.properties?.includes("openDirectory") ? [paths.root] : paths.files };
+        };
+      }, { root: temporaryRoot, files: sourcePaths });
+    }
     const window = await application.firstWindow();
+    await recordBrowseDiagnostics(window);
+    await window.getByRole("button", { name: "跳过引导", exact: true }).click();
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();
@@ -663,6 +741,9 @@ test("bottom-scroll appends assets beyond the first page (Super-ws4k)", async ()
     // No pagination buttons exist; the continuous-loading contract is kept.
     await expect(window.getByRole("button", { name: "上一页" })).toHaveCount(0);
     await expect(window.getByRole("button", { name: "下一页" })).toHaveCount(0);
+  } catch (error) {
+    await logBrowseFailure(await application.firstWindow()).catch(() => undefined);
+    throw error;
   } finally {
     await application.close();
     rmSync(temporaryRoot, { force: true, recursive: true });

@@ -37,4 +37,30 @@ describe('coalesced history refresh', () => {
     await controller.refresh();
     expect(read).toHaveBeenCalledTimes(2);
   });
+
+  it('retains one trailing notification when the active read fails', async () => {
+    let reject!: (error: Error) => void;
+    const read = vi.fn().mockImplementationOnce(() => new Promise<void>((_, fail) => { reject = fail; }))
+      .mockResolvedValue(undefined);
+    const controller = createCoalescedRefresh(read);
+    const task = controller.refresh();
+    await Promise.resolve();
+    for (let i = 0; i < 100; i++) expect(controller.refresh()).toBe(task);
+    reject(new Error('Worker restart'));
+    await task;
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports a failed trailing read without unbounded retries', async () => {
+    let reject!: (error: Error) => void;
+    const read = vi.fn().mockImplementationOnce(() => new Promise<void>((_, fail) => { reject = fail; }))
+      .mockRejectedValue(new Error('still unavailable'));
+    const controller = createCoalescedRefresh(read);
+    const task = controller.refresh();
+    await Promise.resolve();
+    void controller.refresh();
+    reject(new Error('Worker restart'));
+    await expect(task).rejects.toThrow('still unavailable');
+    expect(read).toHaveBeenCalledTimes(2);
+  });
 });

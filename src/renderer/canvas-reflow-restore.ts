@@ -16,6 +16,7 @@ import {
   type CanvasAnchor,
   type RectLike,
 } from "./canvas-scroll-anchor";
+import { readPublishedCanvasAssetLayout } from "./canvas-asset-layout";
 
 export type { AnchorCard, CanvasAnchor, RectLike };
 
@@ -133,12 +134,24 @@ export function scheduleAnchorRestore(
         const restored = Array.from(
           canvas.querySelectorAll<HTMLElement>("[data-asset-id]"),
         ).find((card) => card.dataset.assetId === anchor.assetId);
-        if (!restored) {
+        // A large reflow can move the anchor outside the virtual DOM window.
+        // Its published full-scope geometry still exists: use it to scroll the
+        // window to the destination rather than abandoning the anchor.
+        let rect: RectLike | undefined = restored?.getBoundingClientRect();
+        if (!rect) {
+          for (const grid of canvas.querySelectorAll<HTMLElement>(".masonry-columns, .justified-rows")) {
+            const entry = readPublishedCanvasAssetLayout(grid)?.find((item) => item.id === anchor.assetId);
+            if (!entry) continue;
+            const gridRect = grid.getBoundingClientRect();
+            rect = { left: gridRect.left + entry.x, top: gridRect.top + entry.y, width: entry.width, height: entry.height };
+            break;
+          }
+        }
+        if (!rect) {
           frameRef.current = null;
           onRestored?.();
           return;
         }
-        const rect = restored.getBoundingClientRect();
         const delta = computeAnchorScrollDelta(anchor, rect);
         const nextLeft = clampScrollOffset(
           canvas.scrollLeft + delta.deltaX,

@@ -9901,6 +9901,8 @@ select.ai-config-input.ai-config-languages {
    an invisible 1px trigger; while a page fetch is in flight it shows the
    shared activity pulse + token-colored caption. */
 .browse-load-more {
+  grid-column: 1 / -1;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;

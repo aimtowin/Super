@@ -116,8 +116,10 @@ import { useT, useLocale, translateForLocale, type AppLocale } from "./i18n";
 import type { AiApiFormat } from "../shared/ai-endpoints";
 import type { ApplicationMenuCommand } from "../shared/application-menu";
 import type { SuperMcpSettingsApi } from "../shared/mcp";
-import type { HistoryStatus } from "../shared/protocol/responses";
+import type { AssetChangeEvent, HistoryStatus } from "../shared/protocol/responses";
 import { createCoalescedRefresh } from "./coalesced-refresh";
+import { createSerialPoll } from "./serial-poll";
+import { invalidateChangedAssetArtifacts } from "./asset-change-cache";
 import { isEditableTextTarget } from "../shared/edit-context-menu";
 import type { SearchQuery } from "../shared/asset-types";
 import {
@@ -1771,6 +1773,8 @@ function AppInner() {
     Map<string, string>
   >(new Map());
   const [mediaJobsOpen, setMediaJobsOpen] = useState(false);
+  const taskStatusLibraryId = library?.libraryId;
+  const taskStatusPollRef = useRef<ReturnType<typeof createSerialPoll> | null>(null);
   const [mediaJobs, setMediaJobs] = useState<MediaJobStatus | null>(null);
   const [aiJobs, setAiJobs] = useState<AiJobStatus | null>(null);
   const [pluginJobs, setPluginJobs] = useState<PluginJobStatus | null>(null);
@@ -2654,6 +2658,7 @@ function AppInner() {
       }
 
       setCanvasPrefs((p) => ({ ...p, cardSize: nextSize }));
+      if (cardResizeAnchorRef.current) root.dataset.cardSizeRestoring = "true";
       // Super-32p: always re-anchor after settle; width/size reflow may reset
       // scrollTop mid-wait, and bailing left the visible set wrong.
       scheduleAnchorRestore(
@@ -2662,6 +2667,7 @@ function AppInner() {
         cardSizeRestoreFrameRef,
         30,
         () => {
+          delete root.dataset.cardSizeRestoring;
           cardResizeAnchorRef.current = null;
           cardResizeScrollSnapshotRef.current = null;
         },
@@ -6189,11 +6195,16 @@ function AppInner() {
       closeContextMenu();
       return;
     }
+    // Navigation also invalidates a pending ordinary browse. An empty draft
+    // does not start another query, so relying on loadContent to bump this
+    // generation lets an older refresh repopulate its deliberately empty view.
     await closeAssetPreview(false);
+    contentLoadGenerationRef.current += 1;
     closeContextMenu();
     workspaceCanvasRef.current?.scrollTo({ top: 0, left: 0 });
     resetBrowsePagination();
     setAssets([]);
+    setContentLoading(false);
     setShowTrash(false);
     setShowTagManagement(false);
     setActivePluginSidebarViewId(null);
@@ -6220,6 +6231,7 @@ function AppInner() {
 
   async function refreshSmartCollectionResults(collectionId: string) {
     if (!api || !library) return;
+    const generation = ++contentLoadGenerationRef.current;
     try {
       const result = await api.executeSmartCollection({
         libraryId: library.libraryId,
@@ -6228,6 +6240,7 @@ function AppInner() {
         limit: BROWSE_PAGE_SIZE,
         offset: 0,
       });
+      if (generation !== contentLoadGenerationRef.current) return;
       if (!result.ok) throw new LibraryOperationError(result.error);
       setSmartCollections((current) =>
         current.map((collection) =>
@@ -6245,7 +6258,9 @@ function AppInner() {
         offset: result.value.offset,
       });
     } catch (caught) {
-      setError(toMessage(caught, t("toast.smartCollectionRunFailed"), locale));
+      if (generation === contentLoadGenerationRef.current) {
+        setError(toMessage(caught, t("toast.smartCollectionRunFailed"), locale));
+      }
     }
   }
 
@@ -7852,30 +7867,40 @@ function AppInner() {
   useEffect(() => {
     if (!api || !library) return;
     let reloadTimer: number | undefined;
-    let reloadInFlight = false;
-    let reloadQueued = false;
+    let disposed = false;
+    let pendingAssetEvent: AssetChangeEvent | undefined;
     let networkReloadCooldownTimer: number | undefined;
     let lastNetworkReloadAt = 0;
     let assetChangeDebounceTimer: number | undefined;
+    // Share the same bounded read for import, ordinary changes and NAS signals.
+    // A long read must not accumulate another full query every debounce period.
+    const reconciliation = createCoalescedRefresh(async () => {
+      const event = pendingAssetEvent;
+      pendingAssetEvent = undefined;
+      await reloadCurrentContentRef.current();
+      if (disposed || !event) return;
+      const selected = selectedAssetIdRef.current;
+      if (selected) {
+        const metadata = await api.getAssetMetadata({ libraryId: library.libraryId, assetId: selected });
+        if (!disposed && metadata.ok && selectedAssetIdRef.current === selected) {
+          applyLoadedMetadata(selected, metadata.value);
+        }
+      }
+      if (disposed) return;
+      if (event.source === "text-save") {
+        setNotice(t("toast.textFileSaved"));
+      } else if (event.source === "watcher") {
+        const missing = event.missingCount
+          ? t("toast.diskSyncedMissing", { count: event.missingCount })
+          : "";
+        setNotice(t("toast.diskSyncedAuto", { count: event.changedCount, missing }));
+      }
+    });
     const scheduleSilentReload = () => {
       if (reloadTimer !== undefined) window.clearTimeout(reloadTimer);
       reloadTimer = window.setTimeout(() => {
         reloadTimer = undefined;
-        if (reloadInFlight) {
-          reloadQueued = true;
-          return;
-        }
-        reloadInFlight = true;
-        void reloadCurrentContentRef
-          .current()
-          .catch(() => undefined)
-          .finally(() => {
-            reloadInFlight = false;
-            if (reloadQueued) {
-              reloadQueued = false;
-              scheduleSilentReload();
-            }
-          });
+        void reconciliation.refresh().catch(() => undefined);
       }, 120);
     };
     const scheduleNetworkLibraryReload = () => {
@@ -7898,10 +7923,7 @@ function AppInner() {
     };
     const unsubscribe = api.onAssetsChanged((event) => {
       if (event.libraryId !== library.libraryId) return;
-      setLayoutThumbnailArtifacts({
-        libraryId: library.libraryId,
-        ids: new Map(),
-      });
+      setLayoutThumbnailArtifacts((current) => invalidateChangedAssetArtifacts(current, event));
       scheduleHistoryRefresh();
       // Super-yqrl: while a user import is applying, each committed asset
       // triggers a silent canvas refresh so cards appear one-by-one.
@@ -7919,35 +7941,9 @@ function AppInner() {
       const latestEvent = event;
       assetChangeDebounceTimer = window.setTimeout(() => {
         assetChangeDebounceTimer = undefined;
-        void Promise.resolve().then(async () => {
-          try {
-            await reloadCurrentContentRef.current();
-            if (selectedAssetId) {
-              const metadata = await api.getAssetMetadata({
-                libraryId: library.libraryId,
-                assetId: selectedAssetId,
-              });
-              if (metadata.ok) {
-                applyLoadedMetadata(selectedAssetId, metadata.value);
-              }
-            }
-            if (latestEvent.source === "text-save") {
-              setNotice(t("toast.textFileSaved"));
-            } else if (latestEvent.source === "watcher") {
-              const missing = latestEvent.missingCount
-                ? t("toast.diskSyncedMissing", { count: latestEvent.missingCount })
-                : "";
-              setNotice(
-                t("toast.diskSyncedAuto", {
-                  count: latestEvent.changedCount,
-                  missing,
-                }),
-              );
-            }
-            // source === 'client' / 'content-replace' (or omitted): silent canvas refresh only.
-          } catch (caught) {
-            setError(toMessage(caught, t("toast.diskChangedRefreshFailed"), locale));
-          }
+        pendingAssetEvent = latestEvent;
+        void reconciliation.refresh().catch((caught) => {
+          if (!disposed) setError(toMessage(caught, t("toast.diskChangedRefreshFailed"), locale));
         });
       }, 300);
     });
@@ -7985,6 +7981,8 @@ function AppInner() {
       // other computer's asset.changed event cannot reach this renderer.
     });
     return () => {
+      disposed = true;
+      reconciliation.dispose();
       if (reloadTimer !== undefined) window.clearTimeout(reloadTimer);
       if (networkReloadCooldownTimer !== undefined) {
         window.clearTimeout(networkReloadCooldownTimer);
@@ -7996,7 +7994,7 @@ function AppInner() {
       unsubscribe();
       unsubscribeLibraryChanged();
     };
-  }, [api, applyLoadedMetadata, library, locale, refreshOperationHistory, selectedAssetId, setError, setNotice, t]);
+  }, [api, applyLoadedMetadata, library, locale, refreshOperationHistory, setError, setNotice, t]);
 
   useEffect(() => {
     if (!api) return;
@@ -9200,68 +9198,52 @@ function AppInner() {
   };
 
   useEffect(() => {
-    if (!mediaJobsOpen || !library || !api) return;
+    if (!taskStatusLibraryId || !api) return;
     let active = true;
     const poll = async () => {
       try {
-        const [mediaResult, aiResult, pluginResult, linkedRemovalResult, linkedIndexResult] = await Promise.all([
-          api.listMediaJobs({ libraryId: library.libraryId }),
-          api.getAiJobStatus({ libraryId: library.libraryId }),
-          api.listPluginJobs({ libraryId: library.libraryId }),
-          api.listLinkedFolderRemovalJobs({ libraryId: library.libraryId }),
-          api.listLinkedFolderIndexJobs({ libraryId: library.libraryId }),
+        // Wait for every request before allowing the next poll, even when one
+        // bridge request rejects during a Worker restart.
+        const [media, ai, plugin, linkedRemoval, linkedIndex] = await Promise.allSettled([
+          api.listMediaJobs({ libraryId: taskStatusLibraryId }),
+          api.getAiJobStatus({ libraryId: taskStatusLibraryId }),
+          api.listPluginJobs({ libraryId: taskStatusLibraryId }),
+          api.listLinkedFolderRemovalJobs({ libraryId: taskStatusLibraryId }),
+          api.listLinkedFolderIndexJobs({ libraryId: taskStatusLibraryId }),
         ]);
-        if (active && mediaResult.ok) setMediaJobs(mediaResult.value);
-        if (active && aiResult.ok) setAiJobs(aiResult.value);
-        if (active && pluginResult.ok) setPluginJobs(pluginResult.value);
-        if (active && linkedRemovalResult.ok) setLinkedFolderRemovalJobs(linkedRemovalResult.value);
-        if (active && linkedIndexResult.ok) setLinkedFolderIndexJobs(linkedIndexResult.value);
+        if (active && media.status === "fulfilled" && media.value.ok) setMediaJobs(media.value.value);
+        if (active && ai.status === "fulfilled" && ai.value.ok) setAiJobs(ai.value.value);
+        if (active && plugin.status === "fulfilled" && plugin.value.ok) setPluginJobs(plugin.value.value);
+        if (active && linkedRemoval.status === "fulfilled" && linkedRemoval.value.ok) setLinkedFolderRemovalJobs(linkedRemoval.value.value);
+        if (active && linkedIndex.status === "fulfilled" && linkedIndex.value.ok) setLinkedFolderIndexJobs(linkedIndex.value.value);
       } catch {
         // Keep the last known task state during a transient Worker restart.
       } finally {
         if (active) setMediaJobsLoading(false);
       }
     };
-    const initial = window.setTimeout(() => {
-      if (active) setMediaJobsLoading(true);
-      void poll();
-    }, 0);
-    const timer = window.setInterval(() => void poll(), 1_000);
+    const controller = createSerialPoll(poll, 2_000);
+    taskStatusPollRef.current = controller;
+    void controller.refresh();
     return () => {
       active = false;
-      window.clearTimeout(initial);
-      window.clearInterval(timer);
+      controller.dispose();
+      if (taskStatusPollRef.current === controller) taskStatusPollRef.current = null;
     };
-  }, [api, library, mediaJobsOpen]);
+  }, [api, taskStatusLibraryId]);
 
   useEffect(() => {
-    if (!library || !api) return;
-    let active = true;
-    const poll = async () => {
-      try {
-        const [mediaResult, aiResult, pluginResult, linkedRemovalResult, linkedIndexResult] = await Promise.all([
-          api.listMediaJobs({ libraryId: library.libraryId }),
-          api.getAiJobStatus({ libraryId: library.libraryId }),
-          api.listPluginJobs({ libraryId: library.libraryId }),
-          api.listLinkedFolderRemovalJobs({ libraryId: library.libraryId }),
-          api.listLinkedFolderIndexJobs({ libraryId: library.libraryId }),
-        ]);
-        if (active && mediaResult.ok) setMediaJobs(mediaResult.value);
-        if (active && aiResult.ok) setAiJobs(aiResult.value);
-        if (active && pluginResult.ok) setPluginJobs(pluginResult.value);
-        if (active && linkedRemovalResult.ok) setLinkedFolderRemovalJobs(linkedRemovalResult.value);
-        if (active && linkedIndexResult.ok) setLinkedFolderIndexJobs(linkedIndexResult.value);
-      } catch {
-        // Keep the last known task state during a transient Worker restart.
-      }
-    };
-    void poll();
-    const timer = window.setInterval(() => void poll(), 2_000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [api, library]);
+    const controller = taskStatusPollRef.current;
+    if (!controller) return;
+    controller.setIntervalMs(mediaJobsOpen ? 1_000 : 2_000);
+    if (mediaJobsOpen) {
+      const initial = window.setTimeout(() => {
+        setMediaJobsLoading(true);
+        void controller.refresh();
+      }, 0);
+      return () => window.clearTimeout(initial);
+    }
+  }, [api, taskStatusLibraryId, mediaJobsOpen]);
 
   async function controlMediaJobs(
     action: "pause" | "resume" | "cancel" | "retry",
@@ -11482,17 +11464,20 @@ function AppInner() {
                       </div>
                     ));
                   })()}
+                  {/* Keep the probe inside the content-sized grid. As a separate
+                      workspace grid row it can sit before the overflowing
+                      virtual canvas and never intersect at the actual tail. */}
+                  {/* Super-87pd: invisible tail probe. A jump to the end fills
+                      the last window, not pages 0 → 100 → 200. Super-6z5r:
+                      no spinner or "loading more" copy. */}
+                  {browsePagination.hasMorePages && (
+                    <div
+                      ref={browsePagination.sentinelRef}
+                      className="browse-load-more"
+                      aria-hidden="true"
+                    />
+                  )}
                   </div>
-                )}
-                {/* Super-87pd: invisible tail probe. A jump to the end fills
-                    the last window, not pages 0 → 100 → 200. Super-6z5r:
-                    no spinner or "loading more" copy. */}
-                {browsePagination.hasMorePages && (
-                  <div
-                    ref={browsePagination.sentinelRef}
-                    className="browse-load-more"
-                    aria-hidden="true"
-                  />
                 )}
               </>
             ) : (
