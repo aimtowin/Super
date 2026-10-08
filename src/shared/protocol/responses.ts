@@ -356,11 +356,13 @@ export const assetChangeEventSchema = z.strictObject({
   /** Optional precise invalidation; older/watcher events retain full reconciliation. */
   assetIds: z.array(nonBlankString).min(1).max(500).optional(),
   /**
-   * `watcher` = external disk reconciliation (only this shows the disk-sync toast).
+   * `watcher` = disk reconciliation (only this may show the disk-sync toast).
    * `text-save` / `client` / `content-replace` = in-app mutations; UI should use
    * operation-specific copy or silent canvas refresh.
    */
   source: z.enum(['watcher', 'text-save', 'client', 'content-replace']).optional(),
+  /** A watcher presentation hint, never a domain invalidation/refresh gate. */
+  suppressWatcherNotification: z.boolean().optional(),
 });
 
 export type AssetChangeEvent = z.infer<typeof assetChangeEventSchema>;

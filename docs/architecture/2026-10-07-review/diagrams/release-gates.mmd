@@ -1,0 +1,18 @@
+flowchart LR
+  SRC["source version / SHA"] --> VERIFY["verify:mainline<br/>lint + TS + extension + library + tests + perf + explicit E2E list"]
+  VERIFY --> MEDIA["媒体来源 / hash / WASM / native verification"]
+  MEDIA --> PKG["Forge package + copied-package gates<br/>fonts / native deps / isolated runtime assets"]
+  PKG --> E2E["packaged-startup：3 cases"]
+  E2E --> INNO["Inno installer + 20 retained deltas<br/>immutable file baseline"]
+  INNO --> SUM["通用 checksums<br/>现状扫描整个 out/make"]
+  MAN["v2.3.16 手工补验<br/>filter UI + fullscreen + native updater + exact artifact set"] -.-> E2E
+  MAN -.-> SUM
+  SUM --> DRAFT["GitHub draft / attachments / SHA verify"]
+  DRAFT --> PUB["正式 Latest（需单独发布授权）"]
+  SUM -.-> ECS["ECS publish 独立脚本<br/>暂停，需当次授权"]
+  G["计划：versioned gate manifest<br/>PASS / FAIL / SKIP / NOT-RUN / BLOCKED + capability"] -.-> VERIFY
+  G -.-> E2E
+  A["计划：唯一 target-version artifact manifest<br/>hash / upload / resume / promotion 共用"] -.-> SUM
+  P["计划：构建时provenance receipt<br/>source snapshot / dirty fingerprint / package hashes"] -.-> PKG
+  P -.-> INNO
+  P -.-> A

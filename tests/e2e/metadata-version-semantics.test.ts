@@ -33,6 +33,9 @@ test("does not display the metadata concurrency token as a file version", async 
 
   try {
     const window = await application.firstWindow();
+    await expect(window.locator("#quick-start-guide")).toBeVisible();
+    await window.getByRole("button", { name: "跳过引导", exact: true }).click();
+    await expect(window.locator("#quick-start-guide")).toBeHidden();
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();
@@ -40,6 +43,10 @@ test("does not display the metadata concurrency token as a file version", async 
       .getByRole("button", { name: "导入文件", exact: true })
       .first()
       .click();
+    // Clicking starts the asynchronous import; it does not await its commit.
+    // Wait for the actual visible asset before the original exact-one API check.
+    await expect(window.locator(".asset-card")).toHaveCount(1);
+    await expect(window.locator(".asset-card").first()).toBeVisible();
 
     // Super-4rr4: locate the card by its stable data-asset-id instead of the
     // accessible name — a narrow card can wrap the long file name

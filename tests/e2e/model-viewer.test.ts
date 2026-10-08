@@ -205,7 +205,9 @@ test("shows HDRI names in the trigger and larger previews in the picker", async 
     await expect(trigger.locator(".model-viewer-hdri-trigger-thumb")).toHaveCount(0);
     await trigger.click();
 
-    const picker = viewer.locator('[role="listbox"]');
+    // The picker is portaled outside the viewer so its controls stay above
+    // clipping and drag regions. Exercise the real document-level listbox.
+    const picker = window.getByRole("listbox");
     await expect(picker).toBeVisible();
     await expect(picker.getByRole("option")).toHaveCount(4);
     const previews = picker.locator(".model-viewer-hdri-option-thumb");

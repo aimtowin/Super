@@ -5,9 +5,12 @@
  * current latest.json manifest.
  */
 import { spawn } from 'node:child_process';
-import { access, readdir, readFile, rm, stat } from 'node:fs/promises';
+import { access, readdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadArtifactDerivative, validateLegacyBaseline } from './artifact-manifest.mjs';
+import { loadPackageBuildProvenance } from './build-with-provenance.mjs';
+import { ownedPath, ownedRoot, unverified } from './derivative-producer-utils.mjs';
 
 import {
   DELTA_SOURCE_RETENTION,
@@ -38,26 +41,27 @@ async function exists(filePath) {
   }
 }
 
-function run(command, args) {
+function run(command, args, settings) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: repoRoot, shell: false, stdio: 'inherit' });
+    const child = spawn(command, args, settings);
     child.once('error', reject);
     child.once('exit', (code, signal) => {
-      if (code === 0) resolve();
+      if (code === 0) resolve({ status: 0 });
       else reject(new Error(`${command} exited with ${String(code)}${signal ? ` (${signal})` : ''}.`));
     });
   });
 }
 
-async function currentVersion() {
-  const manifest = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'));
+async function currentVersion(root) {
+  const manifest = JSON.parse(await readFile(await ownedPath(root, path.join(root, 'package.json')), 'utf8'));
   if (typeof manifest.version !== 'string' || !semver.test(manifest.version)) {
     fail('package.json has no valid semantic version.');
   }
   return manifest.version;
 }
 
-async function readBaselines(baselineDirectory) {
+async function readBaselines(root, baselineDirectory) {
+  await ownedPath(root, baselineDirectory, { directory: true });
   let names;
   try {
     names = await readdir(baselineDirectory);
@@ -69,7 +73,7 @@ async function readBaselines(baselineDirectory) {
     const manifestPath = path.join(baselineDirectory, name);
     let manifest;
     try {
-      manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+      manifest = JSON.parse(await readFile(await ownedPath(root, manifestPath), 'utf8'));
     } catch {
       fail(`Invalid baseline manifest: ${manifestPath}`);
     }
@@ -78,6 +82,7 @@ async function readBaselines(baselineDirectory) {
       fail(`Baseline filename/version mismatch: ${manifestPath}`);
     }
     if (baselines.has(version)) fail(`Duplicate baseline version: ${version}`);
+    validateLegacyBaseline(manifest, version);
     baselines.set(version, manifestPath);
   }
   return baselines;
@@ -87,38 +92,54 @@ function deltaStem(fromVersion, toVersion) {
   return `Super-win-x86-64-${fromVersion}-to-${toVersion}-delta`;
 }
 
-async function removePreviousTargetDeltas(outputDirectory, version) {
+async function removePreviousTargetDeltas(root, outputDirectory, version) {
   let names;
   try {
+    await ownedPath(root, outputDirectory, { directory: true });
     names = await readdir(outputDirectory);
   } catch {
-    return;
+    // Missing output is normal, but a linked/invalid path must not be ignored.
+    if (!await exists(outputDirectory)) return;
+    throw unverified('Invalid owned delta output directory.');
   }
   const marker = `-to-${version}-delta`;
   const removable = names.filter((name) => name.startsWith('Super-win-x86-64-')
     && name.includes(marker)
     && (name.endsWith('.zip') || name.endsWith('.json') || name.endsWith('.iss')));
-  await Promise.all(removable.map((name) => rm(path.join(outputDirectory, name), { force: true })));
+  for (const name of removable) await ownedPath(root, path.join(outputDirectory, name));
+  for (const name of removable) {
+    await rm(path.join(outputDirectory, name), { force: true });
+    if (name.endsWith('.zip')) {
+      const locator = path.join(root, 'out/.build-provenance/artifacts', `${name}.json`);
+      if (await exists(locator)) { await ownedPath(root, locator); await rm(locator); }
+    }
+  }
 }
 
-async function removeSkippedDelta(outputDirectory, fromVersion, toVersion) {
+async function removeSkippedDelta(root, outputDirectory, fromVersion, toVersion) {
   const stem = deltaStem(fromVersion, toVersion);
   await Promise.all(['.zip', '.json', '.iss'].map((extension) =>
-    rm(path.join(outputDirectory, `${stem}${extension}`), { force: true })));
+    ownedPath(root, path.join(outputDirectory, `${stem}${extension}`), { missing: true }).then((filename) => rm(filename, { force: true }))));
+  const locator = path.join(root, 'out/.build-provenance/artifacts', `${stem}.zip.json`);
+  if (await exists(locator)) { await ownedPath(root, locator); await rm(locator); }
 }
 
-async function main() {
-  const version = await currentVersion();
-  const baselineDirectory = path.resolve(argument('--baseline-dir') ?? path.join(repoRoot, 'release', 'baselines'));
-  const packageDirectory = path.resolve(argument('--package-dir') ?? path.join(repoRoot, 'out', 'Super-win32-x64'));
-  const outputDirectory = path.resolve(argument('--output-dir') ?? path.join(repoRoot, 'out', 'make', 'delta'));
-  const fullPackagePath = path.resolve(argument('--full-package') ?? path.join(repoRoot, 'out', 'make', `Super-win-x86-64-${version}-setup.zip`));
-  const dryRun = process.argv.includes('--dry-run');
-  const baselines = await readBaselines(baselineDirectory);
+export async function buildRetainedDeltas(options = {}) {
+  const root = await ownedRoot(options.repoRoot ?? repoRoot);
+  const version = await currentVersion(root);
+  const baselineDirectory = path.resolve(options.baselineDirectory ?? path.join(root, 'release/baselines'));
+  const packageDirectory = path.resolve(options.packageRoot ?? path.join(root, 'out/Super-win32-x64'));
+  const outputDirectory = path.resolve(options.outputDirectory ?? path.join(root, 'out/make/delta'));
+  const fullPackagePath = path.resolve(options.fullPackagePath ?? path.join(root, 'out/make', `Super-win-x86-64-${version}-setup.zip`));
+  const packageReceipt = await loadPackageBuildProvenance({ repoRoot: root, packageRoot: packageDirectory, targetVersion: version, platform: 'win32-x64' });
+  const ports = { repoRoot: root, packageRoot: packageDirectory, packageReceipt, targetVersion: version, platform: 'win32-x64' };
+  const fullProof = await loadArtifactDerivative({ ...ports, artifactPath: fullPackagePath });
+  if (fullProof.kind !== 'full-update') throw unverified('Retained deltas require the exact full ZIP producer proof.');
+  await ownedPath(root, outputDirectory, { missing: true, directory: true });
+  const dryRun = options.dryRun === true;
+  const baselines = await readBaselines(root, baselineDirectory);
   const sources = selectRetainedDeltaSources([...baselines.keys()], version);
-  if (!await exists(fullPackagePath)) fail(`Full update archive does not exist: ${fullPackagePath}`);
-  if (!await exists(packageDirectory)) fail(`Packaged application does not exist: ${packageDirectory}`);
-  const fullPackageBytes = (await stat(fullPackagePath)).size;
+  const fullPackageBytes = fullProof.artifact.bytes;
   if (fullPackageBytes <= 0) fail(`Full update archive is empty: ${fullPackagePath}`);
 
   console.log(`[build-retained-deltas] ${sources.length}/${DELTA_SOURCE_RETENTION} retained source version(s) selected for ${version}.`);
@@ -126,26 +147,30 @@ async function main() {
     console.log(`[build-retained-deltas] Sources: ${sources.join(', ') || '(none)'}`);
     return;
   }
-  await removePreviousTargetDeltas(outputDirectory, version);
+  await loadArtifactDerivative({ ...ports, artifactPath: fullPackagePath });
+  await removePreviousTargetDeltas(root, outputDirectory, version);
+  const runner = options.run ?? run;
   for (const sourceVersion of sources) {
-    await run(process.execPath, [
-      buildDeltaScript,
+    const result = await runner(process.execPath, [
+      root === repoRoot ? buildDeltaScript : path.join(root, 'scripts/release/build-inno-delta.mjs'),
       '--from-version', sourceVersion,
       '--to-version', version,
       '--baseline', baselines.get(sourceVersion),
       '--package-dir', packageDirectory,
       '--output-dir', outputDirectory,
-    ]);
+    ], { cwd: root, shell: false, stdio: 'inherit', env: options.env ?? process.env });
+    if (result?.error || result?.status !== 0) throw unverified(`Delta child failed: ${result?.error?.message ?? String(result?.status)}`);
     const stem = deltaStem(sourceVersion, version);
     const metadataPath = path.join(outputDirectory, `${stem}.json`);
     const archivePath = path.join(outputDirectory, `${stem}.zip`);
-    const metadata = JSON.parse(await readFile(metadataPath, 'utf8'));
-    const archiveBytes = (await stat(archivePath)).size;
+    const metadata = JSON.parse(await readFile(await ownedPath(root, metadataPath), 'utf8'));
+    const proof = await loadArtifactDerivative({ ...ports, artifactPath: archivePath });
+    const archiveBytes = proof.artifact.bytes;
     if (metadata?.fromVersion !== sourceVersion || metadata?.toVersion !== version || metadata?.size !== archiveBytes) {
       fail(`Generated delta metadata is invalid: ${metadataPath}`);
     }
     if (!isDeltaWithinSizeLimit(archiveBytes, fullPackageBytes)) {
-      await removeSkippedDelta(outputDirectory, sourceVersion, version);
+      await removeSkippedDelta(root, outputDirectory, sourceVersion, version);
       console.log(`[build-retained-deltas] Skipped ${sourceVersion} -> ${version}: ${(archiveBytes / 1024 / 1024).toFixed(1)} MB exceeds ${(MAX_DELTA_TO_FULL_RATIO * 100).toFixed(0)}% of the full package.`);
       continue;
     }
@@ -153,10 +178,15 @@ async function main() {
   }
   // build-inno-delta uses this fixed intermediate filename. Published delta
   // ZIPs are self-contained, so do not let the intermediate enter checksums.
-  await rm(path.join(outputDirectory, 'SuperSetup.exe'), { force: true });
+  // Compiler intermediates now remain in fresh owned GUID stages, never under
+  // the publication directory. No generic old SuperSetup.exe is touched here.
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+async function main() {
+  await buildRetainedDeltas({ baselineDirectory: argument('--baseline-dir'), packageRoot: argument('--package-dir'),
+    outputDirectory: argument('--output-dir'), fullPackagePath: argument('--full-package'), dryRun: process.argv.includes('--dry-run') });
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });
+}

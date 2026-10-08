@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="1110" viewBox="0 0 1560 1110" role="img" aria-labelledby="title desc">
+  <title id="title">Super Lib v2.3.16 代码架构总览</title>
+  <desc id="desc">从受限 React Renderer，经 contextBridge 和 Electron Main，到 Library UtilityProcess 及各资产库数据；附插件脚本运行时、浏览器扩展、MCP、更新与发布边界。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#396bb7"/></marker>
+    <style>
+      text{font-family:'Segoe UI','Microsoft YaHei',sans-serif;fill:#18283b}
+      .section{font-size:19px;font-weight:650}.name{font-size:16px;font-weight:600}.body{font-size:14px;fill:#42546b}.small{font-size:12px;fill:#53667d}
+      .panel{fill:#ffffff;stroke:#ccd8e5;stroke-width:1.3}.card{fill:#f4f7fb;stroke:#d8e1ed;stroke-width:1}.flow{fill:none;stroke:#396bb7;stroke-width:2;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="1560" height="1110" fill="#edf2f7"/>
+  <text x="36" y="57" font-size="31" font-weight="700">Super Lib · 代码架构总览</text>
+  <text x="36" y="89" class="body">v2.3.16 · 本地优先桌面应用 · 运行时结构与数据所有权，而不是建议重写的目标架构</text>
+  <text x="1524" y="58" text-anchor="end" class="body">2026-10-07</text>
+  <text x="1524" y="87" text-anchor="end" class="small">审查 HEAD 67298c1 / 发行源码 ac4c244</text>
+  <rect x="36" y="113" width="1488" height="57" rx="6" fill="#e1ebf9"/>
+  <text x="56" y="147" class="name">654 TS 模块</text><text x="257" y="147" class="name">2,067 本地依赖声明</text>
+  <text x="532" y="147" class="name">SQLite schema 49</text><text x="816" y="147" class="body">审查范围：进程 · 领域 · 调度 · 安全边界 · 回归与发行</text>
+  <text x="36" y="199" class="small">① UI 保持交互状态；② Main 拥有宿主能力与权限；③ Worker 拥有数据库和文件工作流。异步任务可交错，不等于多写者架构。</text>
+  <rect x="36" y="214" width="440" height="506" rx="8" class="panel"/>
+  <rect x="556" y="214" width="440" height="506" rx="8" class="panel"/>
+  <rect x="1076" y="214" width="448" height="506" rx="8" class="panel"/>
+  <text x="58" y="247" class="section">Renderer · 受限 React UI</text>
+  <text x="58" y="272" class="small">sandbox / contextIsolation / nodeIntegration=false</text>
+  <rect x="56" y="291" width="400" height="65" rx="5" class="card"/>
+  <text x="72" y="316" class="name">main.tsx → Providers → App / AppInner</text>
+  <text x="72" y="340" class="body">Locale · Theme · Elevation · Menu · Card feel</text>
+  <rect x="56" y="370" width="400" height="104" rx="5" class="card"/>
+  <text x="72" y="396" class="name">浏览 / 发现 / 组织</text>
+  <text x="72" y="421" class="body">Sidebar · Filter · Search · Sort · Collection</text>
+  <text x="72" y="445" class="body">100 summaries / layout chunks / idsOnly selection</text>
+  <text x="72" y="466" class="small">Grid · Masonry · Justified：窗口化 DOM / 几何索引</text>
+  <rect x="56" y="488" width="400" height="89" rx="5" class="card"/>
+  <text x="72" y="514" class="name">Inspector / Viewer / Plugin surfaces</text>
+  <text x="72" y="540" class="body">图片 · 视频 · 音频 · 文本 · PDF · Three.js</text>
+  <text x="72" y="563" class="small">预览身份独立；刷新不是导航，不应退出全屏</text>
+  <rect x="56" y="591" width="400" height="71" rx="5" class="card"/>
+  <text x="72" y="617" class="name">受限 Preload / contextBridge</text>
+  <text x="72" y="644" class="body">固定 channel + typed API / 事件订阅</text>
+  <text x="58" y="693" class="small">独立窗口：floating preview / critical confirmation</text>
+  <text x="578" y="247" class="section">Electron Main · 受信宿主</text>
+  <text x="578" y="272" class="small">index.ts：组合根仍包含大量业务编排</text>
+  <rect x="576" y="291" width="400" height="65" rx="5" class="card"/>
+  <text x="592" y="317" class="name">Window / Tray / Shell / IPC Router</text>
+  <text x="592" y="341" class="body">sender + payload 校验 / 生命周期 / 原生交互</text>
+  <rect x="576" y="370" width="400" height="83" rx="5" class="card"/>
+  <text x="592" y="396" class="name">LibraryWorkerClient</text>
+  <text x="592" y="421" class="body">requestId · deadline · events · shutdown</text>
+  <text x="592" y="442" class="small">super:// source / artifact：授权、Range、流取消</text>
+  <rect x="576" y="467" width="400" height="83" rx="5" class="card"/>
+  <text x="592" y="493" class="name">Automation / Plugins / External ingress</text>
+  <text x="592" y="518" class="body">Gateway · permissions · idempotency · confirmation</text>
+  <text x="592" y="539" class="small">包安装、贡献、provider/job、MCP、扩展上传</text>
+  <rect x="576" y="564" width="400" height="98" rx="5" class="card"/>
+  <text x="592" y="590" class="name">Updater / Offscreen render / Diagnostics</text>
+  <text x="592" y="615" class="body">下载校验 → Pending → Inno → 自动重开</text>
+  <text x="592" y="641" class="body">3D / HTML thumbnails：Main 监管专用窗口</text>
+  <text x="578" y="693" class="small">不要把 UtilityProcess 或 unrestricted plugin 等同强沙箱</text>
+  <text x="1098" y="247" class="section">Library UtilityProcess · Worker</text>
+  <text x="1098" y="272" class="small">异步 handler 可交错；better-sqlite3 语句同步</text>
+  <rect x="1096" y="291" width="408" height="65" rx="5" class="card"/>
+  <text x="1112" y="317" class="name">worker/index.ts → LibraryService façade</text>
+  <text x="1112" y="341" class="body">开库 / 兼容与恢复 / 搜索 / 文件与组织</text>
+  <rect x="1096" y="370" width="408" height="83" rx="5" class="card"/>
+  <text x="1112" y="396" class="name">Import / Reconciliation / Watcher</text>
+  <text x="1112" y="421" class="body">source snapshot · stage · hash · lease · manifest</text>
+  <text x="1112" y="442" class="small">提交不可回滚边界；离线与确认删除必须区分</text>
+  <rect x="1096" y="467" width="408" height="83" rx="5" class="card"/>
+  <text x="1112" y="493" class="name">Media / AI / Sync schedulers</text>
+  <text x="1112" y="518" class="body">视口优先 · 资源限制 · fencing · tray pause</text>
+  <text x="1112" y="539" class="small">AI opt-in / 独立 AI 内容层 / WebDAV 同步</text>
+  <rect x="1096" y="564" width="408" height="98" rx="5" class="card"/>
+  <text x="1112" y="590" class="name">媒体执行与查询缓存</text>
+  <text x="1112" y="615" class="body">Sharp / FFmpeg / OIIO / PDF / ufbx WASM</text>
+  <text x="1112" y="641" class="body">browse epoch / data_version / FTS5 / revision keys</text>
+  <text x="1098" y="693" class="small">事件 → Main → UI；后台变化不接管用户预览状态</text>
+  <path d="M476 625H556" class="flow"/><text x="516" y="612" text-anchor="middle" class="small">IPC</text>
+  <path d="M996 410H1076" class="flow"/><text x="1036" y="393" text-anchor="middle" class="small">Port</text>
+  <rect x="36" y="786" width="440" height="215" rx="8" class="panel"/>
+  <rect x="556" y="786" width="440" height="215" rx="8" class="panel"/>
+  <rect x="1076" y="786" width="448" height="215" rx="8" class="panel"/>
+  <text x="58" y="820" class="section">外部入口 / 发行边界</text>
+  <text x="58" y="850" class="body">Browser extension → loopback + Origin → staging</text>
+  <text x="58" y="878" class="body">MCP → Bearer / Host / Origin → Gateway</text>
+  <text x="58" y="906" class="body">AI / WebDAV / GitHub：用户配置的可选网络</text>
+  <text x="58" y="934" class="body">Release gates → Package → Inno / Delta → SHA</text>
+  <text x="58" y="970" class="small">ECS / MUTAI / 账号部署仍暂停，不属于本次实施</text>
+  <text x="578" y="820" class="section">Main 监管的运行时</text>
+  <text x="578" y="852" class="body">Script Utility：QuickJS + Gateway</text>
+  <text x="578" y="881" class="body">Restricted plugin：QuickJS / 显式 capability</text>
+  <text x="578" y="910" class="body">Unrestricted plugin：Node / 用户显式信任</text>
+  <text x="578" y="939" class="body">Offscreen / child windows：最小独立 bridge</text>
+  <text x="578" y="970" class="small">每个 timer / listener / staging 都需明确 owner 与 dispose</text>
+  <text x="1098" y="820" class="section">每库持久数据 / 文件所有权</text>
+  <text x="1098" y="852" class="body">.super/library.db：资产 / 修订 / 组织 / 任务</text>
+  <text x="1098" y="881" class="body">Assets/：托管原文件；linked roots：外部源</text>
+  <text x="1098" y="910" class="body">.super/operations：stage / rollback / recovery</text>
+  <text x="1098" y="939" class="body">.super/artifacts / backups：派生物与验证备份</text>
+  <text x="1098" y="970" class="small">本地 WAL；network/unknown DELETE；保留 durability</text>
+  <path d="M776 720V786" class="flow"/>
+  <path d="M1300 720V786" class="flow"/>
+  <path d="M256 786V752H536V511H556" class="flow" stroke-dasharray="5 4"/>
+  <text x="36" y="1043" class="body">结论：保留多进程模块化单体；先完善请求 / 会话 / 文件所有权，再做有指标的局部优化，最后小步提取领域模块。</text>
+  <text x="36" y="1076" class="small">说明：overview 是可读总图；完整目录与 2,067 依赖边见 inventory.json；运行时、导入时序、浏览刷新、数据域与发布门禁另有 Mermaid 源图。</text>
+</svg>

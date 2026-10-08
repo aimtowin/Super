@@ -90,6 +90,134 @@ function watchClock(startMs = 1_000_000) {
   };
 }
 
+function importClientFile(service: LibraryService, libraryId: string, sourcePath: string) {
+  const plan = service.prepareImport({ libraryId, sourceKind: 'files', sourcePaths: [sourcePath] });
+  return service.resolveImport({ importId: plan.importId, suspectedDuplicate: 'skip', nameConflict: 'keep-both' });
+}
+
+describe('watcher domain events versus per-library notification suppression', () => {
+  it('emits B watcher changes during A client mutation window without suppressing B notifications', async () => {
+    const root = temporaryRoot();
+    const observers = observerHarness();
+    const scheduler = new ManualScheduler();
+    const { clock } = watchClock();
+    const events: unknown[] = [];
+    const service = newService({ observerFactory: observers.factory, scheduler, watchNotifyClock: clock,
+      onAssetsChanged: (event) => events.push(event) });
+    const a = service.createLibrary({ displayName: 'Client A', selectedParentPath: root });
+    const b = service.createLibrary({ displayName: 'External B', selectedParentPath: root });
+    const source = path.join(root, 'client.txt');
+    writeFileSync(source, 'client import');
+    importClientFile(service, a.libraryId, source);
+    events.length = 0;
+    writeFileSync(path.join(b.libraryPath, 'Assets', 'external.txt'), 'external B');
+    observers.callbacks[1]!();
+    scheduler.flush();
+    await service.waitForWatchedRefreshes(b.libraryId);
+
+    // This is the actual committed Service path, not a notification-only model.
+    expect(service.listAssets({ libraryId: b.libraryId, recursive: true })).toHaveLength(1);
+    expect(events).toEqual([{ type: 'asset.changed', libraryId: b.libraryId,
+      changedCount: 1, missingCount: 0, source: 'watcher' }]);
+  });
+
+  it.each([0, 1_499, 1_500])('always emits same-library committed changes at +%ims, marking only the original 1500ms notification window', async (elapsed) => {
+    const root = temporaryRoot();
+    const observers = observerHarness();
+    const scheduler = new ManualScheduler();
+    const { advance, clock } = watchClock();
+    const events: unknown[] = [];
+    const service = newService({ observerFactory: observers.factory, scheduler, watchNotifyClock: clock,
+      onAssetsChanged: (event) => events.push(event) });
+    const library = service.createLibrary({ displayName: 'Mixed client external', selectedParentPath: root });
+    const source = path.join(root, 'client.txt');
+    writeFileSync(source, 'client import');
+    importClientFile(service, library.libraryId, source);
+    events.length = 0;
+    advance(elapsed);
+    writeFileSync(path.join(library.libraryPath, 'Assets', 'external.txt'), 'external');
+    observers.callbacks[0]!();
+    scheduler.flush();
+    await service.waitForWatchedRefreshes(library.libraryId);
+
+    expect(service.listAssets({ libraryId: library.libraryId, recursive: true })).toHaveLength(2);
+    expect(events).toEqual([{ type: 'asset.changed', libraryId: library.libraryId,
+      changedCount: 1, missingCount: 0, source: 'watcher',
+      ...(elapsed < 1_500 ? { suppressWatcherNotification: true } : {}),
+    }]);
+    // A no-diff observer pulse must not forge a second domain event.
+    observers.callbacks[0]!();
+    scheduler.flush();
+    await service.waitForWatchedRefreshes(library.libraryId);
+    expect(events).toHaveLength(1);
+  });
+
+  it('keeps A and B client windows independent when their mutation deadlines overlap', async () => {
+    const root = temporaryRoot();
+    const observers = observerHarness();
+    const scheduler = new ManualScheduler();
+    const { advance, clock } = watchClock();
+    const events: unknown[] = [];
+    const service = newService({ observerFactory: observers.factory, scheduler, watchNotifyClock: clock,
+      onAssetsChanged: (event) => events.push(event) });
+    const a = service.createLibrary({ displayName: 'Overlapping A', selectedParentPath: root });
+    const b = service.createLibrary({ displayName: 'Overlapping B', selectedParentPath: root });
+    const source = path.join(root, 'client.txt');
+    writeFileSync(source, 'client import');
+    importClientFile(service, a.libraryId, source);
+    advance(1_000);
+    importClientFile(service, b.libraryId, source);
+    advance(500);
+    events.length = 0;
+    writeFileSync(path.join(a.libraryPath, 'Assets', 'external-a.txt'), 'external A');
+    writeFileSync(path.join(b.libraryPath, 'Assets', 'external-b.txt'), 'external B');
+    observers.callbacks[0]!(); observers.callbacks[1]!();
+    scheduler.flush();
+    await Promise.all([service.waitForWatchedRefreshes(a.libraryId), service.waitForWatchedRefreshes(b.libraryId)]);
+
+    expect(service.listAssets({ libraryId: a.libraryId, recursive: true })).toHaveLength(2);
+    expect(service.listAssets({ libraryId: b.libraryId, recursive: true })).toHaveLength(2);
+    expect(events).toHaveLength(2);
+    expect(events).toContainEqual({ type: 'asset.changed', libraryId: a.libraryId,
+      changedCount: 1, missingCount: 0, source: 'watcher' });
+    expect(events).toContainEqual({ type: 'asset.changed', libraryId: b.libraryId,
+      changedCount: 1, missingCount: 0, source: 'watcher', suppressWatcherNotification: true });
+  });
+
+  it('clears only the closed library window while another library stays notification-suppressed', async () => {
+    const root = temporaryRoot();
+    const observers = observerHarness();
+    const scheduler = new ManualScheduler();
+    const { clock } = watchClock();
+    const events: unknown[] = [];
+    const service = newService({ observerFactory: observers.factory, scheduler, watchNotifyClock: clock,
+      onAssetsChanged: (event) => events.push(event) });
+    const a = service.createLibrary({ displayName: 'Reopened A', selectedParentPath: root });
+    const b = service.createLibrary({ displayName: 'Still open B', selectedParentPath: root });
+    const source = path.join(root, 'client.txt');
+    writeFileSync(source, 'client import');
+    importClientFile(service, a.libraryId, source);
+    importClientFile(service, b.libraryId, source);
+    await service.closeLibraryAsync(a.libraryId);
+    const reopened = service.openLibrary(a.libraryPath);
+    expect(reopened.libraryId).toBe(a.libraryId);
+    events.length = 0;
+    writeFileSync(path.join(a.libraryPath, 'Assets', 'external-a.txt'), 'external A');
+    writeFileSync(path.join(b.libraryPath, 'Assets', 'external-b.txt'), 'external B');
+    observers.callbacks[2]!(); observers.callbacks[1]!();
+    scheduler.flush();
+    await Promise.all([service.waitForWatchedRefreshes(a.libraryId), service.waitForWatchedRefreshes(b.libraryId)]);
+
+    expect(service.listAssets({ libraryId: a.libraryId, recursive: true })).toHaveLength(2);
+    expect(service.listAssets({ libraryId: b.libraryId, recursive: true })).toHaveLength(2);
+    expect(events).toHaveLength(2);
+    expect(events).toContainEqual({ type: 'asset.changed', libraryId: a.libraryId,
+      changedCount: 1, missingCount: 0, source: 'watcher' });
+    expect(events).toContainEqual({ type: 'asset.changed', libraryId: b.libraryId,
+      changedCount: 1, missingCount: 0, source: 'watcher', suppressWatcherNotification: true });
+  });
+});
+
 it('defers accumulated tray watcher refreshes until foreground browsing is idle', async () => {
   const root = temporaryRoot();
   const observers = observerHarness();

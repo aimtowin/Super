@@ -12,14 +12,10 @@ import {
   type WorkerResult,
 } from '../shared/protocol/responses';
 import type { ParentPort } from 'electron';
+import { createPendingRenderRpc } from './pending-render-rpc';
+import { createModelRenderOrchestrator } from './model-render-orchestrator';
 import {
-  BUNDLED_HDRI_PRESET_IDS,
-} from '../shared/hdri-presets';
-import {
-  MODEL_THUMBNAIL_DEFAULT_EDGE,
-  MODEL_THUMBNAIL_RENDER_TIMEOUT_MS,
   MODEL_THUMBNAIL_WORKER_REQUEST_TIMEOUT_MS,
-  modelThumbnailFormatForFileName,
   parseModelThumbnailRenderResponse,
   type ModelThumbnailSourceAuthorization,
   type ModelThumbnailRenderRequest,
@@ -237,10 +233,10 @@ function requestPluginMediaProvider(input: Omit<PluginMediaProviderRequest, 'typ
 
 // ── Slice E: offscreen model-thumbnail render client (Super-hnmg) ────
 
-const pendingModelThumbnailRenders = new Map<string, {
-  resolve: (result: ModelThumbnailRenderResult) => void;
-  timer: ReturnType<typeof setTimeout>;
-}>();
+const modelRenderRpc = createPendingRenderRpc<ModelThumbnailRenderResult>({
+  dispatch: (message) => parentPort?.postMessage(message),
+  abortMessage: 'Model thumbnail render request aborted.',
+});
 
 /**
  * Ask Main to render one model thumbnail in the shared offscreen window.
@@ -254,29 +250,14 @@ function requestModelThumbnailRender(
   },
   signal?: AbortSignal,
 ): Promise<ModelThumbnailRenderResult> {
-  const requestId = randomUUID();
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pendingModelThumbnailRenders.delete(requestId);
-      resolve({
-        status: 'failed',
-        errorCode: 'MODEL_RENDER_TIMEOUT',
-        reason: 'no render response from Main within the worker deadline',
-      });
-    }, MODEL_THUMBNAIL_WORKER_REQUEST_TIMEOUT_MS);
-    timer.unref?.();
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      pendingModelThumbnailRenders.delete(requestId);
-      reject(new DOMException('Model thumbnail render request aborted.', 'AbortError'));
-    };
-    signal?.addEventListener('abort', onAbort, { once: true });
-    pendingModelThumbnailRenders.set(requestId, { resolve, timer });
-    parentPort?.postMessage({
-      type: 'model-thumbnail.render-request',
-      requestId,
-      ...input,
-    });
+  return modelRenderRpc.request({
+    timeoutMs: MODEL_THUMBNAIL_WORKER_REQUEST_TIMEOUT_MS,
+    timeoutResult: {
+      status: 'failed', errorCode: 'MODEL_RENDER_TIMEOUT',
+      reason: 'no render response from Main within the worker deadline',
+    },
+    signal,
+    buildMessage: (requestId) => ({ type: 'model-thumbnail.render-request', requestId, ...input }),
   });
 }
 
@@ -291,38 +272,23 @@ function requestModelThumbnailRender(
  * offscreen window. Resolves with the typed result (never rejects except on
  * abort); a missing Main response degrades to DOCUMENT_RENDER_TIMEOUT.
  */
-const pendingDocumentThumbnailRenders = new Map<string, {
-  resolve: (result: DocumentThumbnailRenderResponse['result']) => void;
-  timer: ReturnType<typeof setTimeout>;
-}>();
+const documentRenderRpc = createPendingRenderRpc<DocumentThumbnailRenderResponse['result']>({
+  dispatch: (message) => parentPort?.postMessage(message),
+  abortMessage: 'Document thumbnail render request aborted.',
+});
 
 function requestDocumentThumbnailRender(
   input: Omit<DocumentThumbnailRenderRequest, 'type' | 'requestId'>,
   signal?: AbortSignal,
 ): Promise<DocumentThumbnailRenderResponse['result']> {
-  const requestId = randomUUID();
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pendingDocumentThumbnailRenders.delete(requestId);
-      resolve({
-        status: 'failed',
-        errorCode: 'DOCUMENT_RENDER_TIMEOUT',
-        reason: 'no render response from Main within the worker deadline',
-      });
-    }, DOCUMENT_THUMBNAIL_WORKER_REQUEST_TIMEOUT_MS);
-    timer.unref?.();
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      pendingDocumentThumbnailRenders.delete(requestId);
-      reject(new DOMException('Document thumbnail render request aborted.', 'AbortError'));
-    };
-    signal?.addEventListener('abort', onAbort, { once: true });
-    pendingDocumentThumbnailRenders.set(requestId, { resolve, timer });
-    parentPort?.postMessage({
-      type: 'document-thumbnail.render-request',
-      requestId,
-      ...input,
-    });
+  return documentRenderRpc.request({
+    timeoutMs: DOCUMENT_THUMBNAIL_WORKER_REQUEST_TIMEOUT_MS,
+    timeoutResult: {
+      status: 'failed', errorCode: 'DOCUMENT_RENDER_TIMEOUT',
+      reason: 'no render response from Main within the worker deadline',
+    },
+    signal,
+    buildMessage: (requestId) => ({ type: 'document-thumbnail.render-request', requestId, ...input }),
   });
 }
 
@@ -372,14 +338,6 @@ async function withModelRenderGate<T>(
   } finally {
     release();
   }
-}
-
-/** URL builders mirror 3d-viewer/url-remap (kept local to avoid a renderer import). */
-function modelSourceUrl(libraryId: string, assetId: string, revisionId: string): string {
-  return `super://source/${libraryId}/${assetId}?revision=${encodeURIComponent(revisionId)}`;
-}
-function modelPreviewUrl(libraryId: string, artifactId: string): string {
-  return `super://preview/${libraryId}/${artifactId}`;
 }
 
 const MODEL_FILE_EXTENSIONS = new Set(['.fbx', '.obj', '.glb', '.gltf', '.stl']);
@@ -443,82 +401,12 @@ async function renderModelAiViewsViaMain(input: {
  * FBX_* code — the renderer never sees the raw FBX), companion index, then
  * the Main render request.
  */
-async function orchestrateRender(input: {
-  libraryId: string;
-  assetId: string;
-  revisionId: string;
-  relativeFilePath: string;
-  byteSize: number | null;
-  signal: AbortSignal;
-  /** Multi-view render (AI four views) — omitted for the single thumbnail. */
-  views?: ReadonlyArray<readonly [number, number, number]>;
-}): Promise<ModelThumbnailRenderOutcome> {
-    const format = modelThumbnailFormatForFileName(input.relativeFilePath);
-    if (!format) {
-      return { status: 'failed', errorCode: 'MODEL_LOAD_FAILED' };
-    }
-    let effectiveFormat: ModelThumbnailRenderRequest['format'] = format;
-    let renderUrl: string;
-    if (format === 'fbx') {
-      // Slice B single-flight conversion; only the cached GLB is rendered.
-      const conversion = await handleFbxConvertCommand(libraryService, {
-        libraryId: input.libraryId,
-        assetId: input.assetId,
-      });
-      if (conversion.status !== 'ready') {
-        return {
-          status: 'failed',
-          errorCode: conversion.errorCode,
-          ...(conversion.reason === undefined ? {} : { reason: conversion.reason }),
-        };
-      }
-      effectiveFormat = 'glb';
-      renderUrl = modelPreviewUrl(input.libraryId, conversion.glbArtifactId);
-    } else {
-      renderUrl = modelSourceUrl(input.libraryId, input.assetId, input.revisionId);
-    }
-    const companions = libraryService.resolveModelCompanions({
-      libraryId: input.libraryId,
-      assetId: input.assetId,
-    });
-    const sourceAuthorizations: ModelThumbnailSourceAuthorization[] = [
-      authorizeModelSource(libraryService, {
-        libraryId: input.libraryId,
-        assetId: input.assetId,
-        revisionId: input.revisionId,
-      }),
-      ...companions.map((companion) =>
-        authorizeModelSource(libraryService, {
-          libraryId: input.libraryId,
-          assetId: companion.assetId,
-          revisionId: companion.revisionId,
-        })),
-    ];
-    return requestModelThumbnailRender(
-      {
-        libraryId: input.libraryId,
-        assetId: input.assetId,
-        revisionId: input.revisionId,
-        format: effectiveFormat,
-        renderUrl,
-        companionMap: companions.map((companion) => ({
-          relativeFilePath: companion.relativeFilePath,
-          assetId: companion.assetId,
-          revisionId: companion.revisionId,
-          extension: companion.extension,
-        })),
-        hdriPresetId: BUNDLED_HDRI_PRESET_IDS[0]!,
-        width: MODEL_THUMBNAIL_DEFAULT_EDGE,
-        height: MODEL_THUMBNAIL_DEFAULT_EDGE,
-        timeoutMs: MODEL_THUMBNAIL_RENDER_TIMEOUT_MS,
-        sourceAuthorizations,
-        ...(input.views === undefined
-          ? {}
-          : { views: input.views.map((v) => [v[0], v[1], v[2]] as [number, number, number]) }),
-      },
-      input.signal,
-    );
-}
+const orchestrateRender = createModelRenderOrchestrator({
+  convertFbx: (input) => handleFbxConvertCommand(libraryService, input),
+  resolveCompanions: (input) => libraryService.resolveModelCompanions(input),
+  authorizeSource: (input) => authorizeModelSource(libraryService, input),
+  requestModelRender: requestModelThumbnailRender,
+});
 
 function authorizeModelSource(
   service: LibraryService,
@@ -4280,12 +4168,7 @@ parentPort.on('message', async (event) => {
   try {
     // Slice E: Main's offscreen render result (PNG bytes or typed failure).
     const renderResponse = parseModelThumbnailRenderResponse(input);
-    const pending = pendingModelThumbnailRenders.get(renderResponse.requestId);
-    if (pending) {
-      clearTimeout(pending.timer);
-      pendingModelThumbnailRenders.delete(renderResponse.requestId);
-      pending.resolve(renderResponse.result);
-    }
+    modelRenderRpc.settle(renderResponse.requestId, renderResponse.result);
     return;
   } catch {
     // A normal Worker request or control message; validate it below.
@@ -4294,12 +4177,7 @@ parentPort.on('message', async (event) => {
   try {
     // Super-8ca259: Main's offscreen document capture result.
     const documentResponse = parseDocumentThumbnailRenderResponse(input);
-    const pendingDocument = pendingDocumentThumbnailRenders.get(documentResponse.requestId);
-    if (pendingDocument) {
-      clearTimeout(pendingDocument.timer);
-      pendingDocumentThumbnailRenders.delete(documentResponse.requestId);
-      pendingDocument.resolve(documentResponse.result);
-    }
+    documentRenderRpc.settle(documentResponse.requestId, documentResponse.result);
     return;
   } catch {
     // A normal Worker request or control message; validate it below.
@@ -4308,6 +4186,8 @@ parentPort.on('message', async (event) => {
   try {
     const control = parseWorkerControlMessage(input);
     if (control.type === 'worker.shutdown') {
+      modelRenderRpc.dispose('Worker is shutting down.');
+      documentRenderRpc.dispose('Worker is shutting down.');
       aiJobAbortRegistry.abortAll();
       aiProgressThrottler.clearAll();
       for (const libraryId of [...deferredMediaResourceRetries.keys()]) {

@@ -40,7 +40,7 @@ export type UseBrowserSessionRestoreArgs = {
   collectionRecursiveRef: MutableRefObject<boolean>;
   folderRecursiveRef: MutableRefObject<boolean>;
   setFolderRecursive: (enabled: boolean) => void;
-  setLibrary: Dispatch<SetStateAction<RendererLibrarySummary | null>>;
+  activateLibrary: (summary: RendererLibrarySummary | null) => void;
   setShowTrash: Dispatch<SetStateAction<boolean>>;
   setTrashedAssets: Dispatch<SetStateAction<AssetSummary[]>>;
   setAssetScope: Dispatch<SetStateAction<"all" | "root" | string>>;
@@ -93,7 +93,7 @@ export function useBrowserSessionRestore(
     collectionRecursiveRef,
     folderRecursiveRef,
     setFolderRecursive,
-    setLibrary,
+    activateLibrary,
     setShowTrash,
     setTrashedAssets,
     setAssetScope,
@@ -128,7 +128,7 @@ export function useBrowserSessionRestore(
       const result = await api.listOpen();
       if (!result.ok) throw new LibraryOperationError(result.error);
       activeLibrary = result.value[0] ?? null;
-      setLibrary(activeLibrary);
+      activateLibrary(activeLibrary);
       setShowTrash(false);
       setTrashedAssets([]);
       if (activeLibrary) {
@@ -196,7 +196,7 @@ export function useBrowserSessionRestore(
       setUiState(activeLibrary ? "ready" : "idle");
     } finally {
       // Do not let useBrowserSessionPersist observe the transient empty
-      // selection between setLibrary() and applyStoredBrowserSession().
+      // selection between activation and applyStoredBrowserSession().
       setBrowserSessionReady(true);
     }
   }, [
@@ -217,7 +217,7 @@ export function useBrowserSessionRestore(
     setAssets,
     setError,
     setFolderRecursive,
-    setLibrary,
+    activateLibrary,
     setNavHistoryUi,
     setSearchTotal,
     setSelectedAssetId,

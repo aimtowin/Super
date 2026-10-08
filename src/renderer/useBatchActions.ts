@@ -4,10 +4,13 @@ import type { RendererLibrarySummary } from "../shared/protocol/responses";
 import { LibraryOperationError, toMessage } from "./error-utils";
 import { formatBatchTagNotice } from "./batch-tag-notice";
 import { translateForLocale, useLocale } from "./i18n";
+import type { MetadataReadController, MetadataSessionOwner } from "./metadata-read-controller";
 
 export interface UseBatchActionsParams {
   api: SuperLibraryApi | null;
   library: RendererLibrarySummary | null;
+  metadataController: MetadataReadController;
+  metadataSession: MetadataSessionOwner | null;
   setUiState: (state: "loading" | "importing" | "ready") => void;
   setTags: (tags: TagSummary[]) => void;
   setCollections: (collections: CollectionSummary[]) => void;
@@ -45,6 +48,8 @@ export interface UseBatchActionsResult {
 export function useBatchActions({
   api,
   library,
+  metadataController,
+  metadataSession,
   setUiState,
   setTags,
   setCollections,
@@ -67,7 +72,9 @@ export function useBatchActions({
   }
 
   async function batchAssignTagToSelection(tagId: string, assetIds: string[]) {
-    if (!api || !library || assetIds.length === 0) return;
+    const owner = metadataSession;
+    if (!api || !library || assetIds.length === 0 || !metadataController.isCurrent(owner)) return;
+    const ticket = metadataController.beginMutation(owner, assetIds);
     setUiState("loading");
     try {
       const result = await api.assignTags({
@@ -76,7 +83,11 @@ export function useBatchActions({
         tagIds: [tagId],
       });
       if (!result.ok) throw new LibraryOperationError(result.error);
+      if (!metadataController.isCurrent(owner)) return;
+      const skipped = new Set(result.value.skipped.map((item) => item.assetId));
+      metadataController.commitMutation({ ...ticket, epochs: new Map([...ticket.epochs].filter(([id]) => !skipped.has(id))) });
       const tagResult = await api.listTags({ libraryId: library.libraryId });
+      if (!metadataController.isCurrent(owner)) return;
       if (tagResult.ok) setTags(tagResult.value);
       setNotice(
         formatBatchTagNotice(
@@ -88,6 +99,7 @@ export function useBatchActions({
         result.value.historyEntryId,
       );
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return;
       setError(
         toMessage(
           caught,
@@ -96,12 +108,14 @@ export function useBatchActions({
         ),
       );
     } finally {
-      setUiState("ready");
+      if (metadataController.isCurrent(owner)) setUiState("ready");
     }
   }
 
   async function batchRemoveTagFromSelection(tagId: string, assetIds: string[]) {
-    if (!api || !library || assetIds.length === 0) return;
+    const owner = metadataSession;
+    if (!api || !library || assetIds.length === 0 || !metadataController.isCurrent(owner)) return;
+    const ticket = metadataController.beginMutation(owner, assetIds);
     setUiState("loading");
     try {
       const result = await api.removeTags({
@@ -110,16 +124,22 @@ export function useBatchActions({
         tagIds: [tagId],
       });
       if (!result.ok) throw new LibraryOperationError(result.error);
+      if (!metadataController.isCurrent(owner)) return;
+      const skipped = new Set(result.value.skipped.map((item) => item.assetId));
+      metadataController.commitMutation({ ...ticket, epochs: new Map([...ticket.epochs].filter(([id]) => !skipped.has(id))) });
       const tagResult = await api.listTags({ libraryId: library.libraryId });
+      if (!metadataController.isCurrent(owner)) return;
       if (tagResult.ok) setTags(tagResult.value);
       if (activeTagId === tagId) {
         await chooseTag(tagId);
       }
+      if (!metadataController.isCurrent(owner)) return;
       // Super-ws4k review: tag removals do not broadcast asset.changed, and
       // the tag-filter overlay keeps its filter after the removal — reload the
       // current content so a filtered scope empties immediately instead of
       // showing stale cards until the next navigation.
       await reloadCurrentContent();
+      if (!metadataController.isCurrent(owner)) return;
       setNotice(
         formatBatchTagNotice(
           "remove",
@@ -130,6 +150,7 @@ export function useBatchActions({
         result.value.historyEntryId,
       );
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return;
       setError(
         toMessage(
           caught,
@@ -138,7 +159,7 @@ export function useBatchActions({
         ),
       );
     } finally {
-      setUiState("ready");
+      if (metadataController.isCurrent(owner)) setUiState("ready");
     }
   }
 

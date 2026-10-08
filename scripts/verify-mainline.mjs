@@ -1,29 +1,13 @@
-import { spawnSync } from 'node:child_process';
-
-const npmCli = process.env.npm_execpath;
-if (!npmCli) throw new Error('verify:mainline must be launched through npm.');
+import { MAINLINE_STAGES } from './release/gate-manifest.mjs';
+import { runGates } from './release/run-gates.mjs';
 
 const gateEnvironment = process.platform === 'darwin' && process.arch === 'arm64'
   ? { ...process.env, SUPER_REQUIRE_REAL_MEDIA: '1' }
   : process.env;
 
-const gates = [
-  'lint',
-  'typecheck',
-  'extension:verify',
-  'test:library-availability',
-  'test',
-  'test:perf:search',
-  'test:e2e',
-];
-
-for (const gate of gates) {
-  process.stdout.write(`\n[verify:mainline] npm run ${gate}\n`);
-  const result = spawnSync(process.execPath, [npmCli, 'run', gate], {
-    cwd: process.cwd(),
-    env: gateEnvironment,
-    stdio: 'inherit',
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0) process.exit(result.status ?? 1);
-}
+const report = runGates({
+  stages: MAINLINE_STAGES, root: process.cwd(), environment: gateEnvironment,
+  onResult: (result) => process.stdout.write(`[verify:mainline] ${result.id}: ${result.status} (${result.reason})\n`),
+});
+process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+process.exitCode = report.exitCode;

@@ -1,0 +1,121 @@
+{
+  "schema": 1,
+  "checkedAt": "2026-10-07T12:34:29.435Z",
+  "version": "2.3.16",
+  "sourceCommit": "67298c17d792070b09adc05d5a3af3cac722ff4f",
+  "tests": {
+    "passed": 162,
+    "failed": 0,
+    "skipped": 0,
+    "files": [
+      {
+        "path": "tests/unit/active-discovery-filters.test.ts",
+        "status": "passed",
+        "tests": 6
+      },
+      {
+        "path": "tests/unit/app-logger.test.ts",
+        "status": "passed",
+        "tests": 8
+      },
+      {
+        "path": "tests/unit/asset-change-cache.test.ts",
+        "status": "passed",
+        "tests": 3
+      },
+      {
+        "path": "tests/unit/browse-pagination.test.ts",
+        "status": "passed",
+        "tests": 16
+      },
+      {
+        "path": "tests/unit/coalesced-refresh.test.ts",
+        "status": "passed",
+        "tests": 5
+      },
+      {
+        "path": "tests/unit/dimension-filter-selection.test.ts",
+        "status": "passed",
+        "tests": 18
+      },
+      {
+        "path": "tests/unit/inspector-multi-edit.test.ts",
+        "status": "passed",
+        "tests": 18
+      },
+      {
+        "path": "tests/unit/serial-poll.test.ts",
+        "status": "passed",
+        "tests": 5
+      },
+      {
+        "path": "tests/unit/update-native-ui.test.ts",
+        "status": "passed",
+        "tests": 4
+      },
+      {
+        "path": "tests/unit/viewer-preview-policy.test.ts",
+        "status": "passed",
+        "tests": 6
+      },
+      {
+        "path": "tests/unit/viewport-window.test.ts",
+        "status": "passed",
+        "tests": 10
+      },
+      {
+        "path": "tests/unit/worker-client.test.ts",
+        "status": "passed",
+        "tests": 15
+      },
+      {
+        "path": "tests/worker/import-confirmation.test.ts",
+        "status": "passed",
+        "tests": 8
+      },
+      {
+        "path": "tests/worker/import-source-stability.test.ts",
+        "status": "passed",
+        "tests": 20
+      },
+      {
+        "path": "tests/worker/library-watcher.test.ts",
+        "status": "passed",
+        "tests": 15
+      },
+      {
+        "path": "tests/worker/pending-import-lifecycle.test.ts",
+        "status": "passed",
+        "tests": 5
+      }
+    ]
+  },
+  "sourceUnchanged": {
+    "allInventoriedFilesMatchSha256": true,
+    "count": 1317,
+    "productionDiffAgainstTag": "none",
+    "tag": "v2.3.16"
+  },
+  "artifacts": {
+    "offlineHeadlessBrowser": "Microsoft Edge",
+    "preview": {
+      "width": 1560,
+      "height": 1110,
+      "loaded": true,
+      "documentScrollWidth": 1560,
+      "viewportWidth": 1560
+    },
+    "externalRequests": 0,
+    "svgParsed": true,
+    "pngGenerated": true
+  },
+  "notRun": [
+    "full test suite",
+    "new software build/package",
+    "full application E2E",
+    "native installed update",
+    "real NAS/multi-host",
+    "GPU/large-media soak",
+    "CVE/penetration scan"
+  ]
+}

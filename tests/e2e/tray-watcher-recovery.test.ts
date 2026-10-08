@@ -22,6 +22,9 @@ test('tray restore serves directory reads while coalesced file changes are recon
   });
   try {
     const window = await application.firstWindow();
+    await expect(window.locator('#quick-start-guide')).toBeVisible();
+    await window.getByRole('button', { name: '跳过引导', exact: true }).click();
+    await expect(window.locator('#quick-start-guide')).toBeHidden();
     await window.getByRole('button', { name: '创建资源库' }).click();
     await window.getByRole('textbox', { name: '名称' }).fill('Tray recovery');
     await window.getByRole('button', { name: '创建', exact: true }).click();

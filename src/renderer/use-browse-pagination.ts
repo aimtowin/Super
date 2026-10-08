@@ -304,6 +304,17 @@ export function isIgnorableBrowseWindowFailure(code: string | undefined): boolea
   return code === "CANCELLED";
 }
 
+type BrowseGenerationOwner = {
+  generation: number;
+  inFlightOffsets: Set<number>;
+  layoutInFlight: boolean;
+  disposed: boolean;
+};
+
+function createBrowseGenerationOwner(generation: number): BrowseGenerationOwner {
+  return { generation, inFlightOffsets: new Set(), layoutInFlight: false, disposed: false };
+}
+
 export function useBrowsePagination(
   args: UseBrowsePaginationArgs,
 ): UseBrowsePaginationResult {
@@ -320,12 +331,13 @@ export function useBrowsePagination(
 
   const definitionRef = useRef<BrowsePageDefinition | null>(null);
   const generationRef = useRef(0);
+  // Scope replacement updates this mount's holder. StrictMode effect replay
+  // replaces the holder itself so an older cleanup never disposes the new setup.
+  const lifetimeRef = useRef({ owner: createBrowseGenerationOwner(0) });
   const totalRef = useRef(0);
   const layoutRef = useRef<BrowseLayoutEntry[]>([]);
   const layoutHydrationCompleteRef = useRef(false);
-  const layoutFetchInFlightRef = useRef(false);
   const filledOffsetsRef = useRef<Set<number>>(new Set());
-  const inFlightOffsetsRef = useRef<Set<number>>(new Set());
   const deletedIdsRef = useRef<Set<string>>(new Set());
   const [hasMorePages, setHasMorePages] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -334,13 +346,33 @@ export function useBrowsePagination(
   // The observer must not depend on the large layout array itself.
   const [layoutHydrationVersion, setLayoutHydrationVersion] = useState(0);
 
+  const isCurrentOwner = useCallback((owner: BrowseGenerationOwner) =>
+    !owner.disposed && lifetimeRef.current.owner === owner, []);
+
+  const replaceOwner = useCallback(() => {
+    const lifetime = lifetimeRef.current;
+    lifetime.owner.disposed = true;
+    const owner = createBrowseGenerationOwner(++generationRef.current);
+    lifetime.owner = owner;
+    return owner;
+  }, []);
+
+  useEffect(() => {
+    if (lifetimeRef.current.owner.disposed) {
+      lifetimeRef.current = { owner: createBrowseGenerationOwner(++generationRef.current) };
+    }
+    const lifetime = lifetimeRef.current;
+    return () => { lifetime.owner.disposed = true; };
+  }, []);
+
   const applyTarget = useCallback(
     (definition: BrowsePageDefinition) =>
       definition.target === "trash" ? setTrashedAssets : setAssets,
     [setAssets, setTrashedAssets],
   );
 
-  const refreshHasMore = useCallback((total: number, filled: ReadonlySet<number>) => {
+  const refreshHasMore = useCallback((owner: BrowseGenerationOwner, total: number, filled: ReadonlySet<number>) => {
+    if (!isCurrentOwner(owner)) return;
     // Summaries can finish before the compact geometry (e.g. 173 assets with
     // a deferred first-page count). Keep the probe until both are complete;
     // otherwise loaded tail summaries have no slots and disappear forever.
@@ -355,20 +387,20 @@ export function useBrowsePagination(
       }
     }
     setHasMorePages(false);
-  }, []);
+  }, [isCurrentOwner]);
 
   const hydrateNextLayoutChunk = useCallback(
-    async (definition: BrowsePageDefinition, generation: number) => {
-      if (!api || generation !== generationRef.current) return;
+    async (definition: BrowsePageDefinition, owner: BrowseGenerationOwner) => {
+      if (!api || !isCurrentOwner(owner)) return;
       const offset = layoutRef.current.length;
       if (offset >= totalRef.current) {
         layoutHydrationCompleteRef.current = true;
-        refreshHasMore(totalRef.current, filledOffsetsRef.current);
-        setLayoutHydrationVersion((version) => version + 1);
+        refreshHasMore(owner, totalRef.current, filledOffsetsRef.current);
+        setLayoutHydrationVersion((version) => isCurrentOwner(owner) ? version + 1 : version);
         return;
       }
-      if (layoutFetchInFlightRef.current) return;
-      layoutFetchInFlightRef.current = true;
+      if (owner.layoutInFlight) return;
+      owner.layoutInFlight = true;
       try {
         const page = await fetchBrowseLayout({
           api,
@@ -377,15 +409,15 @@ export function useBrowsePagination(
           limit: Math.min(BROWSE_LAYOUT_CHUNK_SIZE, totalRef.current - offset),
         });
         if (browseDiagnosticsEnabled) window.dispatchEvent(new CustomEvent("super:e2e-browse-layout", {
-          detail: { offset, count: page?.layout.length, total: page?.total, generation, currentGeneration: generationRef.current },
+          detail: { offset, count: page?.layout.length, total: page?.total, generation: owner.generation, currentGeneration: generationRef.current },
         }));
-        if (generation !== generationRef.current) return;
+        if (!isCurrentOwner(owner)) return;
         if (!page || (page.layout.length === 0 && page.total > offset)) {
           // Do not strand the current browse scope if a non-critical geometry
           // response fails. The already-painted section still paginates.
           layoutHydrationCompleteRef.current = true;
-          refreshHasMore(totalRef.current, filledOffsetsRef.current);
-          setLayoutHydrationVersion((version) => version + 1);
+          refreshHasMore(owner, totalRef.current, filledOffsetsRef.current);
+          setLayoutHydrationVersion((version) => isCurrentOwner(owner) ? version + 1 : version);
           return;
         }
         totalRef.current = page.total;
@@ -398,25 +430,26 @@ export function useBrowsePagination(
         layoutRef.current = nextLayout;
         layoutHydrationCompleteRef.current =
           nextLayout.length >= page.total || page.layout.length === 0;
-        refreshHasMore(page.total, filledOffsetsRef.current);
+        refreshHasMore(owner, page.total, filledOffsetsRef.current);
         setBrowseLayout(nextLayout);
-        setLayoutHydrationVersion((version) => version + 1);
+        setLayoutHydrationVersion((version) => isCurrentOwner(owner) ? version + 1 : version);
         applyTarget(definition)((current) =>
-          mergeLoadedBrowsePage({ current, items: [], layout: nextLayout }),
+          isCurrentOwner(owner)
+            ? mergeLoadedBrowsePage({ current, items: [], layout: nextLayout })
+            : current,
         );
       } finally {
-        layoutFetchInFlightRef.current = false;
+        owner.layoutInFlight = false;
       }
     },
-    [api, applyTarget, refreshHasMore, setBrowseLayout, setSearchTotal],
+    [api, applyTarget, isCurrentOwner, refreshHasMore, setBrowseLayout, setSearchTotal],
   );
 
   const beginPage = useCallback(
     (definition: BrowsePageDefinition, firstPage: BrowseFirstPage) => {
+      if (!isCurrentOwner(lifetimeRef.current.owner)) return;
+      const owner = replaceOwner();
       definitionRef.current = definition;
-      generationRef.current += 1;
-      inFlightOffsetsRef.current = new Set();
-      layoutFetchInFlightRef.current = false;
       deletedIdsRef.current = new Set();
       totalRef.current = firstPage.total;
       const initialLayout = firstPage.items.map((asset) => ({
@@ -427,7 +460,7 @@ export function useBrowsePagination(
       }));
       layoutRef.current = initialLayout;
       layoutHydrationCompleteRef.current = firstPage.items.length >= firstPage.total;
-      setLayoutHydrationVersion((version) => version + 1);
+      setLayoutHydrationVersion((version) => isCurrentOwner(owner) ? version + 1 : version);
       setBrowseLayout(initialLayout);
       const filled = new Set<number>();
       filled.add(browsePageOffset(firstPage.offset, BROWSE_PAGE_SIZE));
@@ -435,20 +468,19 @@ export function useBrowsePagination(
       setLoadingMore(false);
       setSearchOffset(firstPage.offset + firstPage.items.length);
       setSearchTotal(firstPage.total);
-      refreshHasMore(firstPage.total, filled);
+      refreshHasMore(owner, firstPage.total, filled);
       applyTarget(definition)([...firstPage.items]);
-      const generation = generationRef.current;
       if (api && !layoutHydrationCompleteRef.current) {
-        void hydrateNextLayoutChunk(definition, generation);
+        void hydrateNextLayoutChunk(definition, owner);
       }
     },
-    [api, applyTarget, hydrateNextLayoutChunk, refreshHasMore, setBrowseLayout, setSearchOffset, setSearchTotal],
+    [api, applyTarget, hydrateNextLayoutChunk, isCurrentOwner, refreshHasMore, replaceOwner, setBrowseLayout, setSearchOffset, setSearchTotal],
   );
 
   const fetchPageAt = useCallback(
-    async (offset: number, generation: number, limit = BROWSE_PAGE_SIZE) => {
+    async (offset: number, owner: BrowseGenerationOwner, limit = BROWSE_PAGE_SIZE) => {
       const definition = definitionRef.current;
-      if (!definition || !api) return;
+      if (!definition || !api || !isCurrentOwner(owner)) return;
       const coveredOffsets: number[] = [];
       for (
         let covered = offset;
@@ -458,8 +490,8 @@ export function useBrowsePagination(
         coveredOffsets.push(covered);
       }
       if (coveredOffsets.every((covered) => filledOffsetsRef.current.has(covered))) return;
-      if (coveredOffsets.some((covered) => inFlightOffsetsRef.current.has(covered))) return;
-      for (const covered of coveredOffsets) inFlightOffsetsRef.current.add(covered);
+      if (coveredOffsets.some((covered) => owner.inFlightOffsets.has(covered))) return;
+      for (const covered of coveredOffsets) owner.inFlightOffsets.add(covered);
       if (browseDiagnosticsEnabled) {
         // Super-9e1d8d: issue-time marker. The existing -result/-page events
         // only fire on resolution/apply, so jump-latency attribution could not
@@ -468,9 +500,13 @@ export function useBrowsePagination(
           detail: {
             requestOffset: offset,
             requestLimit: limit,
-            requestGeneration: generation,
+            requestGeneration: owner.generation,
           },
         }));
+      }
+      if (!isCurrentOwner(owner)) {
+        for (const covered of coveredOffsets) owner.inFlightOffsets.delete(covered);
+        return;
       }
       setLoadingMore(true);
       try {
@@ -500,11 +536,11 @@ export function useBrowsePagination(
               ok: result.ok,
               errorCode: result.ok ? null : result.error.code,
               currentGeneration: generationRef.current,
-              requestGeneration: generation,
+              requestGeneration: owner.generation,
             },
           }));
         }
-        if (generation !== generationRef.current) return;
+        if (!isCurrentOwner(owner)) return;
         if (!result.ok) {
           if (isIgnorableBrowseWindowFailure(result.error.code)) return;
           setHasMorePages(false);
@@ -529,6 +565,7 @@ export function useBrowsePagination(
             },
           }));
         }
+        if (!isCurrentOwner(owner)) return;
         if (isDiscardedBrowseWindowPage(page, offset, totalRef.current)) return;
         const liveItems = excludeLocallyDeletedAssets(
           page.items,
@@ -544,10 +581,11 @@ export function useBrowsePagination(
         }
         setSearchTotal(totalRef.current);
         setSearchOffset(offset + page.items.length);
-        refreshHasMore(totalRef.current, filledOffsetsRef.current);
+        refreshHasMore(owner, totalRef.current, filledOffsetsRef.current);
         const snippets = page.snippets ?? [];
         if (snippets.length > 0) {
           setSearchSnippets((current) => {
+            if (!isCurrentOwner(owner)) return current;
             const next = new Map(current);
             for (const snippet of snippets) {
               next.set(snippet.assetId, snippet.text);
@@ -556,22 +594,21 @@ export function useBrowsePagination(
           });
         }
         applyTarget(definition)((current) =>
-          mergeLoadedBrowsePage({
-            current,
-            items: liveItems,
-            layout: layoutRef.current,
-          }),
+          isCurrentOwner(owner)
+            ? mergeLoadedBrowsePage({ current, items: liveItems, layout: layoutRef.current })
+            : current,
         );
       } finally {
         for (const covered of coveredOffsets) {
-          inFlightOffsetsRef.current.delete(covered);
+          owner.inFlightOffsets.delete(covered);
         }
-        if (inFlightOffsetsRef.current.size === 0) setLoadingMore(false);
+        if (isCurrentOwner(owner) && owner.inFlightOffsets.size === 0) setLoadingMore(false);
       }
     },
     [
       api,
       applyTarget,
+      isCurrentOwner,
       onLoadMoreFailed,
       refreshHasMore,
       setSearchOffset,
@@ -583,8 +620,8 @@ export function useBrowsePagination(
   const ensureVisibleRange = useCallback(
     async (startIndex: number, endIndex: number) => {
       const definition = definitionRef.current;
-      if (!definition || !api) return;
-      const generation = generationRef.current;
+      const owner = lifetimeRef.current.owner;
+      if (!definition || !api || !isCurrentOwner(owner)) return;
       const firstOffset = browsePageOffset(
         Math.max(0, Math.min(startIndex, endIndex)),
         BROWSE_PAGE_SIZE,
@@ -597,7 +634,7 @@ export function useBrowsePagination(
       for (let offset = firstOffset; offset <= lastOffset; offset += BROWSE_PAGE_SIZE) {
         if (
           !filledOffsetsRef.current.has(offset)
-          && !inFlightOffsetsRef.current.has(offset)
+          && !owner.inFlightOffsets.has(offset)
         ) offsets.push(offset);
       }
       if (offsets.length === 0) return;
@@ -619,17 +656,19 @@ export function useBrowsePagination(
         500,
         selectedRun.at(-1)! - requestOffset + BROWSE_PAGE_SIZE,
       );
-      await fetchPageAt(requestOffset, generation, requestLimit);
+      await fetchPageAt(requestOffset, owner, requestLimit);
     },
-    [api, fetchPageAt],
+    [api, fetchPageAt, isCurrentOwner],
   );
 
   const appendNextPage = useCallback(async () => {
+    const owner = lifetimeRef.current.owner;
+    if (!isCurrentOwner(owner)) return;
     const total = totalRef.current;
     if (total <= 0) return;
     if (!layoutHydrationCompleteRef.current) {
       const definition = definitionRef.current;
-      if (definition) await hydrateNextLayoutChunk(definition, generationRef.current);
+      if (definition) await hydrateNextLayoutChunk(definition, owner);
       return;
     }
     // The sentinel sits after the last slot. Fill the tail window — never the
@@ -637,20 +676,26 @@ export function useBrowsePagination(
     // pages 0, 100, 200…
     const last = Math.max(0, total - 1);
     await ensureVisibleRange(last, last);
-  }, [ensureVisibleRange, hydrateNextLayoutChunk]);
+  }, [ensureVisibleRange, hydrateNextLayoutChunk, isCurrentOwner]);
 
   const fetchScopeAssetIds = useCallback(
-    (): Promise<string[] | null> =>
-      fetchBrowseScopeAssetIdsGuarded({
+    async (): Promise<string[] | null> => {
+      const owner = lifetimeRef.current.owner;
+      if (!isCurrentOwner(owner)) return null;
+      const ids = await fetchBrowseScopeAssetIdsGuarded({
         api,
         definition: definitionRef.current,
         currentGeneration: () => generationRef.current,
-      }),
-    [api],
+      });
+      return isCurrentOwner(owner) ? ids : null;
+    },
+    [api, isCurrentOwner],
   );
 
   const removeLocally = useCallback(
     (assetIds: string[], removedCount: number) => {
+      const owner = lifetimeRef.current.owner;
+      if (!isCurrentOwner(owner)) return;
       for (const assetId of assetIds) {
         deletedIdsRef.current.add(assetId);
       }
@@ -660,41 +705,44 @@ export function useBrowsePagination(
         (entry) => !removed.has(entry.assetId),
       );
       setBrowseLayout(layoutRef.current);
-      refreshHasMore(totalRef.current, filledOffsetsRef.current);
+      refreshHasMore(owner, totalRef.current, filledOffsetsRef.current);
     },
-    [refreshHasMore, setBrowseLayout],
+    [isCurrentOwner, refreshHasMore, setBrowseLayout],
   );
 
   const reset = useCallback(() => {
+    if (!isCurrentOwner(lifetimeRef.current.owner)) return;
+    const owner = replaceOwner();
     definitionRef.current = null;
-    generationRef.current += 1;
     totalRef.current = 0;
     layoutRef.current = [];
     layoutHydrationCompleteRef.current = false;
-    layoutFetchInFlightRef.current = false;
-    setLayoutHydrationVersion((version) => version + 1);
+    setLayoutHydrationVersion((version) => isCurrentOwner(owner) ? version + 1 : version);
     setBrowseLayout([]);
     filledOffsetsRef.current = new Set();
-    inFlightOffsetsRef.current = new Set();
     setLoadingMore(false);
     setHasMorePages(false);
-  }, [setBrowseLayout]);
+  }, [isCurrentOwner, replaceOwner, setBrowseLayout]);
 
   const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    if (!isCurrentOwner(lifetimeRef.current.owner)) return;
     setSentinelNode(node);
-  }, []);
+  }, [isCurrentOwner]);
 
   useEffect(() => {
-    if (!sentinelNode) return;
+    const owner = lifetimeRef.current.owner;
+    if (!sentinelNode || !isCurrentOwner(owner)) return;
     const root = browseLoadMoreObserverRoot(sentinelNode);
     const observer = new IntersectionObserver(
       (entries) => {
+        if (!isCurrentOwner(owner)) return;
         for (const entry of entries) {
           if (browseDiagnosticsEnabled) window.dispatchEvent(new CustomEvent("super:e2e-browse-sentinel", {
-            detail: { intersecting: entry.isIntersecting, nearTail: isBrowseRootNearTail(root), inFlight: inFlightOffsetsRef.current.size, layoutComplete: layoutHydrationCompleteRef.current, total: totalRef.current },
+            detail: { intersecting: entry.isIntersecting, nearTail: isBrowseRootNearTail(root), inFlight: owner.inFlightOffsets.size, layoutComplete: layoutHydrationCompleteRef.current, total: totalRef.current },
           }));
           if (
-            entry.isIntersecting
+            isCurrentOwner(owner)
+            && entry.isIntersecting
             && isBrowseRootNearTail(root)
             && shouldRunBrowseSentinel({
               layoutHydrationComplete: layoutHydrationCompleteRef.current,
@@ -703,7 +751,7 @@ export function useBrowsePagination(
             // A visible-range request is the interactive path. Let it finish
             // before the low-priority tail fallback can start another Worker
             // query for the same scope.
-            && inFlightOffsetsRef.current.size === 0
+            && owner.inFlightOffsets.size === 0
           ) void appendNextPage();
         }
       },
@@ -714,7 +762,7 @@ export function useBrowsePagination(
     // IntersectionObserver only reports threshold crossings. A visible probe
     // suppressed by an interactive page request needs another observation
     // once that request settles, even if the scroll position did not change.
-  }, [appendNextPage, layoutHydrationVersion, loadingMore, sentinelNode]);
+  }, [appendNextPage, isCurrentOwner, layoutHydrationVersion, loadingMore, sentinelNode]);
 
   return {
     beginPage,

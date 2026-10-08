@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AssetSummary } from "../../src/shared/asset-types";
@@ -320,5 +321,13 @@ describe("discarded browse-window pages (Super-87pd)", () => {
   it("does not treat a cancelled window as a load-more failure", () => {
     expect(isIgnorableBrowseWindowFailure("CANCELLED")).toBe(true);
     expect(isIgnorableBrowseWindowFailure("FOLDER_NOT_FOUND")).toBe(false);
+  });
+});
+
+describe("App pagination failure callback wiring", () => {
+  it("passes a locale-aware useCallback instead of recreating the failure handler for every toast render", () => {
+    const app = readFileSync(new URL("../../src/renderer/App.tsx", import.meta.url), "utf8");
+    expect(app).toMatch(/const onBrowseLoadMoreFailed = useCallback\(\s*\(\) => setError\(t\("toast\.loadMoreFailed"\)\),\s*\[setError, t\],?\s*\)/u);
+    expect(app).toMatch(/onLoadMoreFailed:\s*onBrowseLoadMoreFailed/u);
   });
 });

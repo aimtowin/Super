@@ -1,10 +1,9 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
-import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import process from 'node:process';
 import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
+import { createBuildProvenanceHooks } from './scripts/release/build-with-provenance.mjs';
 
 const projectRoot = import.meta.dirname;
 const appIconBase = path.join(projectRoot, 'assets', 'icons', 'app');
@@ -43,72 +42,10 @@ function isPackagedDebugOrBuildArtifact(file: string): boolean {
   return /\.(?:map|pdb|ipdb|iobj|lib|exp|obj)$/i.test(file);
 }
 
-function nativeMediaPlatform(platform: string, arch: string): string {
-  const expectedHost = `${process.platform}-${process.arch}`;
-  const target = `${platform}-${arch}`;
-  if (target !== expectedHost || !['darwin-arm64', 'win32-x64'].includes(target)) {
-    throw new Error(
-      `Super release packages must be built and media-verified natively; host=${expectedHost}, target=${target}.`,
-    );
-  }
-  return target;
-}
-
-function runNodeGate(script: string, args: string[], extraEnv?: NodeJS.ProcessEnv): void {
-  const result = spawnSync(process.execPath, [path.join(projectRoot, script), ...args], {
-    cwd: projectRoot,
-    env: { ...process.env, ...extraEnv },
-    stdio: 'inherit',
-    shell: false,
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`${script} release gate exited with ${String(result.status)}.`);
-  }
-}
-
 const config: ForgeConfig = {
-  hooks: {
-    // These hooks are part of Forge itself, so invoking `electron-forge`
-    // directly cannot bypass either the promoted-source gate or verification
-    // of the bytes that Packager actually copied.
-    prePackage: async (_forgeConfig, platform, arch) => {
-      // Super Windows 特别警告（2026-08-21 事故）：forge 会在打包时对
-      // native 依赖执行 @electron/rebuild，子进程（cp.fork）继承本进程
-      // 环境变量。本机若装有 vcpkg 用户级 MSBuild 集成，链接器会把
-      // better-sqlite3 自带静态 sqlite3 错解析为 vcpkg 的动态 sqlite3.dll，
-      // 打包产物 .node 依赖缺失 DLL 导致所有资源库打不开。必须在 forge
-      // rebuild 之前强制 VcpkgEnabled=false（与 scripts/rebuild-native.mjs
-      // 一致）。
-      process.env.VcpkgEnabled = 'false';
-      const mediaPlatform = nativeMediaPlatform(platform, arch);
-      // Recover ignored media executables from the pinned Super-Build
-      // release when a clean checkout or a local replacement fails the gate.
-      runNodeGate('scripts/media-binaries.mjs', ['ensure', '--platform', mediaPlatform]);
-      // The browser extension is not shipped to a store yet; it ships inside
-      // the app bundle (Contents/Resources/extension) for manual loading.
-      // Rebuild it so the package always carries the current sources.
-      runNodeGate('scripts/build-extension.mjs', []);
-    },
-    postPackage: async (_forgeConfig, packageResult) => {
-      nativeMediaPlatform(packageResult.platform, packageResult.arch);
-      for (const outputPath of packageResult.outputPaths) {
-        runNodeGate('scripts/verify-package.mjs', [], {
-          SUPER_PACKAGE_ROOT: outputPath,
-        });
-      }
-    },
-    // Forge supports `make --skip-package`; verify the exact default package
-    // input again so that shortcut cannot feed stale or modified bytes to a
-    // maker without passing the package gate.
-    preMake: async () => {
-      const mediaPlatform = nativeMediaPlatform(process.platform, process.arch);
-      runNodeGate('scripts/media-binaries.mjs', ['ensure', '--platform', mediaPlatform]);
-      runNodeGate('scripts/verify-package.mjs', [], {
-        SUPER_PACKAGE_ROOT: path.join(projectRoot, 'out', `Super-${mediaPlatform}`),
-      });
-    },
-  },
+  // generateAssets owns the early immutable receipt; existing media/ufbx,
+  // extension, copied-payload and VcpkgEnabled gates remain inside these hooks.
+  hooks: createBuildProvenanceHooks({ repoRoot: projectRoot }),
   packagerConfig: {
     icon: appIconBase,
     // File-level delta installers compare package paths by hash. A monolithic

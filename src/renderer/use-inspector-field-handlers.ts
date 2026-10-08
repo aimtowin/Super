@@ -8,6 +8,7 @@ import {
   type Dispatch,
   type FormEvent,
   type SetStateAction,
+  type MutableRefObject,
 } from "react";
 
 import type { AssetMetadataResult, AssetSummary } from "../shared/asset-types";
@@ -24,11 +25,15 @@ import type {
   InspectorAiContent,
   MetadataSaveFields,
 } from "./use-inspector-asset-metadata";
+import type { MetadataReadController, MetadataSessionOwner } from "./metadata-read-controller";
 
 export type UseInspectorFieldHandlersParams = {
   api: SuperLibraryApi | null;
   shellApi: SuperShellApi | null | undefined;
   library: RendererLibrarySummary | null;
+  metadataController: MetadataReadController;
+  metadataSession: MetadataSessionOwner | null;
+  selectedAssetIdRef: MutableRefObject<string | undefined>;
   selectedAsset: AssetSummary | undefined;
   selectedAssetId: string | undefined;
   selectedAssetIds: readonly string[];
@@ -70,6 +75,9 @@ export function useInspectorFieldHandlers({
   api,
   shellApi,
   library,
+  metadataController,
+  metadataSession,
+  selectedAssetIdRef,
   selectedAsset,
   selectedAssetId,
   selectedAssetIds,
@@ -91,7 +99,6 @@ export function useInspectorFieldHandlers({
   saveMetadata,
   saveMetadataForSelection,
   batchSetRatingForSelection,
-  loadMetadata,
   setNotice,
   setError,
 }: UseInspectorFieldHandlersParams) {
@@ -100,7 +107,9 @@ export function useInspectorFieldHandlers({
 
   const handlePromoteAiDescription = useCallback(
     async (value: string) => {
-      if (!api || !library || !selectedAsset) return;
+      const owner = metadataSession;
+      if (!api || !library || !selectedAsset || !metadataController.isCurrent(owner)) return;
+      const assetId = selectedAsset.assetId;
       const trimmed = value.trim();
       const previous = aiContent?.description?.trim() ?? "";
       if (
@@ -111,19 +120,27 @@ export function useInspectorFieldHandlers({
       }
       try {
         await saveMetadata({ description: trimmed });
+        // saveMetadata reports errors through UI rather than rejecting. Do not
+        // clear AI provenance unless the versioned human description committed.
+        if (!metadataController.isCurrent(owner) || metadataController.hasConflict(owner, assetId) ||
+          metadataController.peek(owner, assetId)?.description?.trim() !== trimmed) return;
         const cleared = await api.clearAiContent({
           libraryId: library.libraryId,
           scope: { kind: "asset", assetIds: [selectedAsset.assetId] },
           confirm: false,
           fields: ["description"],
         });
+        if (!metadataController.isCurrent(owner)) return;
         if (!cleared.ok) {
           setError(
             toMessage(cleared.error, t("toast.aiContentClearFailed"), locale),
           );
           return;
         }
+        metadataController.invalidate(owner, [assetId]);
+        if (selectedAssetIdRef.current !== assetId) return;
         setAiContent((current) => {
+          if (!metadataController.isCurrent(owner) || selectedAssetIdRef.current !== assetId) return current;
           if (!current || current.assetId !== selectedAsset.assetId) {
             return current;
           }
@@ -136,21 +153,22 @@ export function useInspectorFieldHandlers({
             Boolean(rest.tags && rest.tags.length > 0) || rest.rating != null;
           return stillHas ? rest : null;
         });
-        setDescriptionIsAi(false);
+        setDescriptionIsAi((current) => metadataController.isCurrent(owner) && selectedAssetIdRef.current === assetId ? false : current);
         setNotice(t("toast.aiContentPromoted"));
-        void loadMetadata();
       } catch (caught) {
-        setError(toMessage(caught, t("toast.aiContentPromoteFailed"), locale));
+        if (metadataController.isCurrent(owner)) setError(toMessage(caught, t("toast.aiContentPromoteFailed"), locale));
       }
     },
     [
       aiContent,
       api,
       library,
-      loadMetadata,
+      metadataController,
+      metadataSession,
       locale,
       saveMetadata,
       selectedAsset,
+      selectedAssetIdRef,
       setAiContent,
       setDescriptionIsAi,
       setError,
@@ -206,7 +224,7 @@ export function useInspectorFieldHandlers({
         selectedAssetId ?? undefined,
       );
       if (target?.kind === "batch") {
-        if (multiEdit?.rating.kind === "mixed") return;
+        if (multiEdit?.rating.kind !== "uniform") return;
         setEditRating(rating);
         void batchSetRatingForSelection(rating, target.assetIds);
         return;

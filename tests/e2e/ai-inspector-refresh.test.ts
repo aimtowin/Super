@@ -1,14 +1,82 @@
 import { createServer, type Server } from "node:http";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { _electron as electron, expect, test } from "@playwright/test";
+import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
 import sharp from "sharp";
+import type { AppLogEntry } from "../../src/shared/app-log";
+import type { SuperLibraryApi } from "../../src/shared/library-api";
 
-import { resolveElectronExecutablePath } from "./electron-test-helpers";
+import { resolveElectronExecutablePath, resolveSessionLogPath } from "./electron-test-helpers";
 
 test.describe.configure({ timeout: 180_000 });
+
+type HydrationProbe = {
+  original: (...args: unknown[]) => unknown;
+  release: () => void;
+  firstPageInvocations: number;
+  completedFirstPages: number;
+  rootCountHeld: boolean;
+};
+type ProbeGlobal = typeof globalThis & { __superA7HydrationProbe?: HydrationProbe };
+
+async function installHydrationProbe(application: ElectronApplication, libraryId: string): Promise<void> {
+  await application.evaluate(({ ipcMain }, libraryId) => {
+    const channel = "super:library:request";
+    const host = globalThis as ProbeGlobal;
+    if (host.__superA7HydrationProbe) throw new Error("Hydration IPC fixture is already installed.");
+    // Test-only Electron private API: detect support explicitly. An unsupported
+    // build is a fixture failure, not a claimed business regression.
+    const handlers = (ipcMain as unknown as { _invokeHandlers?: Map<string, (...args: unknown[]) => unknown> })._invokeHandlers;
+    const original = handlers?.get(channel);
+    if (!original) throw new Error("Hydration IPC fixture requires the existing authorized Main handler.");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const probe: HydrationProbe = { original, release, firstPageInvocations: 0, completedFirstPages: 0, rootCountHeld: false };
+    host.__superA7HydrationProbe = probe;
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, async (event, input: unknown) => {
+      const command = input as { type?: string; libraryId?: string; limit?: number; offset?: number;
+        idsOnly?: boolean; layoutOnly?: boolean; scope?: { kind?: string; folderId?: string | null } };
+      const search = command?.type === "asset.search.request" && command.libraryId === libraryId;
+      const firstPage = search && command.limit === 100 && command.offset === 0 && !command.idsOnly && !command.layoutOnly;
+      if (firstPage) probe.firstPageInvocations += 1;
+      // Preserve original authorization, parsing and Main -> Worker execution.
+      // Only the completed first root-count response is held from the renderer.
+      const result = await original(event, input);
+      if (firstPage && (result as { ok?: boolean })?.ok === true) probe.completedFirstPages += 1;
+      if (search && command.limit === 1 && command.scope?.kind === "folder"
+        && command.scope.folderId === null && !probe.rootCountHeld) {
+        probe.rootCountHeld = true;
+        await gate;
+      }
+      return result;
+    });
+  }, libraryId);
+}
+
+async function hydrationProbeStats(application: ElectronApplication) {
+  return application.evaluate(() => {
+    const probe = (globalThis as ProbeGlobal).__superA7HydrationProbe;
+    if (!probe) throw new Error("Missing owned hydration IPC fixture.");
+    return { firstPageInvocations: probe.firstPageInvocations, completedFirstPages: probe.completedFirstPages, rootCountHeld: probe.rootCountHeld };
+  });
+}
+
+async function releaseHydrationProbe(application: ElectronApplication, restore = false): Promise<void> {
+  await application.evaluate(({ ipcMain }, restore) => {
+    const host = globalThis as ProbeGlobal;
+    const probe = host.__superA7HydrationProbe;
+    if (!probe) return;
+    probe.release();
+    if (restore) {
+      ipcMain.removeHandler("super:library:request");
+      ipcMain.handle("super:library:request", probe.original);
+      delete host.__superA7HydrationProbe;
+    }
+  }, restore);
+}
 
 /**
  * Super-c9r3 / REQ-INSPECT-006 regression: after an AI analysis completes
@@ -119,6 +187,7 @@ test("Inspector refreshes immediately after AI analysis completes", async () => 
 
   try {
     const window = await application.firstWindow();
+    await window.getByRole("button", { name: "跳过引导", exact: true }).click();
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();
@@ -273,11 +342,13 @@ test("Inspector refreshes after a BATCH AI analysis completes", async () => {
       SUPER_E2E_OPEN_LIBRARY_PATH: libraryPath,
       SUPER_E2E_USER_DATA_PATH: userDataPath,
       SUPER_E2E_IMPORT_FILES: [firstImage, secondImage].join(path.delimiter),
+      SUPER_WORKER_CMD_LOG: "1",
     },
   });
 
   try {
     const window = await application.firstWindow();
+    await window.getByRole("button", { name: "跳过引导", exact: true }).click();
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();
@@ -311,6 +382,18 @@ test("Inspector refreshes after a BATCH AI analysis completes", async () => {
     await primaryCard.click();
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
     await secondCard.click({ modifiers: [modifier as "Control" | "Meta"] });
+    const libraryId = await window.evaluate(async () => {
+      const api = (window as unknown as { super: { library: SuperLibraryApi } }).super.library;
+      const result = await api.listOpen();
+      if (!result.ok || !result.value[0]) throw new Error("Missing isolated batch library.");
+      return result.value[0].libraryId;
+    });
+    const logsPath = await application.evaluate(({ app }) => app.getPath("logs"));
+    const countWorkerSearches = () => readFileSync(resolveSessionLogPath(logsPath), "utf8").trim().split(/\r?\n/)
+      .filter(Boolean).map((line) => JSON.parse(line) as AppLogEntry)
+      .filter((entry) => entry.scope === "worker.cmd.roundtrip" && entry.context?.commandType === "asset.search").length;
+    const workerSearchesBefore = countWorkerSearches();
+    await installHydrationProbe(application, libraryId);
     await primaryCard.click({ button: "right" });
     await window
       .getByRole("menuitem", { name: /AI 分析（2 项）/ })
@@ -327,13 +410,50 @@ test("Inspector refreshes after a BATCH AI analysis completes", async () => {
       )
       .toBe(true);
 
+    // Both durable job completion and the real batch terminal UI must occur
+    // while the same first hydration is held. The 100 injected completions are
+    // only Renderer/preload event coverage; the batch itself uses real local AI.
+    await expect.poll(async () => (await hydrationProbeStats(application)).rootCountHeld).toBe(true);
+    await expect(window.locator(".workspace-notice-stack").getByText("AI 分析完成：成功 2 项、失败 0 项。", { exact: true })).toBeVisible();
+    const assetId = await primaryCard.getAttribute("data-asset-id");
+    expect(assetId).toBeTruthy();
+    await application.evaluate(({ BrowserWindow }, payload) => {
+      const target = BrowserWindow.getAllWindows().find((entry) => entry.isVisible());
+      if (!target) throw new Error("Missing owned batch renderer.");
+      for (let index = 0; index < 100; index += 1) target.webContents.send("super:ai:completed", {
+        type: "ai.analysis.completed", libraryId: payload.libraryId, assetId: payload.assetId, fieldCount: 1, tagCount: 1,
+      });
+    }, { libraryId, assetId });
+    // Includes ordinary mutation debounce; no first-page read may escape the
+    // held hydration lease when either AI entry or a domain event fires.
+    await window.waitForTimeout(650);
+    const held = await hydrationProbeStats(application);
+    expect(held.firstPageInvocations).toBe(1);
+    expect(held.completedFirstPages).toBe(1);
+    await expect.poll(() => countWorkerSearches() - workerSearchesBefore).toBe(3);
+    const workerSearchesHeld = countWorkerSearches() - workerSearchesBefore;
+    expect(workerSearchesHeld).toBe(3); // Actual Worker: first page + root + trash.
+    await releaseHydrationProbe(application);
+    await expect.poll(async () => (await hydrationProbeStats(application)).completedFirstPages).toBe(2);
+    await window.waitForTimeout(650);
+    const completed = await hydrationProbeStats(application);
+    expect(completed.firstPageInvocations).toBe(2);
+    await expect.poll(() => countWorkerSearches() - workerSearchesBefore).toBe(6);
+    const workerSearchesCompleted = countWorkerSearches() - workerSearchesBefore;
+    expect(workerSearchesCompleted).toBe(6);
+    console.info("[ai-hydration-lease]", JSON.stringify({ held, completed, workerSearchesHeld, workerSearchesCompleted }));
+
     // The primary asset's Inspector must show the batch tag immediately.
     const inspector = window.locator(".inspector-pane");
     await expect(inspector.getByText("批量分析标签")).toBeVisible({
       timeout: 15_000,
     });
   } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    await application.close();
+    try {
+      await releaseHydrationProbe(application, true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await application.close();
+    }
   }
 });

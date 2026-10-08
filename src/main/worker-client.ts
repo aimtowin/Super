@@ -46,12 +46,16 @@ import {
 } from '../shared/document-thumbnail-protocol';
 
 interface PendingRequest {
+  child: UtilityProcess;
   commandType: string;
   resolve(result: WorkerResult): void;
   reject(error: Error): void;
   sentAt: number | undefined;
   timer: ReturnType<typeof setTimeout> | undefined;
 }
+
+export type WorkerRequestTerminalReason = 'response' | 'not-dispatched' | 'worker-exit';
+type TerminalCallback = (reason: WorkerRequestTerminalReason) => void | Promise<void>;
 
 // 15s: a cold UtilityProcess spawn under memory pressure (large game/IDE
 // processes, AV scanning the fresh bundle) legitimately exceeds 5s before the
@@ -179,7 +183,10 @@ export class LibraryWorkerClient {
   #child: UtilityProcess | undefined;
   #ready = false;
   #pending = new Map<string, PendingRequest>();
-  #expiredRequestIds = new Map<string, { commandType: string; sentAt: number }>();
+  #expiredRequestIds = new Map<string, { commandType: string; sentAt: number; child: UtilityProcess }>();
+  // Caller deadlines do not prove the origin process has stopped reading.
+  #resources = new Map<string, { child: UtilityProcess; onTerminal: TerminalCallback }>();
+  #retiredChildren = new WeakSet<UtilityProcess>();
   // Super-2cc492（真实 NAS 生产库事故，2026-08-23）：开库后的第一批元数据
   // 查询在 SMB 冷缓存下实测单条 20-35s（assets 表每页一次网络往返），远超
   // 15s 默认超时；响应迟到即被丢弃、UI 呈现「空资源库」且无法自愈。开库
@@ -274,9 +281,24 @@ export class LibraryWorkerClient {
         attempt,
       });
     });
-    child.on('exit', this.#onExit);
+    child.on('exit', (code) => this.#onExit(child, code));
 
     await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        clearTimeout(timer);
+        child.off('message', onInitialMessage);
+        child.off('exit', onInitialExit);
+      };
+      const fail = (error: Error, kill = true) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        this.#retiredChildren.add(child);
+        if (this.#child === child) { this.#child = undefined; this.#ready = false; }
+        if (kill) child.kill();
+        reject(error);
+      };
       const timer = setTimeout(() => {
         // CI 诊断：超时是启动慢还是 worker 死，靠 worker.boot / worker.exit
         // 日志区分；此处补一条超时记录（此前 reject 前无日志，main 若随后
@@ -286,44 +308,40 @@ export class LibraryWorkerClient {
           new Error('Library Worker ready handshake timed out.'),
           { pid: child.pid, timeoutMs: READY_TIMEOUT_MS, attempt },
         );
-        child.kill();
-        reject(new Error('Library Worker ready handshake timed out.'));
+        fail(new Error('Library Worker ready handshake timed out.'));
       }, READY_TIMEOUT_MS);
 
       const onInitialMessage = (message: unknown) => {
+        if (settled || this.#child !== child) return;
         try {
           parseWorkerReadyMessage(message);
         } catch (error) {
-          clearTimeout(timer);
-          child.off('message', onInitialMessage);
-          child.kill();
-          reject(new Error('Library Worker sent a malformed ready handshake.', { cause: error }));
+          fail(new Error('Library Worker sent a malformed ready handshake.', { cause: error }));
           return;
         }
 
-        clearTimeout(timer);
-        child.off('message', onInitialMessage);
+        settled = true;
+        cleanup();
         this.#ready = true;
-        child.on('message', this.#onMessage);
+        child.on('message', (message) => this.#onMessage(child, message));
         resolve();
       };
 
-      child.once('exit', (code) => {
-        if (!this.#ready) {
-          clearTimeout(timer);
-          reject(new Error(`Library Worker exited before ready (${code}).`));
-        }
-      });
+      const onInitialExit = (code: number) => fail(new Error(`Library Worker exited before ready (${code}).`), false);
+      child.once('exit', onInitialExit);
       child.on('message', onInitialMessage);
     });
   }
 
   request(
     command: WorkerCommand,
-    options: { dispatch?: 'automation-readonly'; historyContext?: WorkerHistoryContext } = {},
+    options: { dispatch?: 'automation-readonly'; historyContext?: WorkerHistoryContext; onTerminal?: TerminalCallback } = {},
   ): Promise<WorkerResult> {
     const child = this.#child;
-    if (!child || !this.#ready) return Promise.reject(new Error('Library Worker is unavailable.'));
+    if (!child || !this.#ready) {
+      if (options.onTerminal) this.#notifyTerminal(options.onTerminal, 'not-dispatched');
+      return Promise.reject(new Error('Library Worker is unavailable.'));
+    }
 
     const requestId = randomUUID();
     if (
@@ -346,7 +364,7 @@ export class LibraryWorkerClient {
         ? undefined
         : setTimeout(() => {
           this.#pending.delete(requestId);
-          this.#expiredRequestIds.set(requestId, { commandType: command.type, sentAt });
+          this.#expiredRequestIds.set(requestId, { commandType: command.type, sentAt, child });
           this.logger.info('worker.request.timeout', 'Library Worker command exceeded its deadline.', {
             requestId, commandType: command.type, totalMs: Date.now() - sentAt,
             timeoutMs: timeout, pendingCount: this.#pending.size,
@@ -360,19 +378,29 @@ export class LibraryWorkerClient {
         }, timeout);
 
       this.#pending.set(requestId, {
+        child,
         commandType: command.type,
         resolve,
         reject,
         sentAt,
         timer,
       });
-      child.postMessage({
-        requestId,
-        command,
-        ...(sentAt === undefined ? {} : { sentAt }),
-        ...(options.dispatch === undefined ? {} : { dispatch: options.dispatch }),
-        ...(options.historyContext === undefined ? {} : { historyContext: options.historyContext }),
-      });
+      if (options.onTerminal) this.#resources.set(requestId, { child, onTerminal: options.onTerminal });
+      try {
+        child.postMessage({
+          requestId, command, sentAt,
+          ...(options.dispatch === undefined ? {} : { dispatch: options.dispatch }),
+          ...(options.historyContext === undefined ? {} : { historyContext: options.historyContext }),
+        });
+      } catch (error) {
+        const pending = this.#pending.get(requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          this.#pending.delete(requestId);
+          this.#finishResource(requestId, child, 'not-dispatched');
+          reject(error);
+        }
+      }
     });
   }
 
@@ -603,23 +631,41 @@ export class LibraryWorkerClient {
 
     this.#shuttingDown = true;
     if (this.#ready) {
-      await Promise.race([
-        new Promise<void>((resolve) => {
-          this.#shutdownAck = resolve;
-          child.postMessage({ type: 'worker.shutdown' });
-        }),
-        new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)),
-      ]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          new Promise<void>((resolve) => {
+            this.#shutdownAck = resolve;
+            child.postMessage({ type: 'worker.shutdown' });
+          }),
+          new Promise<void>((resolve) => { timer = setTimeout(resolve, SHUTDOWN_TIMEOUT_MS); }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
     }
 
+    // This child may have exited and been replaced while awaiting its ack.
+    // A retired shutdown continuation does not own the replacement's state.
+    if (this.#child !== child) return;
     this.#shutdownAck = undefined;
     this.#ready = false;
     this.#rejectAll(new Error('Library Worker is shutting down.'));
+    this.#retiredChildren.add(child);
     child.kill();
     this.#child = undefined;
   }
 
-  readonly #onMessage = (message: unknown) => {
+  readonly #onMessage = (origin: UtilityProcess, message: unknown) => {
+    // Retired processes may still complete resource-bearing requests. Never
+    // forward their events, handshake, or malformed replies to a new child.
+    if (origin !== this.#child || !this.#ready) {
+      try {
+        const response = parseWorkerResponse(message);
+        this.#finishResource(response.requestId, origin, 'response');
+      } catch { /* No valid terminal: retain resources until this child exits. */ }
+      return;
+    }
     // Slice E render requests must be handled before the generic event
     // parsers: the request is answered with a typed response, not forwarded.
     if (this.#dispatchModelThumbnailRenderRequest(message)) return;
@@ -752,9 +798,11 @@ export class LibraryWorkerClient {
     }
 
     const pending = this.#pending.get(response.requestId);
+    if (pending && pending.child !== origin) return;
     if (!pending) {
+      const ownedResource = this.#finishResource(response.requestId, origin, 'response');
       const expired = this.#expiredRequestIds.get(response.requestId);
-      if (expired) {
+      if (expired?.child === origin) {
         this.#expiredRequestIds.delete(response.requestId);
         this.logger.info(
           'worker.response.late',
@@ -763,6 +811,7 @@ export class LibraryWorkerClient {
         );
         return;
       }
+      if (ownedResource) return;
       this.#protocolFailure(new Error('Library Worker response has no matching request.'));
       return;
     }
@@ -781,10 +830,26 @@ export class LibraryWorkerClient {
       );
     }
     pending.resolve(response.result);
+    // Resource callbacks can reenter through exit/protocol handlers. The valid
+    // business response must already be settled before invoking local cleanup.
+    this.#finishResource(response.requestId, origin, 'response');
   };
 
-  readonly #onExit = (code: number) => {
-    const expected = this.#shuttingDown;
+  readonly #onExit = (origin: UtilityProcess, code: number) => {
+    const isCurrent = this.#child === origin;
+    const expected = this.#shuttingDown || this.#retiredChildren.has(origin);
+    // Invalidate the exiting child before invoking user-supplied local cleanup:
+    // a reentrant callback must not dispatch fresh work to a dead process.
+    if (isCurrent) {
+      this.#ready = false;
+      this.#child = undefined;
+      this.#shuttingDown = false;
+      this.#rejectAll(new Error(`Library Worker exited (${code}).`));
+    }
+    for (const [requestId, resource] of this.#resources) {
+      if (resource.child === origin) this.#finishResource(requestId, origin, 'worker-exit');
+    }
+    if (!isCurrent) return;
     if (expected) {
       this.logger.info('worker.exit', 'Library Worker exited during shutdown.', { code });
     } else {
@@ -792,11 +857,24 @@ export class LibraryWorkerClient {
         code,
       });
     }
-    this.#ready = false;
-    this.#child = undefined;
-    this.#shuttingDown = false;
-    this.#rejectAll(new Error(`Library Worker exited (${code}).`));
   };
+
+  #finishResource(requestId: string, child: UtilityProcess, reason: WorkerRequestTerminalReason): boolean {
+    const resource = this.#resources.get(requestId);
+    if (!resource || resource.child !== child) return false;
+    this.#resources.delete(requestId);
+    this.#notifyTerminal(resource.onTerminal, reason, requestId);
+    return true;
+  }
+
+  #notifyTerminal(callback: TerminalCallback, reason: WorkerRequestTerminalReason, requestId?: string): void {
+    const diagnose = (error: unknown) => {
+      try { this.logger.error('worker.request.terminal-cleanup', error, { reason, requestId }); }
+      catch { /* Cleanup diagnostics must not change the original business result. */ }
+    };
+    try { void Promise.resolve(callback(reason)).catch(diagnose); }
+    catch (error) { diagnose(error); }
+  }
 
   #protocolFailure(error: Error): void {
     this.logger.error('worker.protocol', error);

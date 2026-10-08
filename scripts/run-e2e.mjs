@@ -5,6 +5,7 @@ import { builtinModules, createRequire } from 'node:module';
 import process from 'node:process';
 
 import { build } from 'vite';
+import { resolveE2EArguments } from './release/gate-manifest.mjs';
 
 const require = createRequire(import.meta.url);
 const playwrightPackage = require('@playwright/test/package.json');
@@ -197,7 +198,7 @@ const playwrightPath = require.resolve('@playwright/test/cli');
 // for the Playwright child and every Electron process it launches.
 const playwrightEnv = { ...process.env };
 delete playwrightEnv.ELECTRON_RUN_AS_NODE;
-const child = spawn(process.execPath, [playwrightPath, 'test', ...process.argv.slice(2)], {
+const child = spawn(process.execPath, [playwrightPath, 'test', ...resolveE2EArguments(process.argv.slice(2))], {
   cwd: projectRoot,
   env: playwrightEnv,
   stdio: 'inherit',

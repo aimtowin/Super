@@ -49,6 +49,7 @@ import {
 } from "./asset-card-hover-preview";
 import { useAssetCardHoverPreview } from "./use-asset-card-hover-preview";
 import { buildInspectorSummaryMetadata } from "./inspector-progressive-summary";
+import type { MetadataReadState } from "./metadata-read-controller";
 import { PluginInspectorSections } from "./plugin-inspector-sections";
 import { PluginInspectorViews } from "./plugin-inspector-views";
 import { createPluginMenuContributionContext } from "./plugin-contribution-context";
@@ -132,6 +133,10 @@ export interface InspectorPanelProps {
   selectedAsset: AssetSummary | undefined;
   /** Full multi-selection in canvas order; primary is still `selectedAsset`. */
   selectedAssets?: AssetSummary[];
+  /** Full IDs remain authoritative when most summaries are outside the browse page. */
+  selectedAssetIds?: readonly string[];
+  metadataReadState?: MetadataReadState;
+  onRetryMetadata?: () => void;
   library: RendererLibrarySummary | null;
   api?: SuperLibraryApi | null;
   allAssetCount: number;
@@ -557,6 +562,9 @@ export function InspectorPanel(props: InspectorPanelProps) {
   const {
     selectedAsset,
     selectedAssets = [],
+    selectedAssetIds,
+    metadataReadState,
+    onRetryMetadata,
     library,
     api = null,
     allAssetCount,
@@ -605,12 +613,15 @@ export function InspectorPanel(props: InspectorPanelProps) {
     assetId: string;
     probe: MissingAssetRecoveryProbe;
   } | null>(null);
-  const isMultiEdit = multiEdit !== null && multiEdit.selectionCount >= 2;
   const selectionCount = Math.max(
+    new Set(selectedAssetIds ?? []).size,
     multiEdit?.selectionCount ?? 0,
     selectedAssets.length,
     selectedAsset ? 1 : 0,
   );
+  const isMultiEdit = selectionCount >= 2;
+  const metadataPending = metadataReadState?.status === "loading" || (isMultiEdit && multiEdit === null && metadataReadState?.status !== "error");
+  const metadataFailed = metadataReadState?.status === "error";
   const canRequestAiAnalysis = shouldShowInspectorAiAnalysis({
     selectedAsset,
     selectionCount,
@@ -654,11 +665,11 @@ export function InspectorPanel(props: InspectorPanelProps) {
       ? selectedAssets
       : selectedAsset === undefined ? [] : [selectedAsset];
     return createPluginMenuContributionContext({
-      descriptor: { type: "workspace", assetIds: contextAssets.map((asset) => asset.assetId) },
+      descriptor: { type: "workspace", assetIds: selectedAssetIds ? [...selectedAssetIds] : contextAssets.map((asset) => asset.assetId) },
       assets: contextAssets,
       libraryId: libraryId ?? library?.libraryId,
     });
-  }, [library?.libraryId, libraryId, selectedAsset, selectedAssets]);
+  }, [library?.libraryId, libraryId, selectedAsset, selectedAssets, selectedAssetIds]);
 
   // Super-a9n: single-selection GIF/video loops in the Inspector hero;
   // multi-selection never plays (isPreviewable is gated on selectionCount < 2,
@@ -688,7 +699,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
     rawAssetMetadata?.assetId === selectedAsset?.assetId
       ? rawAssetMetadata
       : null;
-  const metadataReady = assetMetadata !== null;
+  const metadataReady = isMultiEdit ? multiEdit !== null : assetMetadata !== null;
   // AssetSummary already carries the fields users need to orient themselves
   // (name, dimensions, rating and favorite). Keep those visible while the
   // heavier tag/palette/AI metadata request fills in asynchronously.
@@ -835,6 +846,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
         source: tag.source,
       }));
     }
+    if (isMultiEdit) return [];
     if (!displayMetadata?.tags) return [];
     return displayMetadata.tags.map((tag) => ({
       id: tag.id,
@@ -1038,11 +1050,12 @@ export function InspectorPanel(props: InspectorPanelProps) {
   );
 
   const inspectorSelectedAssetIds = useMemo(() => {
+    if (selectedAssetIds) return [...new Set(selectedAssetIds)];
     if (selectedAssets.length > 0) {
       return selectedAssets.map((asset) => asset.assetId);
     }
     return selectedAsset ? [selectedAsset.assetId] : [];
-  }, [selectedAsset, selectedAssets]);
+  }, [selectedAsset, selectedAssets, selectedAssetIds]);
 
   return (
     <PaneSurface
@@ -1116,6 +1129,22 @@ export function InspectorPanel(props: InspectorPanelProps) {
             </div>
           )}
 
+          {(metadataPending || metadataFailed) && (
+            <div className={metadataFailed ? "inline-error inspector-version-conflict" : "inspector-ai-analyzing"}
+              role={metadataFailed ? "alert" : "status"} aria-live="polite" data-metadata-state={metadataFailed ? "error" : "loading"}>
+              {metadataFailed ? <Icon name="warning" size={14} /> : <span className="activity-pulse" />}
+              <div>
+                <span>{metadataFailed
+                  ? t("inspector.metadataReadFailed", { count: metadataReadState?.failedAssetIds.length ?? 0 })
+                  : t("inspector.metadataLoading", { ready: metadataReadState?.ready ?? 0, total: selectionCount })}</span>
+                {metadataFailed && onRetryMetadata && (
+                  <button type="button" className="secondary-button inspector-status-action" onClick={onRetryMetadata}>
+                    {t("common.retry")}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           {/* Tag chips (REQ-TAG-003) */}
           <section className="inspector-section inspector-tags-section">
             <div className="inspector-tags-header">
@@ -1165,14 +1194,14 @@ export function InspectorPanel(props: InspectorPanelProps) {
                   )}
                 </span>
               ))}
-              {displayedTags.length === 0 && !showTagInput && (
+              {displayedTags.length === 0 && !showTagInput && !metadataPending && !metadataFailed && (
                 <span className="tag-chip-placeholder">
                   {isMultiEdit
                     ? t("inspector.noSharedTags")
                     : t("inspector.noTags")}
                 </span>
               )}
-              {showTagInput && (
+              {showTagInput && metadataReady && (
                 <div className="tag-input-wrapper">
                   <div className="tag-input-chip">
                     <Icon name="tag" size={11} />
@@ -1278,7 +1307,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
           />
 
           {/* --- Asset metadata editor (compact) --- */}
-          {displayMetadata || isMultiEdit ? (
+          {(isMultiEdit ? multiEdit !== null : displayMetadata !== null) ? (
             <>
               {versionConflict && (
                 <div className="inline-error inspector-version-conflict">
@@ -1457,7 +1486,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
                 return (
               <div className="editor-field">
                 <label className="micro-label" htmlFor="meta-desc">
-                  {descriptionIsAi && showAiBadges && (
+                  {isSingleSelection && descriptionIsAi && showAiBadges && (
                     <span
                       aria-label={t("inspector.aiBadge")}
                       className="inspector-ai-badge inspector-ai-badge-inline"
@@ -1499,7 +1528,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
                   </div>
                 ) : (
                 <textarea
-                  className={`text-field inspector-textarea${descriptionIsAi ? " is-ai-sourced" : ""}`}
+                  className={`text-field inspector-textarea${isSingleSelection && descriptionIsAi ? " is-ai-sourced" : ""}`}
                   disabled={!descriptionEditable || !metadataReady}
                   id="meta-desc"
                   maxLength={10000}

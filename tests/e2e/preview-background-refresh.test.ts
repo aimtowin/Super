@@ -88,6 +88,57 @@ for (const scope of ["all", "filtered", "smart-collection", "draft-smart-collect
       const originalViewer = await viewer.elementHandle();
       const assetId = await card.getAttribute("data-asset-id");
       expect(assetId).toBeTruthy();
+      if (scope === "all") {
+        // Renderer/preload presentation wiring only: these injected events do
+        // not claim Main domain fanout or a real filesystem/import operation.
+        await application.evaluate(({ BrowserWindow }, libraryId) => {
+          const target = BrowserWindow.getAllWindows().find((entry) => entry.isVisible());
+          if (!target) throw new Error("Missing owned preview renderer.");
+          for (const event of [
+            { changedCount: 37 },
+            { changedCount: 41, suppressWatcherNotification: true },
+          ]) target.webContents.send("super:asset:changed", {
+            type: "asset.changed", libraryId, source: "watcher", missingCount: 0, ...event,
+          });
+        }, libraryId);
+        const notices = page.locator(".workspace-notice-stack");
+        await expect(notices.getByText("已自动同步 37 项磁盘变化。", { exact: true })).toBeVisible();
+        await expect(notices.getByText("已自动同步 41 项磁盘变化。", { exact: true })).toHaveCount(0);
+        expect(await originalViewer!.evaluate((element) => element.isConnected && document.fullscreenElement === element)).toBe(true);
+
+        // A previously accepted candidate survives the import's silent 120ms
+        // drain; new import events remain domain-dirty without creating toast.
+        try {
+          await application.evaluate(({ BrowserWindow }, libraryId) => {
+            const target = BrowserWindow.getAllWindows().find((entry) => entry.isVisible());
+            if (!target) throw new Error("Missing owned preview renderer.");
+            target.webContents.send("super:asset:changed", {
+              type: "asset.changed", libraryId, source: "watcher", changedCount: 53, missingCount: 0,
+            });
+            target.webContents.send("super:progress", {
+              type: "import.progress", importId: "isolated-renderer-import-presentation", phase: "copy",
+              filesProcessed: 0, totalFiles: 1, bytesProcessed: 0, totalBytes: 1,
+            });
+          }, libraryId);
+          await page.waitForTimeout(100); // Let the real progress listener/ref commit.
+          await application.evaluate(({ BrowserWindow }, libraryId) => {
+            BrowserWindow.getAllWindows().find((entry) => entry.isVisible())!.webContents.send("super:asset:changed", {
+              type: "asset.changed", libraryId, source: "watcher", changedCount: 59, missingCount: 0,
+            });
+          }, libraryId);
+          await expect(notices.getByText("已自动同步 53 项磁盘变化。", { exact: true })).toBeVisible();
+          await page.waitForTimeout(450);
+          await expect(notices.getByText("已自动同步 59 项磁盘变化。", { exact: true })).toHaveCount(0);
+          expect(await originalViewer!.evaluate((element) => element.isConnected && document.fullscreenElement === element)).toBe(true);
+        } finally {
+          await application.evaluate(({ BrowserWindow }) => {
+            BrowserWindow.getAllWindows().find((entry) => entry.isVisible())!.webContents.send("super:progress", {
+              type: "import.progress", importId: "isolated-renderer-import-presentation", phase: "complete",
+              filesProcessed: 1, totalFiles: 1, bytesProcessed: 1, totalBytes: 1,
+            });
+          });
+        }
+      }
       const events = [
         { channel: "super:asset:changed", payload: { type: "asset.changed", libraryId, source: "watcher", changedCount: 1, missingCount: 0 } },
         { channel: "super:ai:completed", payload: { type: "ai.analysis.completed", libraryId, assetId, fieldCount: 1, tagCount: 0 } },

@@ -1,4 +1,4 @@
-﻿param([string]$Name = 'completed', [int]$ProcessId = 0)
+﻿param([string]$Name = 'completed', [int]$ProcessId = 0, [string]$OutputDirectory = (Join-Path $PSScriptRoot '../../tmp/update-ui-preview'))
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
@@ -24,7 +24,7 @@ $image = New-Object System.Drawing.Bitmap(($rect.Right - $rect.Left), ($rect.Bot
 $graphics = [System.Drawing.Graphics]::FromImage($image)
 try {
   $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $image.Size)
-  $output = Join-Path $PSScriptRoot "../../tmp/update-ui-preview/$Name.png"
+  $output = Join-Path ([System.IO.Path]::GetFullPath($OutputDirectory)) "$Name.png"
   $image.Save($output, [System.Drawing.Imaging.ImageFormat]::Png)
   Write-Output ([System.IO.Path]::GetFullPath($output))
 } finally {

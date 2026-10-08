@@ -2293,6 +2293,22 @@ describe('renderer-safe import plans', () => {
 });
 
 describe('background asset change events', () => {
+  it.each([true, false])('preserves optional watcher notification suppression=%s through the strict domain parser', (suppressWatcherNotification) => {
+    const event = { type: 'asset.changed', libraryId: 'library-01', changedCount: 2,
+      missingCount: 1, source: 'watcher', suppressWatcherNotification };
+    expect(parseAssetChangeEvent(event)).toEqual(event);
+  });
+
+  it('keeps legacy no-flag watcher payloads unchanged and rejects malformed flags or unrelated private fields', () => {
+    const legacy = { type: 'asset.changed', libraryId: 'library-01', changedCount: 1,
+      missingCount: 0, source: 'watcher' };
+    expect(parseAssetChangeEvent(legacy)).toEqual(legacy);
+    for (const invalid of ['true', 1, null, {}]) {
+      expect(() => parseAssetChangeEvent({ ...legacy, suppressWatcherNotification: invalid })).toThrow();
+    }
+    expect(() => parseAssetChangeEvent({ ...legacy, suppressWatcherNotification: true, sourcePath: '/private/source.png' })).toThrow();
+  });
+
   it('accepts precise ID invalidation and rejects empty or oversized lists', () => {
     const event = { type: 'asset.changed', libraryId: 'library-01', changedCount: 1, missingCount: 0 };
     expect(parseAssetChangeEvent({ ...event, assetIds: ['asset-01'] }).assetIds).toEqual(['asset-01']);

@@ -1,9 +1,9 @@
 import * as http from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import * as os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createExtensionServer,
@@ -724,6 +724,40 @@ describe('createExtensionServer', () => {
   });
 
   describe('POST /save-upload', () => {
+    it('cleans an unclaimed callback failure even if the diagnostic callback also throws', async () => {
+      const stagingRoot = path.join(os.tmpdir(), `super-ext-test-${randomUUID()}`);
+      await mkdir(stagingRoot, { recursive: true });
+      try {
+        server = await startServer({
+          uploadStagingRoot: stagingRoot,
+          onSaveUpload: () => { throw new Error('callback failure'); },
+          onError: () => { throw new Error('diagnostic failure'); },
+        });
+        const result = await postUpload(server.port, Buffer.from('fixture'), validUploadHeaders);
+        expect(result.status).toBe(500);
+        await vi.waitFor(async () => expect(await readdir(stagingRoot)).toEqual([]));
+      } finally {
+        await rm(stagingRoot, { recursive: true, force: true });
+      }
+    });
+
+    it.each([false, true])('reclaims an unclaimed upload after callback accepted=%s', async (accepted) => {
+      const stagingRoot = path.join(os.tmpdir(), `super-ext-test-${randomUUID()}`);
+      await mkdir(stagingRoot, { recursive: true });
+      let upload!: SaveUploadRequest;
+      try {
+        server = await startServer({
+          uploadStagingRoot: stagingRoot,
+          onSaveUpload: (received) => { upload = received; return accepted ? { accepted: true } : { accepted: false, status: 503, reason: 'no library' }; },
+        });
+        const result = await postUpload(server.port, Buffer.from('fixture'), validUploadHeaders);
+        expect(result.status).toBe(accepted ? 202 : 503);
+        await expect(readFile(upload.stagedFilePath)).rejects.toMatchObject({ code: 'ENOENT' });
+      } finally {
+        await rm(stagingRoot, { recursive: true, force: true });
+      }
+    });
+
     it('returns 202 for a valid upload and calls onSaveUpload', async () => {
       const uploads: SaveUploadRequest[] = [];
       const stagingRoot = path.join(os.tmpdir(), `super-ext-test-${randomUUID()}`);
@@ -733,7 +767,8 @@ describe('createExtensionServer', () => {
         server = await startServer({
           port: TEST_PORT,
           uploadStagingRoot: stagingRoot,
-          onSaveUpload: async (upload) => {
+          onSaveUpload: async (upload, staging) => {
+            staging.claim();
             uploads.push(upload);
             return { accepted: true };
           },

@@ -4177,6 +4177,8 @@ export interface AssetsChangedEvent {
   libraryId: string;
   missingCount: number;
   source?: 'watcher' | 'text-save' | 'content-replace' | 'client';
+  /** Presentation only: domain subscribers must still process this change. */
+  suppressWatcherNotification?: boolean;
   type: 'asset.changed';
 }
 
@@ -5977,11 +5979,11 @@ export class LibraryService {
   /** Prevent a replayed history recipe from creating a second history entry. */
   private historyReplayDepth = 0;
   /**
-   * After in-app filesystem mutations (text save, copy, move, import…), watcher
-   * refreshes still update DB but must not surface a "disk synced" toast — that
-   * copy is reserved for true external changes.
+   * After in-app filesystem mutations (text save, copy, move, import…), only
+   * this library's watcher toast is quieted. All committed changes still flow
+   * to domain subscribers, including external changes during that short window.
    */
-  private suppressWatcherNotifyUntilMs = 0;
+  private readonly suppressWatcherNotifyUntilByLibrary = new Map<string, number>();
   private artifactsDirReady = new WeakSet<OpenLibrary>();
 
   constructor(private readonly options: LibraryServiceOptions = {}) {}
@@ -6050,16 +6052,17 @@ export class LibraryService {
     input: ModelThumbnailRendererInput,
   ) => Promise<ModelThumbnailRenderOutcome>;
 
-  private noteClientFilesystemMutation(): void {
+  private noteClientFilesystemMutation(libraryId: string): void {
     const debounceMs = this.options.debounceMs ?? 250;
-    this.suppressWatcherNotifyUntilMs = Math.max(
-      this.suppressWatcherNotifyUntilMs,
+    this.suppressWatcherNotifyUntilByLibrary.set(libraryId, Math.max(
+      this.suppressWatcherNotifyUntilByLibrary.get(libraryId) ?? 0,
       this.watchNotifyNow() + debounceMs * 6,
-    );
+    ));
   }
 
-  private shouldEmitWatcherAssetChange(): boolean {
-    return this.watchNotifyNow() >= this.suppressWatcherNotifyUntilMs;
+  private shouldSuppressWatcherNotification(libraryId: string): boolean {
+    const until = this.suppressWatcherNotifyUntilByLibrary.get(libraryId);
+    return until !== undefined && this.watchNotifyNow() < until;
   }
 
   /**
@@ -6156,13 +6159,15 @@ export class LibraryService {
     } finally {
       // A pause can arrive after some batches committed. Notify those writes
       // too: replaying the scan later will correctly find no diff for them.
-      if (this.hasOpenLibrary(libraryId) && changedCount > 0 && this.shouldEmitWatcherAssetChange()) {
+      if (this.hasOpenLibrary(libraryId) && changedCount > 0) {
         this.options.onAssetsChanged?.({
           type: 'asset.changed',
           libraryId,
           changedCount,
           missingCount,
           source: 'watcher',
+          ...(this.shouldSuppressWatcherNotification(libraryId)
+            ? { suppressWatcherNotification: true } : {}),
         });
       }
     }
@@ -6801,7 +6806,16 @@ export class LibraryService {
       this.pendingImports.delete(importId);
       pending.expiryHandle = undefined;
       this.updateImportOperation(pending, 'rolled_back', 'IMPORT_EXPIRED');
-      this.removeOperation(pending.operationPath);
+      try {
+        this.removeOperation(pending.operationPath);
+      } catch (error) {
+        // The token is already expired. Keep residual staging for safe recovery
+        // on the next open instead of letting a cleanup fault kill the Worker.
+        this.diagnose('import.expiry.cleanup', error, {
+          libraryId: pending.libraryId,
+          operationId: path.basename(pending.operationPath),
+        });
+      }
     }, Math.max(0, expiresAt - clock.now()));
   }
 
@@ -13086,7 +13100,7 @@ export class LibraryService {
     const relativePath = parent.relativePath === ''
       ? name
       : path.posix.join(parent.relativePath, name);
-    this.noteClientFilesystemMutation();
+    this.noteClientFilesystemMutation(input.libraryId);
     return this.linkedDirectoryMutationSummary({
       linkedFolderId: parent.linkedFolderId,
       relativePath,
@@ -13225,7 +13239,7 @@ export class LibraryService {
           }
         }
       })();
-      this.noteClientFilesystemMutation();
+      this.noteClientFilesystemMutation(input.libraryId);
       return this.linkedDirectoryMutationSummary({
         linkedFolderId: target.linkedFolderId,
         relativePath: newRelativePath,
@@ -29030,7 +29044,7 @@ export class LibraryService {
       version: 4,
     };
     this.applyManagedMoveOperation(openLibrary, operationId, manifest);
-    this.noteClientFilesystemMutation();
+    this.noteClientFilesystemMutation(input.libraryId);
     return { movedCount: files.length, skippedCount, operationId,
       assets: this.managedMoveSummaries(openLibrary, files.map((file) => file.assetId)) };
   }
@@ -29277,7 +29291,7 @@ export class LibraryService {
       version: 5,
     };
     this.applyManagedCopyOperation(openLibrary, operationId, manifest);
-    this.noteClientFilesystemMutation();
+    this.noteClientFilesystemMutation(input.libraryId);
     return {
       copiedCount: files.length,
       skippedCount,
@@ -29814,7 +29828,7 @@ export class LibraryService {
     const dir = path.dirname(absolutePath);
     const tmpPath = path.join(dir, `.super-text-edit-${randomUUID()}.tmp`);
     const payload = Buffer.from(input.content, 'utf8');
-    this.noteClientFilesystemMutation();
+    this.noteClientFilesystemMutation(input.libraryId);
     try {
       writeFileSync(tmpPath, payload);
       const fd = openSync(tmpPath, 'r+');
@@ -30160,7 +30174,7 @@ export class LibraryService {
     const absolutePath = this.resolveAssetPath(input.libraryId, input.assetId);
     const dir = path.dirname(absolutePath);
     const tmpPath = path.join(dir, `.super-content-replace-${randomUUID()}.tmp`);
-    this.noteClientFilesystemMutation();
+    this.noteClientFilesystemMutation(input.libraryId);
     try {
       writeFileSync(tmpPath, payload);
       const fd = openSync(tmpPath, 'r+');
@@ -30480,7 +30494,7 @@ export class LibraryService {
           } finally {
             closeSync(descriptor);
           }
-          this.noteClientFilesystemMutation();
+          this.noteClientFilesystemMutation(input.libraryId);
           renameSync(temporaryPath, destinationPath);
           this.failAt('crash-content-replace-batch-after-first-file');
         }
@@ -30836,7 +30850,7 @@ export class LibraryService {
     const destinationPath = path.join(parentDirectoryPath, newFileName);
     const now = new Date().toISOString();
     let renamed = false;
-    this.noteClientFilesystemMutation();
+    this.noteClientFilesystemMutation(input.libraryId);
     try {
       renameSync(sourcePath, destinationPath);
       renamed = true;
@@ -33952,7 +33966,7 @@ export class LibraryService {
     } catch (error) {
       throw new LibraryServiceError('LIBRARY_NOT_WRITABLE', { cause: error });
     }
-    this.noteClientFilesystemMutation();
+    this.noteClientFilesystemMutation(input.libraryId);
     this.syncGitignore(openLibrary, input.content);
     return { content: input.content };
   }
@@ -33981,7 +33995,7 @@ export class LibraryService {
     } catch (error) {
       throw new LibraryServiceError('LIBRARY_NOT_WRITABLE', { cause: error });
     }
-    this.noteClientFilesystemMutation();
+    this.noteClientFilesystemMutation(openLibrary.summary.libraryId);
     this.syncGitignore(openLibrary, next);
   }
 
@@ -36981,7 +36995,7 @@ export class LibraryService {
               );
             }
           }
-          if (!bulkCommit) this.noteClientFilesystemMutation();
+          if (!bulkCommit) this.noteClientFilesystemMutation(pending.libraryId);
           if (!pending.suppressAssetChangeEvents) {
             this.options.onAssetsChanged?.({
               type: 'asset.changed',
@@ -36999,7 +37013,7 @@ export class LibraryService {
         openLibrary.connection.transaction(() => {
           for (const action of actions) commitImportedAsset(action);
         })();
-        this.noteClientFilesystemMutation();
+        this.noteClientFilesystemMutation(pending.libraryId);
         const copiedThumbs: Array<{
           copied: EagleCopiedThumbnail;
           revisionId: string;
@@ -40867,6 +40881,8 @@ export class LibraryService {
     this.watchedRefreshTasks.get(libraryId)?.controller.abort();
     this.pendingWatchedAssetRefreshes.delete(libraryId);
     this.pendingWatchedLinkedRefreshes.delete(libraryId);
+
+    this.suppressWatcherNotifyUntilByLibrary.delete(libraryId);
 
     const backupTimer = this.databaseBackupTimers.get(libraryId);
     if (backupTimer) {

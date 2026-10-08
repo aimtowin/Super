@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadPackageBuildProvenance } from './build-with-provenance.mjs';
+import { mkdirOwned, ownedPath, ownedRoot, unverified } from './derivative-producer-utils.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -15,47 +16,20 @@ function argument(name) {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-async function hashFile(filePath) {
-  return createHash('sha256').update(await readFile(filePath)).digest('hex');
-}
-
-async function collect(root, directory = root) {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    const absolute = path.join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...await collect(root, absolute));
-    else if (entry.isFile()) {
-      const info = await stat(absolute);
-      files.push({
-        path: path.relative(root, absolute).replaceAll('\\', '/'),
-        size: info.size,
-        sha256: await hashFile(absolute),
-      });
-    }
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-
-async function main() {
-  const explicitVersion = argument('--version');
-  const explicitInput = argument('--input');
-  const explicitOutput = argument('--output');
-  const explicitCount = [explicitVersion, explicitInput, explicitOutput].filter((value) => value !== undefined).length;
-  if (explicitCount !== 0 && explicitCount !== 3) usage();
-  const packageManifest = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'));
-  const version = explicitVersion ?? packageManifest.version;
-  const input = explicitInput ?? path.join(repoRoot, 'out', 'Super-win32-x64');
-  const output = explicitOutput ?? path.join(repoRoot, 'release', 'baselines', `${String(version)}.json`);
+export async function writePackageFileManifest(options = {}) {
+  const root = await ownedRoot(options.repoRoot ?? repoRoot);
+  const packageManifest = JSON.parse(await readFile(await ownedPath(root, path.join(root, 'package.json')), 'utf8'));
+  const version = options.version ?? packageManifest.version;
+  const input = options.packageRoot ?? path.join(root, 'out/Super-win32-x64');
+  const output = options.outputPath ?? path.join(root, 'release/baselines', `${String(version)}.json`);
   if (typeof version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(version)) usage();
-  const root = path.resolve(input);
-  const files = await collect(root);
-  const runtimeVersion = JSON.parse(
-    await readFile(path.join(repoRoot, 'node_modules', 'electron', 'package.json'), 'utf8'),
-  ).version;
-  if (typeof runtimeVersion !== 'string') throw new Error('Unable to determine Electron runtime version.');
-  await mkdir(path.dirname(path.resolve(output)), { recursive: true });
+  const receipt = await loadPackageBuildProvenance({ repoRoot: root, packageRoot: path.resolve(input), targetVersion: version, platform: 'win32-x64' });
+  const files = receipt.package.files.map((file) => ({ path: file.path, size: file.bytes, sha256: file.sha256 }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+  const runtimeVersion = receipt.toolVersions.electron;
+  if (typeof runtimeVersion !== 'string') throw unverified('Verified target receipt has no Electron runtime version.');
   const outputPath = path.resolve(output);
+  await ownedPath(root, outputPath, { missing: true });
   const content = `${JSON.stringify({ version, runtimeVersion, files }, null, 2)}\n`;
   try {
     const existing = await readFile(outputPath, 'utf8');
@@ -67,11 +41,22 @@ async function main() {
   } catch (error) {
     if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
   }
+  await loadPackageBuildProvenance({ repoRoot: root, packageRoot: path.resolve(input), targetVersion: version, platform: 'win32-x64' });
+  await mkdirOwned(root, path.dirname(outputPath));
+  await ownedPath(root, outputPath, { missing: true });
   await writeFile(outputPath, content, { flag: 'wx' });
   console.log(`[package-file-manifest] Wrote ${files.length} entries to ${outputPath}`);
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+async function main() {
+  const version = argument('--version');
+  const input = argument('--input');
+  const output = argument('--output');
+  const count = [version, input, output].filter((value) => value !== undefined).length;
+  if (count !== 0 && count !== 3) usage();
+  await writePackageFileManifest({ version, packageRoot: input, outputPath: output });
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });
+}

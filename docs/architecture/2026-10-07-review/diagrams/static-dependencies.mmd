@@ -1,0 +1,38 @@
+flowchart LR
+  %% Static relative dependency declarations, NOT runtime IPC.
+  automation["automation"]
+  main["main"]
+  mcp["mcp"]
+  plugins["plugins"]
+  preload["preload"]
+  renderer["renderer"]
+  scripting["scripting"]
+  shared["shared"]
+  types["types"]
+  worker["worker"]
+  automation -->|"0 value/dynamic; 1 type"| main
+  automation -->|"1 value/dynamic; 0 type"| plugins
+  automation -->|"6 value/dynamic; 4 type"| shared
+  main -->|"8 value/dynamic; 7 type"| automation
+  main -->|"2 value/dynamic; 2 type"| mcp
+  main -->|"30 value/dynamic; 21 type"| plugins
+  main -->|"3 value/dynamic; 0 type"| renderer
+  main -->|"1 value/dynamic; 0 type"| scripting
+  main -->|"74 value/dynamic; 32 type"| shared
+  main -->|"2 value/dynamic; 0 type"| worker
+  mcp -->|"4 value/dynamic; 2 type"| automation
+  mcp -->|"1 value/dynamic; 0 type"| main
+  mcp -->|"1 value/dynamic; 0 type"| plugins
+  mcp -->|"0 value/dynamic; 3 type"| shared
+  plugins -->|"1 value/dynamic; 0 type"| automation
+  plugins -->|"5 value/dynamic; 0 type"| shared
+  preload -->|"24 value/dynamic; 13 type"| shared
+  renderer -->|"6 value/dynamic; 13 type"| plugins
+  renderer -->|"1 value/dynamic; 1 type"| scripting
+  renderer -->|"55 value/dynamic; 198 type"| shared
+  scripting -->|"12 value/dynamic; 17 type"| plugins
+  scripting -->|"7 value/dynamic; 11 type"| shared
+  shared -->|"21 value/dynamic; 2 type"| plugins
+  worker -->|"2 value/dynamic; 2 type"| plugins
+  worker -->|"1 value/dynamic; 0 type"| renderer
+  worker -->|"57 value/dynamic; 18 type"| shared

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { spawn } from "node:child_process";
+import type { ExtensionUploadStagingHandle } from "./extension-upload-staging";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -7,7 +7,6 @@ import {
   readFileSync,
   writeFileSync,
   existsSync,
-  rmSync,
 } from "node:fs";
 
 import {
@@ -32,6 +31,7 @@ import {
 } from "./application-menu";
 import { applyDevAppIcon, appIconImage } from "./app-icon";
 import { SourcePathCache, type SourcePathResolution } from "./source-path-cache";
+import { publishAssetChangeToPorts } from "./asset-change-publisher";
 import {
   NativeAssetDragCache,
   startNativeAssetDrag,
@@ -64,10 +64,11 @@ import {
   type AppLocale,
 } from "../shared/native-dialog-i18n";
 import {
+  createAppUpdateInstallerLauncher,
   createAppUpdateService,
   type AppUpdateService,
 } from './app-update-service';
-import { PendingAppUpdateStore, type AppUpdateNotice } from './pending-app-update';
+import { PendingAppUpdateStore, resumePendingAppUpdate, type AppUpdateNotice } from './pending-app-update';
 import type {
   AppUpdateCheckResult,
   AppUpdateInstallResult,
@@ -250,7 +251,6 @@ import {
   type RendererResult,
   type WorkerResult,
   type AssetChangeEvent,
-  parseAssetChangeEvent,
   type LibraryChangedEvent,
   parseLibraryChangedEvent,
   type ExtensionSaveCompletedEvent,
@@ -1721,6 +1721,7 @@ async function handleSaveIntent(
 
 async function handleSaveUpload(
   upload: SaveUploadRequest,
+  staging: ExtensionUploadStagingHandle,
 ): Promise<SaveUploadDisposition> {
   if (!workerClient) {
     return { accepted: false, status: 503, reason: "worker unavailable" };
@@ -1751,19 +1752,24 @@ async function handleSaveUpload(
       ? upload.targetFolderId ?? undefined
       : saveContext.selectedFolderId;
 
-  const command: WorkerCommand = {
-    type: "extension.save-from-file",
-    libraryId: saveContext.libraryId,
-    targetFolderId,
-    sourcePageUrl: upload.sourcePageUrl,
-    mediaUrl: upload.mediaUrl,
-    stagedFilePath: upload.stagedFilePath,
-    contentType: upload.contentType,
-    filename: upload.filename,
-  };
-
+  let handedToClient = false;
   try {
-    const result = await workerClient.request(command);
+    staging.claim();
+    const command: WorkerCommand = {
+      type: "extension.save-from-file",
+      libraryId: saveContext.libraryId,
+      targetFolderId,
+      sourcePageUrl: upload.sourcePageUrl,
+      mediaUrl: upload.mediaUrl,
+      stagedFilePath: upload.stagedFilePath,
+      contentType: upload.contentType,
+      filename: upload.filename,
+    };
+    const pending = workerClient.request(command, {
+      onTerminal: () => staging.release(),
+    });
+    handedToClient = true;
+    const result = await pending;
     if (!result.ok) {
       logger?.error(
         "extension-server.save-upload",
@@ -1802,14 +1808,12 @@ async function handleSaveUpload(
     ]);
     return { accepted: true };
   } catch (error) {
+    if (!handedToClient) {
+      try { await staging.release(); }
+      catch (cleanupError) { logger?.error("extension-server.save-upload-cleanup", cleanupError); }
+    }
     logger?.error("extension-server.save-upload", error);
     throw error;
-  } finally {
-    try {
-      rmSync(upload.stagingDirectory, { recursive: true, force: true });
-    } catch (error) {
-      logger?.error("extension-server.save-upload-cleanup", error);
-    }
   }
 }
 
@@ -1884,34 +1888,20 @@ async function reopenLibrariesAfterFailedReplacement(
 }
 
 function publishAssetChange(event: AssetChangeEvent): void {
-  const parsed = parseAssetChangeEvent(event);
-  // Asset changes can invalidate a cached source path (delete, relink, move,
-  // or replacement). Artifact-only library changes use the separate
-  // library.changed channel and do not evict the viewer's hot path.
-  sourcePathCache.clearLibrary(parsed.libraryId);
-  clearArtifactPathCache(parsed.libraryId);
-  pluginActivationCoordinator?.fanOutDomainEvent(createPluginDomainEvent({
-    kind: 'asset.changed',
-    libraryId: parsed.libraryId,
-    summary: {
-      changedCount: parsed.changedCount,
-      missingCount: parsed.missingCount,
-      ...(parsed.source === undefined ? {} : { source: parsed.source }),
+  publishAssetChangeToPorts(event, {
+    clearSourcePathCache: (libraryId) => sourcePathCache.clearLibrary(libraryId),
+    clearArtifactPathCache,
+    fanOutPluginDomainEvent: pluginActivationCoordinator
+      ? (pluginEvent) => pluginActivationCoordinator?.fanOutDomainEvent(pluginEvent)
+      : undefined,
+    enqueueWatcherAutoAnalysis: (libraryId) => {
+      void enqueueAutoAnalyzeAfterImport(libraryId, [], undefined, true);
     },
-  }));
-  // Linked folders are reconciled by the Worker watcher rather than the
-  // import bridge. Reconcile the unanalysed queue after a watcher change so
-  // files added to an existing link receive the same opt-in auto-analysis as
-  // files imported into a managed library. The queue's durable state makes
-  // duplicate watcher notifications harmless.
-  if (parsed.source === 'watcher') {
-    void enqueueAutoAnalyzeAfterImport(parsed.libraryId, [], undefined, true);
-  }
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.webContents.send(
-    ASSET_CHANGE_CHANNEL,
-    parsed,
-  );
+    sendToRenderer: (parsed) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.webContents.send(ASSET_CHANGE_CHANNEL, parsed);
+    },
+  });
 }
 
 function publishLibraryChanged(event: LibraryChangedEvent): void {
@@ -6137,20 +6127,12 @@ async function startApplication(): Promise<void> {
     environment: process.env,
     openPath: (filePath) => shell.openPath(filePath),
     showItemInFolder: (filePath) => shell.showItemInFolder(filePath),
-    launchInstaller: async (installerPath, mode) => {
-      if (process.platform === 'win32') {
-        const args = mode === 'silent'
-          ? ['/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS']
-          : [];
-        // “silent” only suppresses Inno's standard wizard. The user-approved
-        // updater supplies its own foreground progress window, so hiding the
-        // child process would also hide that window and leave Super closed.
-        spawn(installerPath, args, { detached: true, stdio: 'ignore', windowsHide: false }).unref();
-      } else {
-        const openError = await shell.openPath(installerPath);
-        if (openError !== '') throw new Error(openError);
-      }
-    },
+    // Keep the native updater foreground-visible and wait for actual spawn
+    // confirmation before treating the handoff as successful or quitting.
+    launchInstaller: createAppUpdateInstallerLauncher({
+      platform: process.platform,
+      openPath: (filePath) => shell.openPath(filePath),
+    }),
     onDownloadProgress: (progress) => {
       mainWindow?.webContents.send(APP_UPDATE_PROGRESS_CHANNEL, progress);
     },
@@ -6160,35 +6142,18 @@ async function startApplication(): Promise<void> {
   // Inno Setup may omit a custom Run parameter when elevation changes user
   // context. The completion record is version-gated, so it is safe to use as
   // the durable handoff instead of depending only on `--updated`.
-  completedAppUpdateNotice = await pendingAppUpdateStore.consumeCompletion(app.getVersion());
-  const deferredUpdate = await pendingAppUpdateStore.loadPending();
-  try {
-    const removedCount = await pendingAppUpdateStore.pruneStaleArtifacts(deferredUpdate?.cleanupPath);
-    if (removedCount > 0) {
-      logger?.info('app-update.cleanup', 'Removed abandoned update cache directories.', { removedCount });
-    }
-  } catch (error) {
-    logger?.error('app-update.cleanup', error, { phase: 'startup-prune' });
-  }
-  if (deferredUpdate !== undefined && appUpdateService.restorePreparedUpdate(deferredUpdate)) {
-    await pendingAppUpdateStore.saveCompletion({
-      version: deferredUpdate.version,
-      releaseNotes: deferredUpdate.releaseNotes,
-    });
-    const launched = await appUpdateService.launchPreparedUpdate('silent');
-    if (launched.ok && launched.action === 'installer-opened') {
-      await pendingAppUpdateStore.clearPending();
-      logger?.info('app-update.deferred', 'Launching a user-approved update before normal startup.', {
-        version: deferredUpdate.version,
-      });
-      setImmediate(() => app.quit());
-      return;
-    }
-    await pendingAppUpdateStore.clearPending();
-    await pendingAppUpdateStore.consumeCompletion();
-    logger?.info('app-update.deferred', 'Discarded an update that could not be launched.', {
-      version: deferredUpdate.version,
-    });
+  let pendingUpdateRecoveryNotice = false;
+  const pendingUpdateStartup = await resumePendingAppUpdate({
+    store: pendingAppUpdateStore,
+    service: appUpdateService,
+    currentVersion: app.getVersion(),
+    logger,
+    onInvalidUpdate: () => { pendingUpdateRecoveryNotice = true; },
+  });
+  completedAppUpdateNotice = pendingUpdateStartup.completionNotice;
+  if (!pendingUpdateStartup.continueStartup) {
+    setImmediate(() => app.quit());
+    return;
   }
   // Super-wgmy: 会话日志最多保留最近 100 份，启动时清理最旧；
   // 清理失败不得阻断启动。
@@ -7979,23 +7944,31 @@ async function startApplication(): Promise<void> {
       if (prepared === undefined || pendingAppUpdateStore === undefined) {
         return { ok: false, status: 'error', code: 'not-available' };
       }
-      await pendingAppUpdateStore.saveCompletion({
-        version: prepared.version,
-        releaseNotes: prepared.releaseNotes,
-      });
       // The update handoff is intentional and user-approved. Hide the main
       // window before spawning Setup so the previous Super Lib UI never
       // lingers behind the foreground updater. Restore it only on failure.
       const windowToClose = mainWindow;
       windowToClose.hide();
-      const result = await appUpdateService.launchPreparedUpdate('silent');
+      const store = pendingAppUpdateStore;
+      let completionCreated = false;
+      const result = await appUpdateService.launchPreparedUpdate('silent', {
+        beforeLaunch: async () => {
+          await store.saveCompletion({ version: prepared.version, releaseNotes: prepared.releaseNotes });
+          completionCreated = true;
+        },
+      });
       if (result.ok && result.action === 'installer-opened') {
-        await pendingAppUpdateStore.clearPending();
+        await store.clearPending().catch((error: unknown) => logger?.error('app-update.persist', error, { phase: 'launched-clear' }));
         automaticUpdatePrepared = false;
         windowToClose.destroy();
         app.quit();
       } else {
-        await pendingAppUpdateStore.consumeCompletion();
+        if (!result.ok && result.code === 'busy') return result;
+        if (completionCreated) {
+          await store.clearCompletion(prepared.version).catch((error: unknown) => logger?.error('app-update.persist', error, { phase: 'failed-completion' }));
+        }
+        automaticUpdatePrepared = false;
+        await store.clearPending().catch((error: unknown) => logger?.error('app-update.persist', error, { phase: 'failed-clear' }));
         if (!windowToClose.isDestroyed()) {
           windowToClose.show();
           windowToClose.focus();
@@ -8272,6 +8245,18 @@ async function startApplication(): Promise<void> {
   });
 
   await createMainWindow();
+  if (pendingUpdateRecoveryNotice && mainWindow !== undefined) {
+    const english = appLocale === 'en';
+    // This notice never blocks library startup or attempts an automatic download.
+    void dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: english ? 'Please prepare the update again' : '请重新准备更新',
+      message: english ? 'The previously prepared update could not be verified.' : '上次准备的更新无法通过完整性校验。',
+      detail: english ? 'Super has opened normally. Download the update again when you are ready; no cached installer was run.'
+        : '软件已正常打开。需要更新时请重新下载；未执行缓存中的安装程序。',
+      buttons: [english ? 'OK' : '知道了'],
+    }).catch((error: unknown) => logger?.error('app-update.deferred', error, { phase: 'reprepare-notice' }));
+  }
   try {
     await embeddedMcpServer?.initialize();
   } catch (error) {

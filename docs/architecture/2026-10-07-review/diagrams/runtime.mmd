@@ -1,0 +1,74 @@
+flowchart TB
+  subgraph UI["UI / renderer sandbox（可多个窗口）"]
+    R["main.tsx → App / AppInner<br/>导航·发现·画布·Inspector·Viewer·任务·插件表面"]
+    F["Floating preview<br/>独立受限 preload"]
+    CF["危险操作确认子窗口<br/>只暴露 get / decide"]
+    O["Offscreen renderer<br/>3D / HTML thumbnail"]
+  end
+  P["preload/index.ts<br/>contextBridge 白名单 + typed API"]
+  subgraph HOST["Electron Main / 受信本地宿主"]
+    M["main/index.ts：组合根 + 业务编排<br/>Window / tray / shell / IPC sender validation"]
+    WC["LibraryWorkerClient<br/>ready / requestId / deadline / events / shutdown"]
+    PRO["super:// + super-plugin://<br/>授权路径·修订·Range·媒体流取消"]
+    AUTO["CommandGateway / ExecutionJournal<br/>权限·幂等·库上下文·危险操作确认"]
+    PL["PluginPackageManager + Activation<br/>包校验·信任·贡献·jobs/providers"]
+    EX["ExtensionServer<br/>loopback + Origin / staging owner"]
+    UP["AppUpdateService + PendingStore<br/>清单·下载校验·延期安装·原生启动"]
+  end
+  subgraph WORKER["Library UtilityProcess / 不是 Web Worker"]
+    W["worker/index.ts<br/>异步命令可交错 / SQLite 语句同步"]
+    LS["LibraryService façade<br/>每库 session·49 migrations·导入·查询·watcher"]
+    MQ["媒体队列<br/>视口优先·资源限制·tray pause·job fence"]
+    AI["AI 队列<br/>provider limiter / cancellation / opt-in"]
+    SY["SyncEngine / WebDAVDriver"]
+  end
+  subgraph UTILITY["隔离运行时（由 Main 监管）"]
+    SC["ScriptRuntime Utility / QuickJS"]
+    PS["Restricted Plugin Host / QuickJS"]
+    PT["Unrestricted Plugin Host / Node<br/>用户显式信任，不视为强沙箱"]
+  end
+  subgraph STORAGE["本地数据 / Worker 主要拥有"]
+    DB[("每库 .super/library.db<br/>资产·修订·组织·任务·FTS5·change sequence")]
+    AS["Assets/ 托管原文件<br/>外部 linked roots 不属库所有"]
+    META[".super/operations / artifacts / backups 等<br/>恢复日志·派生文件·验证过的 DB 备份"]
+  end
+  NET["可选外部服务<br/>用户配置 AI / WebDAV / GitHub 插件或发行资源"]
+  MCP["MCP 客户端<br/>loopback HTTP + Bearer / Host / Origin / 确认"]
+  EXT["浏览器扩展 / Chrome content + background<br/>不配对是既有产品选择"]
+  BIN["Sharp / FFmpeg / OIIO / PDF / ufbx WASM<br/>受控媒体执行与资源守卫"]
+  R <-->|"固定 IPC / events"| P
+  P <-->|"校验 sender / payload"| M
+  M <--> WC
+  WC <-->|"ParentPort / requestId"| W
+  W --> LS
+  W --> MQ
+  W --> AI
+  W --> SY
+  LS <--> DB
+  LS <--> AS
+  LS <--> META
+  MQ --> BIN
+  MQ <-->|"异步 render RPC"| M
+  M <--> O
+  M <--> F
+  M <--> CF
+  R --> PRO
+  PRO --> WC
+  M --> AUTO
+  AUTO --> WC
+  AUTO <--> SC
+  M --> PL
+  PL <--> PS
+  PL <--> PT
+  PL --> AUTO
+  MCP <--> AUTO
+  EXT --> EX
+  EX --> WC
+  M --> UP
+  AI --> NET
+  SY --> NET
+  PL --> NET
+  UP --> NET
+  DB -.->|"change sequence / 外部提交保守失效"| W
+  W -.->|"asset / library / thumbnail / AI events"| M
+  M -.-> R

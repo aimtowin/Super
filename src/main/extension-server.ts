@@ -1,11 +1,12 @@
 import * as http from 'node:http';
 import { createWriteStream } from 'node:fs';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { z } from 'zod';
+import { createExtensionUploadStaging, type ExtensionUploadStagingHandle } from './extension-upload-staging';
 
 // ---------------------------------------------------------------------------
 // Save-intent schema — JSON URL save (legacy / fallback)
@@ -82,6 +83,7 @@ export interface ExtensionServerOptions {
   /** Called after POST /save-upload streams the body to a local staging file. */
   onSaveUpload: (
     upload: SaveUploadRequest,
+    staging: ExtensionUploadStagingHandle,
   ) => void | SaveUploadDisposition | Promise<void | SaveUploadDisposition>;
   /** Called on GET /folders. */
   onListFolders: () => ListFoldersDisposition | Promise<ListFoldersDisposition>;
@@ -278,6 +280,10 @@ export async function createExtensionServer(
 ): Promise<ExtensionServer> {
   const startPort = options.port ?? 19876;
   const maxPort = startPort + 2;
+  const reportUploadError = (error: Error) => {
+    try { options.onError?.(error); }
+    catch { /* A diagnostic failure must not strand upload cleanup. */ }
+  };
 
   const server = http.createServer((req, res) => {
     res.setHeader('Connection', 'close');
@@ -365,6 +371,7 @@ export async function createExtensionServer(
             '_',
           ) || 'download';
         const stagedFilePath = path.join(stagingDirectory, safeName);
+        const staging = createExtensionUploadStaging({ root: options.uploadStagingRoot, directory: stagingDirectory });
         try {
           await mkdir(stagingDirectory, { recursive: true });
           const limit = sizeLimitTransform(MAX_EXTENSION_UPLOAD_BYTES);
@@ -372,7 +379,7 @@ export async function createExtensionServer(
           await pipeline(req, limit.stream, writer);
           const byteLength = limit.getByteLength();
           if (byteLength === 0) {
-            await rm(stagingDirectory, { recursive: true, force: true });
+            await staging.releaseIfUnclaimed();
             jsonResponse(res, 400, { status: 'rejected', reason: 'empty body' });
             return;
           }
@@ -391,7 +398,11 @@ export async function createExtensionServer(
               ? {}
               : { sourcePageUrl: metadata.sourcePageUrl }),
             ...(metadata.mediaUrl === undefined ? {} : { mediaUrl: metadata.mediaUrl }),
-          });
+          }, staging.handle);
+
+          // An early return (no library/Worker) is still a Server-owned file.
+          // Claimed files must survive a caller deadline or HTTP disconnect.
+          await staging.releaseIfUnclaimed();
 
           if (
             disposition &&
@@ -408,19 +419,20 @@ export async function createExtensionServer(
 
           jsonResponse(res, 202, { status: 'accepted' });
         } catch (error) {
-          try {
-            await rm(stagingDirectory, { recursive: true, force: true });
-          } catch {
-            // Best effort.
-          }
           const normalized = error instanceof Error ? error : new Error(String(error));
           if ((normalized as NodeJS.ErrnoException).code === 'PAYLOAD_TOO_LARGE') {
             jsonResponse(res, 413, { status: 'rejected', reason: 'payload too large' });
             return;
           }
-          options.onError?.(normalized);
+          reportUploadError(normalized);
           if (!res.headersSent) {
             jsonResponse(res, 500, { status: 'rejected', reason: 'internal error' });
+          }
+        } finally {
+          try {
+            await staging.releaseIfUnclaimed();
+          } catch (error) {
+            reportUploadError(error instanceof Error ? error : new Error(String(error)));
           }
         }
       })();

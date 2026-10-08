@@ -741,6 +741,8 @@ export const zhCN = {
     versionConflict: "版本冲突",
     versionConflictBody: "元数据已被其他操作修改。请刷新以获取最新版本。",
     refreshMetadata: "刷新元数据",
+    metadataLoading: "正在读取选中项元数据：{ready}/{total}",
+    metadataReadFailed: "{count} 项元数据读取失败；完整数据就绪后可继续批量编辑。",
     libraryPath: "资源库路径",
     aiGenerated: "AI 生成内容",
     aiBadge: "AI",

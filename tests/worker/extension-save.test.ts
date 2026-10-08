@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, watch, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -9,6 +9,19 @@ import { LibraryService } from '../../src/worker/library-service';
 import type { PinnedHttpTransport } from '../../src/worker/secure-http-download';
 
 const temporaryRoots: string[] = [];
+const ownedServices = new Set<LibraryService>();
+const ownedWatcherClosures: Promise<void>[] = [];
+
+// Same native recursive observer as production, with a fixture-owned close
+// acknowledgement. closeAllAsync drains Service jobs, not fs.watch's close
+// event; retiring this test process before that event is not a completed drain.
+const observedNativeWatcher: NonNullable<ConstructorParameters<typeof LibraryService>[0]>['observerFactory'] =
+  (assetsPath, onEvent, onError) => {
+    const observer = watch(assetsPath, { recursive: true }, () => onEvent());
+    observer.on('error', onError);
+    ownedWatcherClosures.push(new Promise<void>((resolve) => observer.once('close', resolve)));
+    return observer;
+  };
 
 function tempDir(): string {
   const dir = mkdtempSync(path.join(tmpdir(), 'super-test-extension-'));
@@ -35,15 +48,17 @@ const fetchBackedPinnedTransport: PinnedHttpTransport = async ({ headers, signal
   };
 };
 
-function createTestLibrary(options?: ConstructorParameters<typeof LibraryService>[0]): { service: LibraryService; libraryId: string } {
+async function createTestLibrary(options?: ConstructorParameters<typeof LibraryService>[0]): Promise<{ service: LibraryService; libraryId: string }> {
   const libraryPath = tempDir();
-  const service = new LibraryService({ pinnedHttpTransport: fetchBackedPinnedTransport, ...options });
+  const service = new LibraryService({ pinnedHttpTransport: fetchBackedPinnedTransport,
+    observerFactory: observedNativeWatcher, ...options });
+  ownedServices.add(service);
   const library = service.createLibrary({
     displayName: `test-${randomUUID()}`,
     selectedParentPath: libraryPath,
   });
   // Open the library we just created (it was auto-opened by createLibrary)
-  service.closeLibrary(library.libraryId);
+  await service.closeLibraryAsync(library.libraryId);
   const opened = service.openLibrary(
     path.join(libraryPath, library.displayName),
   );
@@ -132,23 +147,28 @@ describe('saveAssetFromUrl', () => {
   let service: LibraryService;
   let libraryId = '';
 
-  beforeEach(() => {
-    const lib = createTestLibrary({
+  beforeEach(async () => {
+    const lib = await createTestLibrary({
       dnsLookup: async () => [{ address: '8.8.8.8', family: 4 }],
     });
     service = lib.service;
     libraryId = lib.libraryId;
   });
 
-  afterEach(() => {
-    try {
-      service.closeAll();
-    } catch {
-      // Best effort.
-    }
-    unstubFetch();
+  afterEach(async () => {
+    // The fixture owns real watchers/native media tasks. Wait for the existing
+    // asynchronous shutdown path before removing its sources or retiring the
+    // Vitest process; synchronous close is not proof those jobs have settled.
     vi.useRealTimers();
+    for (const ownedService of ownedServices) await ownedService.closeAllAsync();
+    ownedServices.clear();
+    await Promise.all(ownedWatcherClosures.splice(0));
+    unstubFetch();
     for (const root of temporaryRoots.splice(0)) {
+      if (path.dirname(path.resolve(root)).toLowerCase() !== path.resolve(tmpdir()).toLowerCase()
+        || !path.basename(root).startsWith('super-test-extension-')) {
+        throw new Error('Refusing cleanup outside the isolated extension fixture.');
+      }
       try { rmSync(root, { recursive: true, force: true }); } catch { /* ok */ }
     }
   });
@@ -191,9 +211,9 @@ describe('saveAssetFromUrl', () => {
   });
 
   it('rolls back the downloaded file and asset when source-page metadata cannot commit', async () => {
-    service.closeAll();
+    await service.closeAllAsync();
     const diagnostics: Array<{ context?: Record<string, unknown> }> = [];
-    const lib = createTestLibrary({
+    const lib = await createTestLibrary({
       dnsLookup: async () => [{ address: '8.8.8.8', family: 4 }],
       failAt: 'after-import-metadata',
       onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
@@ -219,8 +239,8 @@ describe('saveAssetFromUrl', () => {
   });
 
   it('recovers a URL import on reopen after a crash between file placement and database commit', async () => {
-    service.closeAll();
-    const crashingLibrary = createTestLibrary({
+    await service.closeAllAsync();
+    const crashingLibrary = await createTestLibrary({
       dnsLookup: async () => [{ address: '8.8.8.8', family: 4 }],
       failAt: 'crash-after-place',
     });
@@ -237,14 +257,15 @@ describe('saveAssetFromUrl', () => {
 
     expect(readFileSync(path.join(library.libraryPath, 'Assets', 'photo.png'))).toBeDefined();
     expect(readdirSync(path.join(library.libraryPath, '.super', 'operations'))).toHaveLength(1);
-    service.closeAll();
+    await service.closeAllAsync();
 
-    const recovered = new LibraryService();
+    const recovered = new LibraryService({ observerFactory: observedNativeWatcher });
+    ownedServices.add(recovered);
     const reopened = recovered.openLibrary(library.libraryPath);
     expect(recovered.listAssets({ libraryId: reopened.libraryId, recursive: true })).toEqual([]);
     expect(readdirSync(path.join(reopened.libraryPath, 'Assets'))).toEqual([]);
     expect(existsSync(path.join(reopened.libraryPath, '.super', 'operations'))).toBe(false);
-    recovered.closeAll();
+    await recovered.closeAllAsync();
   });
 
   it('downloads a video with mediaType and sets correct filename', async () => {
@@ -350,7 +371,7 @@ describe('saveAssetFromUrl', () => {
   });
 
   it('rejects forged magic from the prefix without consuming the complete response', async () => {
-    service.closeAll();
+    await service.closeAllAsync();
     let chunksRead = 0;
     const transport: PinnedHttpTransport = async () => ({
       status: 200,
@@ -365,7 +386,7 @@ describe('saveAssetFromUrl', () => {
       },
       cancel: vi.fn(),
     });
-    const lib = createTestLibrary({
+    const lib = await createTestLibrary({
       dnsLookup: async () => [{ address: '8.8.8.8', family: 4 }],
       pinnedHttpTransport: transport,
     });
@@ -542,8 +563,8 @@ describe('saveAssetFromUrl', () => {
   });
 
   it('rejects a URL whose DNS result is private before fetch', async () => {
-    service.closeAll();
-    const lib = createTestLibrary({
+    await service.closeAllAsync();
+    const lib = await createTestLibrary({
       dnsLookup: async () => [{ address: '127.0.0.1', family: 4 }],
     });
     service = lib.service;
@@ -560,12 +581,12 @@ describe('saveAssetFromUrl', () => {
   });
 
   it('pins the validated public address into the socket transport without a second DNS lookup', async () => {
-    service.closeAll();
+    await service.closeAllAsync();
     const dnsLookup = vi.fn()
       .mockResolvedValueOnce([{ address: '8.8.8.8', family: 4 }])
       .mockResolvedValueOnce([{ address: '127.0.0.1', family: 4 }]);
     const transport = vi.fn(fetchBackedPinnedTransport);
-    const lib = createTestLibrary({ dnsLookup, pinnedHttpTransport: transport });
+    const lib = await createTestLibrary({ dnsLookup, pinnedHttpTransport: transport });
     service = lib.service;
     libraryId = lib.libraryId;
     stubFetch({ contentType: 'image/png' });
@@ -611,11 +632,11 @@ describe('saveAssetFromUrl', () => {
   });
 
   it('revalidates every redirect target and blocks a redirect to private DNS', async () => {
-    service.closeAll();
+    await service.closeAllAsync();
     const dnsLookup = vi.fn(async (hostname: string) => hostname === 'public.example'
       ? [{ address: '8.8.8.8', family: 4 as const }]
       : [{ address: '169.254.169.254', family: 4 as const }]);
-    const lib = createTestLibrary({ dnsLookup });
+    const lib = await createTestLibrary({ dnsLookup });
     service = lib.service;
     libraryId = lib.libraryId;
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
@@ -634,13 +655,13 @@ describe('saveAssetFromUrl', () => {
   });
 
   it('pins a separately validated address on every redirect hop', async () => {
-    service.closeAll();
+    await service.closeAllAsync();
     const dnsLookup = vi.fn(async (hostname: string) => [{
       address: hostname === 'one.example' ? '8.8.8.8' : '1.1.1.1',
       family: 4,
     }]);
     const transport = vi.fn(fetchBackedPinnedTransport);
-    const lib = createTestLibrary({ dnsLookup, pinnedHttpTransport: transport });
+    const lib = await createTestLibrary({ dnsLookup, pinnedHttpTransport: transport });
     service = lib.service;
     libraryId = lib.libraryId;
     vi.stubGlobal('fetch', vi.fn()
@@ -667,9 +688,9 @@ describe('saveAssetFromUrl', () => {
   });
 
   it('redacts query and fragment from source-page diagnostics', async () => {
-    service.closeAll();
+    await service.closeAllAsync();
     const diagnostics: Array<{ context?: Record<string, unknown> }> = [];
-    const lib = createTestLibrary({
+    const lib = await createTestLibrary({
       dnsLookup: async () => [{ address: '8.8.8.8', family: 4 }],
       onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
     });
@@ -688,9 +709,9 @@ describe('saveAssetFromUrl', () => {
   });
 
   it('redacts query and fragment from nested network errors before logging', async () => {
-    service.closeAll();
+    await service.closeAllAsync();
     const diagnostics: Array<{ error: unknown; context?: Record<string, unknown> }> = [];
-    const lib = createTestLibrary({
+    const lib = await createTestLibrary({
       dnsLookup: async () => [{ address: '8.8.8.8', family: 4 }],
       onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
     });

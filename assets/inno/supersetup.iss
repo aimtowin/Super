@@ -11,6 +11,9 @@
   #define AppVersion "0.0.1"
 #endif
 #define AppExeName "Super.exe"
+#ifndef PackageRoot
+  #define PackageRoot "..\..\out\Super-win32-x64"
+#endif
 
 [Setup]
 AppId={{F3A7C2E1-9B5D-4E8A-8C3F-1D6B2A9E4C71}
@@ -49,7 +52,7 @@ Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.i
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\..\out\Super-win32-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PackageRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; 2.1.0 起应用改为 resources\app 文件树，以便后续更新能按文件做增量传输。
 ; Electron 会优先载入 app.asar，因此从旧版升级时必须清除遗留归档；否则新

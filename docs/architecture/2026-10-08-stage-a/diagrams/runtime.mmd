@@ -1,0 +1,90 @@
+flowchart TB
+  %% Runtime ownership map, not the TypeScript static-import graph.
+  %% Mermaid source has not been rendered by this task; see compatibility-matrix.
+  subgraph Renderer["Renderer · sandboxed UI"]
+    App["App · actual composition / activation"]
+    Browse["use-browse-pagination\nowner + generation\n100 summaries / 500 layout chunks"]
+    Inspector["single + complete multi Inspector\nconfirmed metadata ≠ dirty draft"]
+    Metadata["metadata-read-controller\nopaque session / per-asset epoch\nraw IPC ≤4 · bulk ≤3 · primary first"]
+    Coalescer["existing coalescedRefresh\none active + dirty trailing\nwatcher + AI item / batch"]
+    Hydration["hydrateContent\nall raw count/sidebar requests drain\nforeground page finishes first"]
+    Presentation["independent watcher notice candidate\nquiet hint affects presentation only"]
+    Viewer["Viewer identity / request sequence\npreview and navigation unchanged"]
+    App --> Browse
+    App --> Inspector
+    Inspector --> Metadata
+    App --> Coalescer
+    Coalescer --> Hydration
+    Coalescer --> Presentation
+    Browse --> Viewer
+  end
+  Preload["Preload · typed contextBridge allowlist"]
+  subgraph Main["Electron Main · validated senders / payloads"]
+    Composition["index composition root"]
+    WorkerClient["LibraryWorkerClient\nrequestId + origin child\ndeadline ≠ actual terminal"]
+    Publisher["asset-change-publisher\nsource/artifact cache → plugin\nopt-in watcher AI → renderer"]
+    Upload["ExtensionServer / upload staging\nclaim → dispatch → valid response / actual child exit\nowned direct-child / no early delete"]
+    Offscreen["controlled offscreen BrowserWindow\nmodel + document render bridge"]
+    Updater["PendingStore → UpdateService → launcher\nreceipt/final stream hash\nlegacy requires re-prepare"]
+    Plugin["plugin client / operation / manager\nreceived bytes budget / pause / abort\nexisting trust + archive validation"]
+    Gateway["CommandGateway / ExecutionJournal\nMCP · confirmation · idempotency"]
+    Protocol["super:// / plugin protocol\nauthorized source / Range / cancel"]
+    Composition --> WorkerClient
+    Composition --> Publisher
+    Composition --> Upload
+    Upload --> WorkerClient
+    Composition --> Offscreen
+    Composition --> Updater
+    Composition --> Plugin
+    Composition --> Gateway
+    Composition --> Protocol
+    Gateway --> WorkerClient
+    Protocol --> WorkerClient
+  end
+  subgraph Worker["Library UtilityProcess · one synchronous SQLite owner per service"]
+    Entry["worker/index · typed dispatcher / control"]
+    Service["LibraryService façade\nquery / import / revisions / history / watcher\nTTL: token invalidation before best-effort cleanup"]
+    Render["pending-render-rpc × model/document\nsettle once / Map + timer + listener cleanup\norchestrator abort checks after conversion"]
+    Media["media queues / visibility / job fences\nSharp · FFmpeg · OIIO · PDF · ufbx"]
+    AI["opt-in AI queues / limiter / progress"]
+    Sync["SyncEngine / WebDAV"]
+    Entry --> Service
+    Entry --> Render
+    Entry --> Media
+    Entry --> AI
+    Entry --> Sync
+    Entry -. "shutdown: dispose RPC first" .-> Render
+  end
+  subgraph Storage["Persisted data · unchanged schema / write fencing / recovery"]
+    DB[(".super/library.db\nschema49 / FTS / change sequence\nFK ON · FULL · local WAL / network-or-unknown DELETE")]
+    Durable["operation journals / revisions / history\nlease + job fence\nverified two-slot backup / recovery ladder"]
+    Managed["Assets · owned managed originals / artifacts"]
+    Linked["external linked roots\nnot owned by library cleanup\nexplicit source-file trash contract preserved"]
+  end
+  Scripts["separate Script / Plugin UtilityProcesses\nrestricted QuickJS / standard host / trusted Node host"]
+  Child["floating preview / critical-confirmation windows\nseparate narrow preload"]
+  External["optional AI / WebDAV / GitHub / update source\nno ECS migration or new account gate"]
+  App <-->|"typed request / event"| Preload
+  Preload <--> Composition
+  WorkerClient <-->|"ParentPort · requestId / validated terminal"| Entry
+  Service -->|"committed domain event + optional presentation hint"| Publisher
+  Publisher --> App
+  Render <-->|"render request / response; no physical GPU cancel"| Offscreen
+  Service <--> DB
+  Service <--> Durable
+  Service <--> Managed
+  Service <--> Linked
+  Gateway <--> Scripts
+  Plugin <--> Scripts
+  Composition <--> Child
+  AI --> External
+  Sync --> External
+  Plugin --> External
+  Updater --> External
+  subgraph Build["A1b · local build association; actual package/make evidence in release validation"]
+    Inputs["early capture before media / ufbx / extension / Vite\nall production file types + untracked\nimmutable resources and captured media lock"]
+    Package["thin npm / actual Forge hooks\npostPackage final payload hashes\npreMake exact package receipt; sidecar outside payload"]
+    Derivatives["third slice: target-bound producers / one artifact set\ninstaller ↔ setup ZIP / retained deltas / checksums\nimplementation status lives in compatibility matrix"]
+    Inputs --> Package --> Derivatives
+  end
+  Package -. "package relation is not a digital signature" .-> Updater

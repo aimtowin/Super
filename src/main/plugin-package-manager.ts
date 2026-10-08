@@ -54,6 +54,7 @@ import {
   type InstalledPluginPackage,
   type PluginGitHubAvailableUpdate,
   type PluginGitHubClient,
+  type PluginGitHubDownloadOptions,
   type PluginInstallFromArchiveInput,
   type PluginInstallFromDirectoryInput,
   type PluginInstallFromGitHubInput,
@@ -298,6 +299,8 @@ export class PluginPackageManager {
   }
 
   async installFromGitHub(input: PluginInstallFromGitHubInput): Promise<PluginInstallResult> {
+    const downloadOptions = this.#githubDownloadOptions(input);
+    this.#assertGitHubActive(downloadOptions);
     let parsed;
     try {
       parsed = parseGitHubRepositoryUrl(input.repository);
@@ -316,8 +319,8 @@ export class PluginPackageManager {
       libraryDirectory: input.libraryDirectory,
       client: input.client,
       platformToken,
-      signal: input.signal,
-      downloadOptions: input.downloadOptions,
+      signal: downloadOptions.signal,
+      downloadOptions,
     });
     if (releaseInstall !== undefined) return releaseInstall;
 
@@ -331,8 +334,8 @@ export class PluginPackageManager {
       scope: input.scope,
       libraryDirectory: input.libraryDirectory,
       client: input.client,
-      signal: input.signal,
-      downloadOptions: input.downloadOptions,
+      signal: downloadOptions.signal,
+      downloadOptions,
     });
   }
 
@@ -343,13 +346,18 @@ export class PluginPackageManager {
     package: InstalledPluginPackage;
     client: PluginGitHubClient;
     platformToken?: string;
+    signal?: AbortSignal;
+    downloadOptions?: PluginGitHubDownloadOptions;
   }): Promise<PluginGitHubAvailableUpdate | undefined> {
     const source = input.package.lock.source;
     if (source.kind !== 'github') return undefined;
+    const downloadOptions = this.#githubDownloadOptions(input);
+    this.#assertGitHubActive(downloadOptions);
     const platformToken = this.#resolvePlatformToken(input.platformToken);
     const currentVersion = parseSemver(input.package.lock.version);
     if (currentVersion === undefined) return undefined;
-    const releases = await input.client.listReleases(source.repository);
+    const releases = await input.client.listReleases(source.repository, downloadOptions);
+    this.#assertGitHubActive(downloadOptions);
     const candidates = this.#stableSemverReleases(releases)
       .filter((entry) => compareSemver(entry.version, currentVersion) > 0);
     for (const candidate of candidates) {
@@ -360,7 +368,8 @@ export class PluginPackageManager {
         pluginId: input.package.lock.pluginId,
       });
       if (asset === undefined) continue;
-      const commitSha = await input.client.commitShaForRef(source.repository, candidate.release.tagName);
+      const commitSha = await input.client.commitShaForRef(source.repository, candidate.release.tagName, downloadOptions);
+      this.#assertGitHubActive(downloadOptions);
       return {
         version: stripSemverTagPrefix(candidate.release.tagName),
         tag: candidate.release.tagName,
@@ -379,7 +388,11 @@ export class PluginPackageManager {
     packageHash: string;
     client: PluginGitHubClient;
     platformToken?: string;
+    signal?: AbortSignal;
+    downloadOptions?: PluginGitHubDownloadOptions;
   }): Promise<PluginInstallResult> {
+    const downloadOptions = this.#githubDownloadOptions(input);
+    this.#assertGitHubActive(downloadOptions);
     const installed = await this.listInstalled({
       scope: input.scope,
       libraryDirectory: input.libraryDirectory,
@@ -398,11 +411,15 @@ export class PluginPackageManager {
       package: match.package,
       client: input.client,
       platformToken: input.platformToken,
+      signal: downloadOptions.signal,
+      downloadOptions,
     });
     if (available === undefined) {
       throw new PluginPackageManagerError('PLUGIN_ARCHIVE_INVALID', 'No newer compatible GitHub Release asset is available.');
     }
-    const archive = await input.client.downloadReleaseAsset(available.browserDownloadUrl);
+    this.#assertGitHubActive(downloadOptions);
+    const archive = await input.client.downloadReleaseAsset(available.browserDownloadUrl, downloadOptions);
+    this.#assertGitHubActive(downloadOptions);
     return this.installFromArchive({
       archive,
       scope: input.scope,
@@ -414,6 +431,7 @@ export class PluginPackageManager {
         commitSha: available.commitSha,
         fingerprint: source.fingerprint,
       },
+      signal: downloadOptions.signal,
     });
   }
 
@@ -466,7 +484,11 @@ export class PluginPackageManager {
     libraryId?: string;
     client: PluginGitHubClient;
     platformToken?: string;
+    signal?: AbortSignal;
+    downloadOptions?: PluginGitHubDownloadOptions;
   }): Promise<PluginInstallResult[]> {
+    const downloadOptions = this.#githubDownloadOptions(input);
+    this.#assertGitHubActive(downloadOptions);
     const installed = await this.listInstalled({
       scope: input.scope,
       libraryDirectory: input.libraryDirectory,
@@ -474,6 +496,7 @@ export class PluginPackageManager {
     const state = await this.#readDeviceState();
     const applied: PluginInstallResult[] = [];
     for (const entry of installed) {
+      this.#assertGitHubActive(downloadOptions);
       if (entry.status !== 'valid' || entry.package.lock.source.kind !== 'github') continue;
       const preference = state.updatePreferences.find((item) => item.pluginId === entry.package.lock.pluginId
         && item.sourceFingerprint === entry.package.lock.sourceFingerprint);
@@ -487,6 +510,8 @@ export class PluginPackageManager {
         package: entry.package,
         client: input.client,
         platformToken: input.platformToken,
+        signal: downloadOptions.signal,
+        downloadOptions,
       });
       if (available === undefined) continue;
       const result = await this.applyGitHubUpdateForLock({
@@ -496,6 +521,8 @@ export class PluginPackageManager {
         packageHash: entry.package.lock.packageHash,
         client: input.client,
         platformToken: input.platformToken,
+        signal: downloadOptions.signal,
+        downloadOptions,
       });
       applied.push(result);
     }
@@ -514,8 +541,11 @@ export class PluginPackageManager {
   }): Promise<PluginInstallResult | undefined> {
     let releases: Awaited<ReturnType<PluginGitHubClient['listReleases']>>;
     try {
-      releases = await input.client.listReleases(input.repository);
+      this.#assertGitHubActive(input.downloadOptions);
+      releases = await input.client.listReleases(input.repository, input.downloadOptions);
+      this.#assertGitHubActive(input.downloadOptions);
     } catch (error) {
+      this.#assertGitHubActive(input.downloadOptions);
       if (error instanceof PluginPackageManagerError && error.code === 'PLUGIN_ARCHIVE_INVALID') {
         return undefined;
       }
@@ -528,6 +558,7 @@ export class PluginPackageManager {
     let lastCompatibilityFailure: unknown;
     let missingPlatform = false;
     for (const candidate of ordered) {
+      this.#assertGitHubActive(input.downloadOptions);
       const version = stripSemverTagPrefix(candidate.tagName);
       const asset = selectPluginReleaseAsset(candidate.assets, input.platformToken, { version })
         ?? selectPluginReleaseAsset(candidate.assets, input.platformToken);
@@ -541,10 +572,16 @@ export class PluginPackageManager {
         continue;
       }
       sawAnyNormativeAsset = true;
+      // Either half failing must terminate the other half's owned requests,
+      // without aborting the caller's signal or changing custom-client shape.
+      const pair = new AbortController();
+      const signal = input.signal === undefined ? pair.signal : AbortSignal.any([input.signal, pair.signal]);
+      const pairOptions = { ...input.downloadOptions, signal };
       const [archive, commitSha] = await Promise.all([
-        input.client.downloadReleaseAsset(asset.browserDownloadUrl, input.downloadOptions),
-        input.client.commitShaForRef(input.repository, candidate.tagName),
-      ]);
+        input.client.downloadReleaseAsset(asset.browserDownloadUrl, pairOptions),
+        input.client.commitShaForRef(input.repository, candidate.tagName, pairOptions),
+      ]).catch((error: unknown) => { pair.abort(); throw error; });
+      this.#assertGitHubActive(input.downloadOptions);
       try {
         input.downloadOptions?.onPhase?.('installing');
         return await this.installFromArchive({
@@ -591,7 +628,9 @@ export class PluginPackageManager {
     signal?: AbortSignal;
     downloadOptions?: PluginInstallFromGitHubInput['downloadOptions'];
   }): Promise<PluginInstallResult> {
-    const tags = await input.client.listTags(input.repository);
+    this.#assertGitHubActive(input.downloadOptions);
+    const tags = await input.client.listTags(input.repository, input.downloadOptions);
+    this.#assertGitHubActive(input.downloadOptions);
     const compatibleTags = tags
       .flatMap((tag) => {
         const version = parseSemver(stripSemverTagPrefix(tag.name));
@@ -606,14 +645,16 @@ export class PluginPackageManager {
       ? [{ ref: preferred.name, expectedCommit: preferred.commitSha }]
       : compatibleTags.length > 0
         ? compatibleTags.map((tag) => ({ ref: tag.name, expectedCommit: tag.commitSha }))
-        : [await input.client.defaultBranch(input.repository).then((branch) => ({
+        : [await input.client.defaultBranch(input.repository, input.downloadOptions).then((branch) => ({
           ref: branch.name,
           expectedCommit: branch.commitSha,
         }))];
 
     let lastCompatibilityFailure: unknown;
     for (const candidate of candidates) {
+      this.#assertGitHubActive(input.downloadOptions);
       const downloaded = await input.client.downloadArchive(input.repository, candidate.ref, input.downloadOptions);
+      this.#assertGitHubActive(input.downloadOptions);
       if (!/^[a-f0-9]{40,64}$/u.test(downloaded.commitSha)) {
         throw new PluginPackageManagerError('PLUGIN_ARCHIVE_INVALID', 'GitHub returned an invalid commit SHA for the plugin archive.');
       }
@@ -643,6 +684,27 @@ export class PluginPackageManager {
     throw lastCompatibilityFailure instanceof Error
       ? lastCompatibilityFailure
       : new PluginPackageManagerError('PLUGIN_PACKAGE_INCOMPATIBLE', 'No compatible plugin tag is available.');
+  }
+
+  #githubDownloadOptions(input: { signal?: AbortSignal; downloadOptions?: PluginGitHubDownloadOptions }): PluginGitHubDownloadOptions {
+    const hostBudget = this.#limits.maxArchiveBytes;
+    const requestedBudget = input.downloadOptions?.maxArchiveBytes;
+    if (!Number.isSafeInteger(hostBudget) || hostBudget < 0
+      || (requestedBudget !== undefined && (!Number.isSafeInteger(requestedBudget) || requestedBudget < 0))) {
+      throw new PluginPackageManagerError('PLUGIN_ARCHIVE_INVALID', 'Invalid GitHub download archive byte budget.');
+    }
+    const parent = input.signal;
+    const downloadSignal = input.downloadOptions?.signal;
+    const signal = parent !== undefined && downloadSignal !== undefined && parent !== downloadSignal
+      ? AbortSignal.any([parent, downloadSignal]) : parent ?? downloadSignal;
+    return { ...input.downloadOptions,
+      maxArchiveBytes: requestedBudget === undefined ? hostBudget : Math.min(hostBudget, requestedBudget),
+      ...(signal === undefined ? {} : { signal }),
+    };
+  }
+
+  #assertGitHubActive(options: PluginGitHubDownloadOptions | undefined): void {
+    if (options?.signal?.aborted) throw new DOMException('Plugin installation was stopped.', 'AbortError');
   }
 
   #resolvePlatformToken(explicit: string | undefined): PluginPlatformToken {

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' file:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <title>Super Lib · 阶段 A 架构与兼容性索引</title>
+  <style>
+    :root{color-scheme:light;font-family:"Segoe UI","Microsoft YaHei",sans-serif;color:#203248;background:#f4f7fa;font-synthesis:none}*{box-sizing:border-box}body{margin:0}a{color:#244e80;text-underline-offset:3px}a:focus-visible{outline:3px solid #cc8731;outline-offset:4px;border-radius:3px}main{max-width:1720px;padding:40px 36px 52px;margin:auto}header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:24px}h1{font-size:30px;letter-spacing:-.6px;margin:6px 0 12px}h2{font-size:18px;margin:0 0 12px}.eyebrow{font:12px Consolas,"Cascadia Code",monospace;letter-spacing:1.4px;color:#54708d}.intro{max-width:900px;line-height:1.7;margin:0;color:#53687d}.badge{font-size:13px;line-height:1.65;border:1px solid #adc5b8;border-radius:8px;background:#edf5f0;padding:12px 16px;min-width:218px}.badge strong{display:block;font-weight:650}.figure{margin:0;background:#fff;border:1px solid #cfd9e4;border-radius:10px;overflow:hidden}.figure img{display:block;max-width:100%;width:100%;height:auto}.figure figcaption{padding:14px 22px;border-top:1px solid #dbe3ec;color:#53687d;font-size:13px;line-height:1.7}.links{display:flex;gap:8px 24px;flex-wrap:wrap}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:20px}.card{background:#fff;border:1px solid #d4dfe9;border-radius:8px;padding:22px;min-width:0}.card p{font-size:14px;line-height:1.8;color:#52687d;margin:12px 0 0}.card ul{list-style:none;padding:0;margin:0}.card li+li{margin-top:10px}.notice{background:#fff7e7;border-left:3px solid #c99b48;padding:16px 20px;margin-top:20px;font-size:14px;line-height:1.8}code{font:13px Consolas,"Cascadia Code",monospace;overflow-wrap:anywhere}.foot{font-size:12px;color:#687b8e;margin-top:22px;line-height:1.8}@media(max-width:900px){main{padding:24px 16px}header{display:block}.badge{display:inline-block;margin-top:18px}.cards{grid-template-columns:1fr}h1{font-size:25px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <div class="eyebrow">SUPER LIB / ARCHITECTURE / 2026-10-08</div>
+      <h1>阶段 A：实际结构与兼容性证据</h1>
+      <p class="intro">这份离线索引补充已实施的请求拥有者、后台刷新、文件终态和构建来源链。原架构快照不被覆盖；结构图不代替源冻结、真实命令退出状态、UI 验收或发行许可。</p>
+    </div>
+    <div class="badge"><strong>发行版本 2.3.17</strong>schema49 / 依赖 / 本地优先边界保留<br>最终结果以兼容矩阵与台账为准</div>
+  </header>
+  <figure class="figure">
+    <img src="architecture-overview.svg" width="1640" height="1220" alt="Renderer、Main与Library UtilityProcess的实际拥有者结构，原数据安全不变式，以及独立构建凭据链">
+    <figcaption>
+      <div class="links"><a href="architecture-overview.svg">查看原始 SVG</a><a href="diagrams/runtime.mmd">Mermaid 运行结构源</a><a href="compatibility-matrix.md">逐项兼容与验收矩阵</a><a href="README.md">实施结构说明</a></div>
+      SVG 是纯离线 markup；本页没有在线字体、脚本或外部资源。Mermaid 源未嵌入渲染器，不能将存在源码记为渲染验证通过。
+    </figcaption>
+  </figure>
+  <section class="cards" aria-label="证据与源文件索引">
+    <article class="card">
+      <h2>实施与证据</h2>
+      <ul><li><a href="../../plans/2026-10-07-architecture-stage-a-decisions.md">决定版：A0 → A 检查点</a></li><li><a href="../../plans/2026-10-08-architecture-stage-a-continuation.md">持续实施与验收台账</a></li><li><a href="compatibility-matrix.md">真实 red / 新合同 / 夹具错误 / NOT_RUN</a></li></ul>
+      <p>局部 PASS 只代表命令覆盖的范围。JSON 断言绿不代替实际 exit 0；性能百分比、真实 GPU / NAS 和安装发布没有从结构图推导。</p>
+    </article>
+    <article class="card">
+      <h2>实际拥有者与数据边界</h2>
+      <ul><li><a href="../../../src/renderer/metadata-read-controller.ts">Metadata owner / raw IPC budget</a></li><li><a href="../../../src/main/worker-client.ts">Worker request / origin-child terminal</a></li><li><a href="../../../src/worker/library-service.ts">LibraryService / schema / recovery</a></li><li><a href="../../../src/main/asset-change-publisher.ts">Quiet presentation / domain fanout</a></li></ul>
+      <p>取消 consumer 不提前释放原始请求槽；通知静音不停止 cache、插件和 opt-in AI。外部 linked root 不变成 cleanup 所有物。</p>
+    </article>
+    <article class="card">
+      <h2>可复核清点与历史快照</h2>
+      <ul><li><a href="inventory.json">本阶段最终冻结后生成的 inventory</a></li><li><a href="tools/build-inventory.mjs">只读清点 / hash 与链接复核工具</a></li><li><a href="../2026-10-07-review/index.html">2026-10-07 原审查页面（历史）</a></li><li><a href="../2026-10-07-review/inventory.json">原源码清点（不覆盖、不追认）</a></li></ul>
+      <p>新 inventory 必须在所有源码写者 freeze 后生成。工具拒绝覆盖既有输出；旧清点的统计与 SHA 不能冒充当前源码未变。</p>
+    </article>
+  </section>
+  <aside class="notice">构建来源 receipt 只绑定本地输入与输出，不是数字签名。第三片 producer / 唯一附件接线及最后 UI、static、IPC、native 验收状态以矩阵登记为准；本页面不会启动 Super、下载依赖、运行安装器或连接服务器。</aside>
+  <p class="foot">图中 Main/Worker 边表示实际 bridge，不是模块互相任意调用。静态相对 import 清点不包含 SQL / IPC / package imports；完整功能、权限和恢复策略仍以源码和限定测试证据为准。</p>
+</main>
+</body>
+</html>

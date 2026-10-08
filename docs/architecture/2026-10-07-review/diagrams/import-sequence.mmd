@@ -1,0 +1,42 @@
+sequenceDiagram
+  actor User as 用户
+  participant UI as Renderer
+  participant Main as Main / WorkerClient
+  participant W as Library Worker
+  participant Lease as Write/Job lease
+  participant Stage as operation stage / 源文件
+  participant DB as SQLite / manifest
+  Note over User,DB: 本图限定普通文件/目录 staged import；不是所有 adapter 的统一时序
+  User->>UI: 普通文件/目录导入
+  UI->>Main: prepare（类型化参数）
+  Main->>W: requestId + command
+  W->>Lease: 获取/心跳 writer lease，媒体 external hold
+  W->>Stage: 枚举与验证源路径
+  W->>DB: 先持久 file_operations preparing / staging manifest
+  W->>Stage: 1MiB bounded 异步 stage copy/hash
+  W->>Stage: 前后身份/大小/时间与路径验证
+  W->>DB: 更新 operation phase / 恢复 manifest
+  alt 有冲突
+    W-->>UI: pending token / TTL / conflicts
+    User->>UI: 选择保留/跳过/合并/替换
+    UI->>W: resolve token
+    W->>W: reserve token；重复确认共享 Promise
+  else 无冲突
+    W->>W: 直接进入提交
+  end
+  W->>Lease: 确认 fence 仍有效
+  W->>Stage: 仅操作本次拥有的路径
+  W->>DB: bounded transaction / commit
+  Note over W,DB: commit 是不可回滚边界；清理失败不得撤销已提交资产
+  W->>Stage: 清理 stage（失败保留可恢复证据）
+  W->>DB: 内部每500 ID分批查询
+  W-->>UI: 合并完整 scoped result / UTF-8全局排序，不截断
+  DB-->>Main: change sequence
+  W-->>Main: asset.changed / progress
+  Main-->>UI: 刷新与通知，保留现有预览身份
+  W->>W: 媒体队列恢复；视口优先
+  opt 用户 opt-in 且视觉输入 ready
+    W->>W: AI 分析并写独立 AI 层
+  end
+  Note over UI,W: Billfish/Eagle：128项bulk、skipContentHash、同步prepare/resolve，批间yielding
+  Note over UI,W: linked登记外部root；ZIP另经解压验证/冲突流程，不套用本图每一步

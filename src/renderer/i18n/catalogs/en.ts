@@ -753,6 +753,8 @@ export const en = {
     versionConflict: "Version conflict",
     versionConflictBody: "Metadata was changed by another operation. Refresh to load the latest version.",
     refreshMetadata: "Refresh metadata",
+    metadataLoading: "Loading selected metadata: {ready}/{total}",
+    metadataReadFailed: "Metadata failed for {count} items. Batch editing resumes when the complete selection is ready.",
     libraryPath: "Library path",
     aiGenerated: "AI-generated content",
     aiBadge: "AI",

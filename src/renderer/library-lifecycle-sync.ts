@@ -6,10 +6,19 @@ export function shouldApplyLibraryLifecycleEvent(input: {
   scriptSandboxPreviewOpen: boolean;
 }): boolean {
   if (input.event.type !== 'library.opened') return false;
+  if (input.event.source === 'replacement-restore') return true;
   if (input.event.library.libraryId === input.currentLibraryId) return false;
   return input.event.source === 'mcp'
-    || input.event.source === 'replacement-restore'
     || (input.scriptSandboxPreviewOpen && input.currentLibraryId === undefined);
+}
+
+/** Main also uses same-ID MCP `opened` for rename/show-in-desktop, not reopen. */
+export function shouldUpdateLibrarySummaryEvent(input: {
+  event: RendererLifecycleEvent;
+  currentLibraryId?: string;
+}): boolean {
+  return input.event.type === 'library.opened' && input.event.source === 'mcp'
+    && input.event.library.libraryId === input.currentLibraryId;
 }
 
 /**

@@ -1,4 +1,6 @@
-﻿$ErrorActionPreference = 'Stop'
+﻿param([string]$PreviewDirectory = (Join-Path $PSScriptRoot '../../tmp/update-ui-preview'))
+$ErrorActionPreference = 'Stop'
+$PreviewDirectory = [IO.Path]::GetFullPath($PreviewDirectory)
 Add-Type @'
 using System;
 using System.Text;
@@ -23,17 +25,28 @@ public static class UpdatePreviewInput {
   }
 }
 '@
-$executable = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../tmp/update-ui-preview/SuperUpdatePreview.exe'))
+$executable = Join-Path $PreviewDirectory 'SuperUpdatePreview.exe'
+foreach ($fixtureExecutable in @($executable, (Join-Path $PreviewDirectory 'SuperUpdateCompileOnly.exe'))) {
+  if (-not (Test-Path -LiteralPath $fixtureExecutable -PathType Leaf)) { throw "Current compiled fixture is missing: $fixtureExecutable" }
+}
 $script:ownedPreviews = [Collections.Generic.List[System.Diagnostics.Process]]::new()
+function Assert-NoPreviewProcesses {
+  $existing = @(Get-Process -Name 'SuperUpdatePreview.tmp', 'SuperUpdateCompileOnly.tmp' -ErrorAction SilentlyContinue)
+  if ($existing.Count -gt 0) { throw 'An updater preview is already running. Refusing to claim or close another run.' }
+}
+Assert-NoPreviewProcesses
 function Open-Preview([string]$name, [string]$extra = '', [string]$target = $executable) {
+  Assert-NoPreviewProcesses
   $processName = [IO.Path]::GetFileNameWithoutExtension($target) + '.tmp'
   $existing = @(Get-Process -Name $processName -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
-  $script:previewLog = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../../tmp/update-ui-preview/$name.log"))
+  $script:previewLog = Join-Path $PreviewDirectory "$name.log"
   Start-Process -FilePath $target -ArgumentList "/SP- /SILENT /SUPERLIB-FOREGROUND-UPDATE /LOG=`"$script:previewLog`" $extra" -WindowStyle Hidden
   for ($attempt = 0; $attempt -lt 100; $attempt++) {
     Start-Sleep -Milliseconds 50
-    $previewProcess = Get-Process -Name $processName -ErrorAction SilentlyContinue | Where-Object { $_.Id -notin $existing -and $_.MainWindowTitle -eq 'Super Lib 更新' } | Select-Object -First 1
-    if ($previewProcess) {
+    $candidates = @(Get-Process -Name $processName -ErrorAction SilentlyContinue | Where-Object { $_.Id -notin $existing -and $_.MainWindowTitle -eq 'Super Lib 更新' })
+    if ($candidates.Count -gt 1) { throw 'More than one new updater preview matched. Refusing ambiguous process ownership.' }
+    if ($candidates.Count -eq 1) {
+      $previewProcess = $candidates[0]
       $script:ownedPreviews.Add($previewProcess)
       return $previewProcess
     }
@@ -82,7 +95,7 @@ try {
   if ($button -ne [IntPtr]::Zero -and [UpdatePreviewInput]::IsWindowVisible($button)) { throw 'Installing state must hide the retry button.' }
   [UpdatePreviewInput]::PostMessage($previewProcess.MainWindowHandle, 0x100, [IntPtr]27, [IntPtr]0) | Out-Null
   [UpdatePreviewInput]::PostMessage($previewProcess.MainWindowHandle, 0x100, [IntPtr]13, [IntPtr]0) | Out-Null
-  & (Join-Path $PSScriptRoot 'capture-update-preview.ps1') -Name 'progress' -ProcessId $previewProcess.Id
+  & (Join-Path $PSScriptRoot 'capture-update-preview.ps1') -Name 'progress' -ProcessId $previewProcess.Id -OutputDirectory $PreviewDirectory
   if ([UpdatePreviewInput]::FindCaption($previewProcess.MainWindowHandle, '56%') -eq [IntPtr]::Zero) { throw 'Progress preview must retain 56% after keyboard input.' }
   $previewProcess.CloseMainWindow() | Out-Null
   Assert-Closed $previewProcess
@@ -91,7 +104,7 @@ try {
 
   $previewProcess = Open-Preview 'completed' '/PREVIEWCOMPLETIONHOLD=1'
   Assert-Caption $previewProcess '100%'
-  & (Join-Path $PSScriptRoot 'capture-update-preview.ps1') -Name 'completed' -ProcessId $previewProcess.Id
+  & (Join-Path $PSScriptRoot 'capture-update-preview.ps1') -Name 'completed' -ProcessId $previewProcess.Id -OutputDirectory $PreviewDirectory
   $previewProcess.CloseMainWindow() | Out-Null
   Assert-Closed $previewProcess
   Assert-LaunchCount 0
@@ -99,7 +112,7 @@ try {
 
   $previewProcess = Open-Preview 'retry-click' '/PREVIEWLAUNCHFAIL=1'
   $button = Wait-ForRetry $previewProcess
-  & (Join-Path $PSScriptRoot 'capture-update-preview.ps1') -Name 'launch-failed' -ProcessId $previewProcess.Id
+  & (Join-Path $PSScriptRoot 'capture-update-preview.ps1') -Name 'launch-failed' -ProcessId $previewProcess.Id -OutputDirectory $PreviewDirectory
   Start-Sleep -Milliseconds 1300
   Assert-LaunchCount 1
   [UpdatePreviewInput]::SendMessage($button, 0x201, [IntPtr]1, [IntPtr]0x00140014) | Out-Null

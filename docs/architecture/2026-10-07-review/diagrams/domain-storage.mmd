@@ -1,0 +1,21 @@
+flowchart TB
+  L["library / 每库 OpenLibrary session"] --> A["assets<br/>稳定 assetId / portable path / current revision"]
+  MF["managed_folders<br/>对应 Assets/ 真实目录"] --> A
+  LF["linked_folders + rules / ignore materialization<br/>外部路径 / offline availability"] --> A
+  A --> R["revisions<br/>内容指纹 / accepted revision / stable identity"]
+  A --> H["asset_metadata / human_asset_tags / tags<br/>描述·评分·喜欢·人工色卡·来源等"]
+  A --> AI["ai_content / ai_asset_tags / analysis state<br/>独立 AI 层，不覆盖人工信息"]
+  C["collections / collection_assets<br/>树 / 手动顺序，不移动文件"] --> A
+  SC["smart_collections<br/>保存 query/filter/sort，不拥有成员"] -.-> A
+  SQ["asset_sequences / frames<br/>折叠呈现，帧仍是独立资产"] --> A
+  R --> AR["revision_artifacts<br/>thumbnail / proxy / mip / waveform 等派生物"]
+  A --> IDX["asset_search_index / FTS5<br/>包含 / 单字搜索语义不能直接换成 FTS-only"]
+  OP["file_operations / operation_history<br/>manifest · stage · recovery / undo"] --> A
+  LE["library_write_leases / job leases<br/>fencing / heartbeat"] -.-> OP
+  J["jobs / plugin jobs / derived fields<br/>持久任务与结果"] --> AR
+  CH["durable change sequence<br/>连接本地 browse TEMP epoch + data_version"] -.-> IDX
+  SY["sync sessions / manifest cache<br/>远端 WebDAV；非数据库并行写扩容"] --> A
+  A -.-> FS["Assets/ 或 external linked root<br/>文件所有权必须区分"]
+  OP -.-> ST[".super/operations"]
+  AR -.-> AF[".super/artifacts / 其他派生目录"]
+  BK[".super/backups/library.db.1 / .2<br/>先验证再恢复，保留原始证据"] -.-> L

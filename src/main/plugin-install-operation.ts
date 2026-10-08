@@ -20,7 +20,8 @@ export class PluginInstallOperation {
   #bytesDownloaded = 0;
   #totalBytes: number | undefined;
   #stopped = false;
-  #resume: (() => void) | undefined;
+  readonly #pausedWaiters = new Set<() => void>();
+  readonly #pauseListeners = new Set<(paused: boolean) => void>();
 
   constructor(operationId: string, report: (event: PluginInstallProgress) => void) {
     this.operationId = operationId;
@@ -37,65 +38,93 @@ export class PluginInstallOperation {
   }
 
   setPhase(phase: PluginInstallProgress['phase']): void {
+    if (this.#terminal()) return;
     this.#phase = phase;
     this.#emit();
   }
 
   setCompleted(): void {
-    if (this.#stopped) return;
-    this.#state = 'completed';
-    this.#emit();
+    this.#finish('completed');
   }
 
   setFailed(message: string): void {
-    if (this.#stopped) return;
-    this.#state = 'failed';
-    this.#emit({ message: message.slice(0, 2_000) });
+    this.#finish('failed', message.slice(0, 2_000));
   }
 
   control(action: PluginInstallControlAction): void {
-    if (this.#state === 'completed' || this.#state === 'failed' || this.#stopped) return;
+    if (this.#terminal()) return;
     if (action === 'pause') {
+      if (this.#state === 'paused') return;
       this.#state = 'paused';
+      this.#notifyPause();
       this.#emit();
       return;
     }
     if (action === 'resume') {
       this.#state = 'running';
-      this.#resume?.();
-      this.#resume = undefined;
+      this.#wakePausedWaiters();
+      this.#notifyPause();
       this.#emit();
       return;
     }
-    this.#stopped = true;
-    this.#state = 'stopped';
-    this.#abortController.abort();
-    this.#resume?.();
-    this.#resume = undefined;
-    this.#emit({ message: 'Plugin installation was stopped.' });
+    this.#finish('stopped', 'Plugin installation was stopped.');
   }
 
   async waitIfPaused(): Promise<void> {
-    if (this.#stopped) throw new PluginInstallCancelledError();
+    if (this.signal.aborted) throw new PluginInstallCancelledError();
     if (this.#state !== 'paused') return;
-    await new Promise<void>((resolve) => {
-      this.#resume = resolve;
-    });
-    if (this.#stopped) throw new PluginInstallCancelledError();
+    let waiter: (() => void) | undefined;
+    try {
+      await new Promise<void>((resolve) => {
+        waiter = resolve;
+        this.#pausedWaiters.add(resolve);
+      });
+    } finally { if (waiter !== undefined) this.#pausedWaiters.delete(waiter); }
+    if (this.signal.aborted) throw new PluginInstallCancelledError();
   }
 
   downloadOptions(): PluginGitHubDownloadOptions {
     return {
       signal: this.signal,
       waitIfPaused: () => this.waitIfPaused(),
+      subscribePause: (listener) => {
+        if (!this.#terminal()) this.#pauseListeners.add(listener);
+        listener(this.#state === 'paused');
+        return () => { this.#pauseListeners.delete(listener); };
+      },
       onPhase: (phase) => this.setPhase(phase),
       onProgress: ({ bytesDownloaded, totalBytes }) => {
+        if (this.#terminal()) return;
         this.#phase = 'downloading';
         this.#bytesDownloaded = bytesDownloaded;
         this.#totalBytes = totalBytes;
         this.#emit();
       },
     };
+  }
+
+  #terminal(): boolean {
+    return this.#state === 'completed' || this.#state === 'failed' || this.#state === 'stopped';
+  }
+
+  #wakePausedWaiters(): void {
+    for (const resume of this.#pausedWaiters) resume();
+    this.#pausedWaiters.clear();
+  }
+
+  #notifyPause(): void {
+    for (const listener of this.#pauseListeners) listener(this.#state === 'paused');
+  }
+
+  #finish(state: 'completed' | 'failed' | 'stopped', message?: string): void {
+    if (this.#terminal()) return;
+    this.#state = state;
+    this.#stopped = state === 'stopped';
+    if (state !== 'completed') this.#abortController.abort();
+    this.#wakePausedWaiters();
+    this.#notifyPause();
+    this.#pauseListeners.clear();
+    this.#emit(message === undefined ? {} : { message });
   }
 
   #emit(extra: Pick<PluginInstallProgress, 'message'> = {}): void {

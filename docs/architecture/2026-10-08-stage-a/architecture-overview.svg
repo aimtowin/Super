@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="1220" viewBox="0 0 1640 1220" role="img" aria-labelledby="title desc">
+  <title id="title">Super Lib 阶段 A：实际进程、请求拥有者与数据安全结构</title>
+  <desc id="desc">Renderer 经窄 preload 向 Electron Main 发请求。Main 的 WorkerClient 绑定原始请求与来源 child，Library UtilityProcess 拥有 SQLite 和后台任务。UI 的分页和元数据 owner 阻止旧响应污染新会话，通知静音不吞领域事件。原 schema49、FULL、WAL或DELETE、租约与验证备份不变。下方独立展示构建关联，最终验收状态见兼容矩阵。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#50647a"/></marker>
+    <style>
+      text{font-family:"Segoe UI","Microsoft YaHei",sans-serif;fill:#1f3043} .title{font-size:30px;font-weight:700}.sub{font-size:15px;fill:#596d82}.lane{fill:#eef3f8;stroke:#c9d5e1;stroke-width:1.5}.heading{font-size:19px;font-weight:700}.card{fill:white;stroke:#b7c8d9;stroke-width:1.3}.name{font-size:16px;font-weight:650}.body{font-size:14px;fill:#435b70}.small{font-size:13px;fill:#435b70}.chip{fill:#e4eefb;stroke:#9cb5d7}.line{fill:none;stroke:#50647a;stroke-width:1.7;marker-end:url(#arrow)}.both{marker-start:url(#arrow)}.dashed{stroke-dasharray:5 4}.rule{stroke:#d5dee8}.code{font-family:Consolas,"Cascadia Code",monospace;font-size:13px}.label{font-size:12px;fill:#435b70}.amber{fill:#fff7e5;stroke:#d4ad62}.green{fill:#edf6f0;stroke:#9bc0a7}
+    </style>
+  </defs>
+  <rect width="1640" height="1220" fill="#f9fbfd"/>
+  <text x="48" y="53" class="title">Super Lib · 阶段 A 实施结构</text>
+  <text x="48" y="79" class="sub">实际进程与拥有者关系 · 保留本地优先、多进程模块化单体 · 结构图不是全量验收或发行许可</text>
+  <rect x="1320" y="28" width="272" height="44" rx="8" class="green"/>
+  <text x="1335" y="47" class="small">版本 2.3.17 · 不升依赖 / schema</text>
+  <text x="1335" y="64" class="small">最终状态：compatibility-matrix.md</text>
+
+  <rect x="48" y="122" width="476" height="492" rx="12" class="lane"/>
+  <text x="72" y="154" class="heading">Renderer · sandboxed UI</text>
+  <text x="72" y="175" class="small">App 是组合根；不是每个 hook 自建请求拥有者</text>
+  <rect x="72" y="194" width="428" height="58" rx="7" class="card"/>
+  <text x="89" y="218" class="name">App · activation / navigation / viewer identity</text>
+  <text x="89" y="239" class="body">activation / replacement 换 owner；summary 更新保 owner</text>
+  <rect x="72" y="272" width="206" height="125" rx="7" class="card"/>
+  <text x="88" y="296" class="name">Browse pagination</text>
+  <text x="88" y="319" class="body">owner + generation</text>
+  <text x="88" y="341" class="body">page 100 / layout ≤500</text>
+  <text x="88" y="363" class="body">旧 finally 仅清自己占位</text>
+  <text x="88" y="384" class="small">trash / 深页 / 全 query 保留</text>
+  <rect x="294" y="272" width="206" height="125" rx="7" class="card"/>
+  <text x="310" y="296" class="name">Metadata + Inspector</text>
+  <text x="310" y="319" class="body">owner token + asset epoch</text>
+  <text x="310" y="341" class="body">raw ≤4 / bulk ≤3 / primary</text>
+  <text x="310" y="363" class="body">完整 all-ID，不取成功子集</text>
+  <text x="310" y="384" class="small">draft ≠ confirmed · 人工/AI</text>
+  <rect x="72" y="419" width="428" height="92" rx="7" class="card"/>
+  <text x="89" y="443" class="name">既有 coalescedRefresh ← watcher + AI</text>
+  <text x="89" y="465" class="body">one active + dirty trailing；raw count/sidebar 全排空</text>
+  <text x="89" y="487" class="body">前台首屏先完成；提示候选独立于 domain snapshot</text>
+  <rect x="72" y="532" width="428" height="57" rx="7" class="chip"/>
+  <text x="89" y="557" class="name">Preload · typed contextBridge allowlist</text>
+  <text x="89" y="578" class="small">请求 / 事件按既有公共 API；新增 quiet 位仅影响提示</text>
+  <path d="M175 253V270M396 253V270" class="line"/>
+
+  <rect x="570" y="122" width="520" height="492" rx="12" class="lane"/>
+  <text x="594" y="154" class="heading">Electron Main · validated composition</text>
+  <text x="594" y="175" class="small">sender / payload 校验、窗口、队列与本地资源拥有者</text>
+  <rect x="594" y="194" width="231" height="136" rx="7" class="card"/>
+  <text x="610" y="219" class="name">LibraryWorkerClient</text>
+  <text x="610" y="243" class="body">requestId + origin child</text>
+  <text x="610" y="266" class="body">deadline ≠ actual terminal</text>
+  <text x="610" y="289" class="body">有效 response / 实际 exit</text>
+  <text x="610" y="312" class="small">旧 child 不污染 replacement</text>
+  <rect x="843" y="194" width="223" height="136" rx="7" class="card"/>
+  <text x="859" y="219" class="name">asset-change-publisher</text>
+  <text x="859" y="243" class="body">source + artifact cache</text>
+  <text x="859" y="266" class="body">→ plugin domain events</text>
+  <text x="859" y="289" class="body">→ opt-in AI → renderer</text>
+  <text x="859" y="312" class="small">quiet hint 不停止这些副作用</text>
+  <rect x="594" y="349" width="472" height="67" rx="7" class="card"/>
+  <text x="611" y="374" class="name">ExtensionServer + owned upload staging</text>
+  <text x="611" y="397" class="body">claim → dispatch → actual terminal；不按 disconnect / timeout 删源</text>
+  <rect x="594" y="436" width="231" height="74" rx="7" class="card"/>
+  <text x="610" y="460" class="name">Controlled offscreen window</text>
+  <text x="610" y="483" class="body">model / document render bridge</text>
+  <text x="610" y="501" class="small">逻辑 abort 不撤销已运行 GPU</text>
+  <rect x="843" y="436" width="223" height="74" rx="7" class="card"/>
+  <text x="859" y="460" class="name">Updater + Plugin manager</text>
+  <text x="859" y="483" class="body">final hash / actual spawn</text>
+  <text x="859" y="501" class="small">byte budget / pause / abort / trust</text>
+  <text x="594" y="549" class="body">CommandGateway / journal · super:// + plugin protocol</text>
+  <text x="594" y="574" class="small">原 MCP / 确认 / 幂等 / source授权 / Range / 子窗口能力保留</text>
+  <path d="M499 560H570" class="line both"/>
+  <text x="522" y="544" class="label">IPC</text>
+  <path d="M709 349V331" class="line"/>
+
+  <rect x="1136" y="122" width="456" height="492" rx="12" class="lane"/>
+  <text x="1160" y="154" class="heading">Library UtilityProcess</text>
+  <text x="1160" y="175" class="small">worker/index：typed dispatcher / shutdown control</text>
+  <rect x="1160" y="194" width="408" height="136" rx="7" class="card"/>
+  <text x="1177" y="218" class="name">LibraryService · 单同步 SQLite owner</text>
+  <text x="1177" y="243" class="body">query / import / revision / history / watcher</text>
+  <text x="1177" y="267" class="body">TTL：先 token invalid + durable rolled_back</text>
+  <text x="1177" y="290" class="body">最后 cleanup 失败诊断，留 owned 暂存待恢复</text>
+  <text x="1177" y="313" class="small">不改 schema / lease / backup；领域事件不因 quiet 消失</text>
+  <rect x="1160" y="349" width="408" height="87" rx="7" class="card"/>
+  <text x="1177" y="374" class="name">pending-render-rpc × model / document</text>
+  <text x="1177" y="397" class="body">settle once → Map / timer / listener 清理</text>
+  <text x="1177" y="420" class="body">conversion await → signal check → status / RPC</text>
+  <rect x="1160" y="456" width="408" height="87" rx="7" class="card"/>
+  <text x="1177" y="481" class="name">Media / AI / Sync queues</text>
+  <text x="1177" y="504" class="body">Sharp · FFmpeg · OIIO · PDF · ufbx / opt-in AI</text>
+  <text x="1177" y="527" class="small">single-flight / source授权 / job fence / WebDAV 保留</text>
+  <text x="1160" y="577" class="body">shutdown：RPC dispose 先于原媒体 / 库关闭</text>
+  <path d="M1090 254H1136" class="line both"/>
+  <text x="1096" y="238" class="label">port</text>
+  <path d="M1136 391H1067" class="line both"/>
+  <text x="1083" y="375" class="label">render</text>
+
+  <path d="M953 194V102H285V194" class="line dashed"/>
+  <text x="597" y="97" class="label">committed domain event → renderer；可选 quiet 位只限制 toast</text>
+
+  <rect x="48" y="682" width="476" height="246" rx="12" class="lane"/>
+  <text x="72" y="716" class="heading">辅助进程与外部能力 · 原边界保留</text>
+  <rect x="72" y="736" width="428" height="67" rx="7" class="card"/>
+  <text x="89" y="761" class="name">独立 Script / Plugin UtilityProcesses</text>
+  <text x="89" y="785" class="body">restricted QuickJS / standard host / trusted Node host</text>
+  <text x="72" y="832" class="body">Floating preview / critical confirmation：独立窄 preload</text>
+  <text x="72" y="860" class="body">可选 AI / WebDAV / GitHub / 更新下载源</text>
+  <text x="72" y="888" class="small">本轮无 ECS 迁移、账号门禁、线上测量或真实安装</text>
+  <path d="M795 614V649H486V735" class="line"/>
+  <text x="548" y="644" class="label">Main gateway / plugin host 管理</text>
+
+  <rect x="570" y="682" width="1022" height="246" rx="12" class="green"/>
+  <text x="594" y="716" class="heading">持久数据与文件所有权 · 不变式没有降级</text>
+  <rect x="594" y="736" width="302" height="157" rx="7" class="card"/>
+  <text x="611" y="761" class="name">.super/library.db · schema49</text>
+  <text x="611" y="790" class="body">assets / revisions / FTS / change sequence</text>
+  <text x="611" y="817" class="body">foreign_keys ON · synchronous FULL</text>
+  <text x="611" y="845" class="body">local → WAL；network / unknown → DELETE</text>
+  <text x="611" y="872" class="small">library.db 仍由 Library Worker 写入</text>
+  <rect x="912" y="736" width="300" height="157" rx="7" class="card"/>
+  <text x="929" y="761" class="name">Durable journals / recovery</text>
+  <text x="929" y="790" class="body">lease / job owner + fencing token</text>
+  <text x="929" y="817" class="body">operations / revisions / history</text>
+  <text x="929" y="845" class="body">验证 snapshot 后旋转两 slot 备份</text>
+  <text x="929" y="872" class="small">primary → verified backups → Assets rescue</text>
+  <rect x="1228" y="736" width="340" height="157" rx="7" class="card"/>
+  <text x="1245" y="761" class="name">Managed Assets / external linked roots</text>
+  <text x="1245" y="790" class="body">托管 originals / artifacts 属库拥有范围</text>
+  <text x="1245" y="817" class="body">外部 linked root 不归 cleanup 所有</text>
+  <text x="1245" y="845" class="body">显式 source-file trash 原合同保留</text>
+  <text x="1245" y="872" class="small">A9 仅回收 owned upload；A2 仅清安全 operation</text>
+  <path d="M1366 614V682" class="line"/>
+  <text x="1380" y="647" class="label">LibraryService owns DB / files</text>
+
+  <rect x="48" y="973" width="1544" height="191" rx="12" class="amber"/>
+  <text x="72" y="1005" class="heading">A1b 构建关联 · 与运行进程独立；真实成品 / 发布见版本验证记录</text>
+  <rect x="72" y="1023" width="428" height="112" rx="7" class="card"/>
+  <text x="89" y="1048" class="name">① early inputs receipt</text>
+  <text x="89" y="1073" class="body">media / ufbx / extension / Vite 前捕获</text>
+  <text x="89" y="1096" class="body">全类型 + untracked / resources / licenses / locks</text>
+  <text x="89" y="1120" class="small">仅声明生成物漂移；当前 media 由已捕获 pin 验证</text>
+  <rect x="570" y="1023" width="428" height="112" rx="7" class="card"/>
+  <text x="587" y="1048" class="name">② exact package receipt / thin launcher</text>
+  <text x="587" y="1073" class="body">postPackage 最终hash；preMake 再验 exact包</text>
+  <text x="587" y="1096" class="body">sidecar 在 payload 外；父级先检查，写前再核源</text>
+  <text x="587" y="1120" class="small">skip-package 不用新 HEAD 追认旧包；不是数字签名</text>
+  <rect x="1068" y="1023" width="500" height="112" rx="7" class="card dashed"/>
+  <text x="1085" y="1048" class="name">③ derivative producers / explicit artifact set</text>
+  <text x="1085" y="1073" class="body">trusted target → installer / ZIP / retained delta / checksums</text>
+  <text x="1085" y="1096" class="body">旧 baseline 保留；数量 / 60% 策略不改；不盲 glob</text>
+  <text x="1085" y="1120" class="small">三片接线已冻结；实际产物以对应 receipt 校验</text>
+  <path d="M500 1078H568M998 1078H1066" class="line"/>
+  <text x="48" y="1195" class="small">实线：请求或拥有者关系；虚线：领域提示 / 尚待最终记录的切片。GPU 物理取消、大库性能、NAS、真实安装与发行不由此图证明。</text>
+</svg>

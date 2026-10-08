@@ -1,0 +1,19 @@
+flowchart LR
+  NAV["用户导航 / search / filter / sort"] --> DEF["QueryDefinition + generation"]
+  DEF --> PAGE["第一页 100 summaries"]
+  DEF --> GEO["layoutOnly 500-entry chunks<br/>完整身份 / 几何索引"]
+  GEO --> WIN["grid / masonry / justified<br/>DOM 窗口 + spacer + overscan"]
+  WIN --> V["ensureVisibleRange<br/>目的地 summary pages"]
+  V --> PAGE
+  DEF --> IDS["idsOnly：当前筛选范围<br/>全选 / 反选 / 批量操作"]
+  PAGE --> INS["Inspector metadata / mixed state"]
+  PAGE --> PRE["Viewer identity + request sequence<br/>浏览刷新不等于用户离开预览"]
+  CHANGE["asset.changed / library.changed"] --> CO["现有 debounce + coalescedRefresh<br/>one active + one dirty trailing"]
+  CO --> RE["reloadCurrentContent / scoped requery"]
+  AI["AI completed"] -->|"现状：逐条直接调用"| RE
+  RE --> DEF
+  TH["thumbnail / dimensions"] --> PATCH["rAF 局部 patch / cover debounce"]
+  PATCH --> WIN
+  POLL["serialPoll：任务面板开 1s / 关 2s<br/>前一次五类读取 settle 后再调度"] --> TASK["任务状态 / 错误 / 停止与重试"]
+  PLAN["计划：AI 也接入共享失效入口"] -.-> CO
+  OWN["计划：request session 独立清理<br/>旧 finally 不清新 generation"] -.-> DEF

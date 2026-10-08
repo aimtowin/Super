@@ -76,7 +76,13 @@ export type PluginGitHubRelease = {
 
 export type PluginGitHubDownloadOptions = {
   signal?: AbortSignal;
+  /** Limits received archive bytes, not the process memory footprint. */
+  maxArchiveBytes?: number;
+  headerTimeoutMs?: number;
+  idleTimeoutMs?: number;
   waitIfPaused?: () => Promise<void>;
+  /** Immediately delivers current state; unsubscribe releases the listener. */
+  subscribePause?: (listener: (paused: boolean) => void) => () => void;
   onPhase?: (phase: 'resolving' | 'downloading' | 'installing') => void;
   onProgress?: (progress: { bytesDownloaded: number; totalBytes?: number }) => void;
 };
@@ -90,12 +96,12 @@ export type PluginGitHubAvailableUpdate = {
 };
 
 export interface PluginGitHubClient {
-  listTags(repository: string): Promise<Array<{ name: string; commitSha: string }>>;
-  defaultBranch(repository: string): Promise<{ name: string; commitSha: string }>;
-  listReleases(repository: string): Promise<PluginGitHubRelease[]>;
+  listTags(repository: string, options?: PluginGitHubDownloadOptions): Promise<Array<{ name: string; commitSha: string }>>;
+  defaultBranch(repository: string, options?: PluginGitHubDownloadOptions): Promise<{ name: string; commitSha: string }>;
+  listReleases(repository: string, options?: PluginGitHubDownloadOptions): Promise<PluginGitHubRelease[]>;
   downloadReleaseAsset(browserDownloadUrl: string, options?: PluginGitHubDownloadOptions): Promise<Uint8Array>;
   downloadArchive(repository: string, ref: string, options?: PluginGitHubDownloadOptions): Promise<{ archive: Uint8Array; commitSha: string }>;
-  commitShaForRef(repository: string, ref: string): Promise<string>;
+  commitShaForRef(repository: string, ref: string, options?: PluginGitHubDownloadOptions): Promise<string>;
 }
 
 export type PluginFetch = (input: string, init?: RequestInit) => Promise<Response>;

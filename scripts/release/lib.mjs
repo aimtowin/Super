@@ -58,6 +58,10 @@ export function resolvePackagedExecutable(packageRoot = defaultPackageRoot()) {
   throw new Error(`Unsupported platform for packaged E2E: ${process.platform}`);
 }
 
+/** Legacy read-only inventory, NOT a trusted release/attachment selector.
+ * Release producers/checksums consume artifact-manifest.mjs exclusively.
+ * Retained for diagnostic/tool compatibility; do not publish this raw list.
+ */
 export function collectMakeArtifacts(makeRoot = path.join(repoRoot, 'out', 'make')) {
   if (!existsSync(makeRoot)) {
     return [];

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AppLogger } from '../../src/main/app-logger';
 
@@ -20,6 +20,148 @@ import {
   WorkerRequestTimeoutError,
   requestTimeoutForCommand,
 } from '../../src/main/worker-client';
+
+describe('Worker origin and actual-terminal ownership', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    utilityProcessFork.mockReset();
+    vi.stubEnv('SUPER_FFMPEG_PATH', '/usr/bin/true');
+    vi.stubEnv('SUPER_OIIO_PATH', '/usr/bin/true');
+  });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
+  function harness(children = [new FakeUtilityProcess()]) {
+    for (const child of children) utilityProcessFork.mockReturnValueOnce(child);
+    const logger = { worker: vi.fn(), error: vi.fn(), info: vi.fn() } as unknown as AppLogger;
+    const client = new LibraryWorkerClient('/fixture/worker.js', logger);
+    return { client, logger, child: children[0]! };
+  }
+  async function ready(client: LibraryWorkerClient, child: FakeUtilityProcess) {
+    const started = client.start(); child.emit('message', { type: 'worker.ready' }); await started;
+  }
+  function reply(child: FakeUtilityProcess, requestId: string) {
+    child.emit('message', { requestId, result: { ok: true, type: 'library.closed', libraryId: 'library' } });
+  }
+  it('forwards a notification-suppressed watcher domain event through the real worker message handler without killing the child', async () => {
+    const { client, child, logger } = harness(); await ready(client, child);
+    const assetChanged = vi.fn(); const libraryChanged = vi.fn();
+    const unsubscribe = client.onAssetsChanged(assetChanged);
+    client.onLibraryChanged(libraryChanged);
+    const event = { type: 'asset.changed', libraryId: 'library', changedCount: 1,
+      missingCount: 0, source: 'watcher', suppressWatcherNotification: true };
+    child.emit('message', event);
+    expect(assetChanged).toHaveBeenCalledExactlyOnceWith(event);
+    expect(libraryChanged).not.toHaveBeenCalled();
+    expect(child.kill).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+    unsubscribe(); child.emit('message', event);
+    expect(assetChanged).toHaveBeenCalledOnce();
+    expect(child.kill).not.toHaveBeenCalled();
+  });
+
+  it('removes a failed post pending request and its deadline timer', async () => {
+    const { client, child, logger } = harness(); await ready(client, child);
+    child.postMessage.mockImplementationOnce(() => { throw new Error('failed post'); });
+    const onTerminal = vi.fn();
+    const options = { onTerminal };
+    await expect(client.request({ type: 'library.close', libraryId: 'library' }, options)).rejects.toThrow('failed post');
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(logger.info).not.toHaveBeenCalledWith('worker.request.timeout', expect.anything(), expect.anything());
+    expect(vi.getTimerCount()).toBe(0);
+    expect(onTerminal).toHaveBeenCalledExactlyOnceWith('not-dispatched');
+  });
+  it('does not let an old timed-out child handshake or exit corrupt the replacement', async () => {
+    const old = new FakeUtilityProcess(); const next = new FakeUtilityProcess();
+    const { client } = harness([old, next]);
+    const starting = client.start();
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(old.listenerCount('message')).toBe(0);
+    old.emit('message', { type: 'worker.ready' });
+    await expect(client.request({ type: 'library.close', libraryId: 'library' })).rejects.toThrow('unavailable');
+    next.emit('message', { type: 'worker.ready' }); await starting;
+    const pending = client.request({ type: 'library.close', libraryId: 'library' }).catch((error: unknown) => error);
+    const requestId = next.postMessage.mock.calls.at(-1)![0].requestId;
+    old.emit('message', { requestId, result: { invalid: true } });
+    old.emit('exit', 1);
+    reply(next, requestId);
+    expect(await pending).toMatchObject({ ok: true, type: 'library.closed' });
+    expect(next.kill).not.toHaveBeenCalled();
+  });
+  it('retains terminal ownership after deadline and expired-ID eviction until a valid response', async () => {
+    const { client, child } = harness(); await ready(client, child);
+    const onTerminal = vi.fn(); const options = { onTerminal };
+    const pending = client.request({ type: 'library.close', libraryId: 'library' }, options).catch((error: unknown) => error);
+    const requestId = child.postMessage.mock.calls.at(-1)![0].requestId;
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(await pending).toMatchObject({ code: 'WORKER_REQUEST_TIMEOUT' });
+    expect(onTerminal).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(10 * 60_000 + 1);
+    reply(child, requestId);
+    expect(onTerminal).toHaveBeenCalledExactlyOnceWith('response');
+    expect(child.kill).not.toHaveBeenCalled();
+    child.emit('exit', 0);
+    expect(onTerminal).toHaveBeenCalledOnce();
+  });
+  it('keeps resources through protocol kill intent until the origin actually exits', async () => {
+    const { client, child } = harness(); await ready(client, child);
+    const onTerminal = vi.fn(); const options = { onTerminal };
+    const pending = client.request({ type: 'library.close', libraryId: 'library' }, options).catch((error: unknown) => error);
+    child.emit('message', { invalid: true });
+    await pending;
+    expect(child.kill).toHaveBeenCalled();
+    expect(onTerminal).not.toHaveBeenCalled();
+    child.emit('exit', 1); child.emit('exit', 1);
+    expect(onTerminal).toHaveBeenCalledExactlyOnceWith('worker-exit');
+  });
+
+  it('makes an exiting child unavailable before a reentrant cleanup callback runs', async () => {
+    const { client, child } = harness(); await ready(client, child);
+    let nested!: Promise<unknown>;
+    const options = { onTerminal: () => {
+      nested = client.request({ type: 'library.close', libraryId: 'other' }).catch((error: unknown) => error);
+    } };
+    const pending = client.request({ type: 'library.close', libraryId: 'library' }, options).catch((error: unknown) => error);
+    child.emit('exit', 1); await pending;
+    expect(await nested).toMatchObject({ message: 'Library Worker is unavailable.' });
+    expect(child.postMessage).toHaveBeenCalledOnce();
+  });
+
+  it('does not let a retiring shutdown continuation clear a replacement child', async () => {
+    const old = new FakeUtilityProcess(); const next = new FakeUtilityProcess();
+    const { client } = harness([old, next]); await ready(client, old);
+    const retiring = client.shutdown();
+    old.emit('exit', 0);
+    await ready(client, next);
+    const onTerminal = vi.fn();
+    const pending = client.request({ type: 'library.close', libraryId: 'library' }, { onTerminal })
+      .catch((error: unknown) => error);
+    const requestId = next.postMessage.mock.calls.at(-1)![0].requestId;
+    await vi.advanceTimersByTimeAsync(2_000); await retiring;
+    expect(onTerminal).not.toHaveBeenCalled();
+    reply(next, requestId);
+    expect(await pending).toMatchObject({ ok: true, type: 'library.closed' });
+    expect(onTerminal).toHaveBeenCalledExactlyOnceWith('response');
+    expect(next.kill).not.toHaveBeenCalled();
+  });
+
+  it('settles a valid response before a terminal callback reenters through exit', async () => {
+    const { client, child } = harness(); await ready(client, child);
+    const onTerminal = vi.fn(() => { child.emit('exit', 0); });
+    const pending = client.request({ type: 'library.close', libraryId: 'library' }, { onTerminal })
+      .catch((error: unknown) => error);
+    const requestId = child.postMessage.mock.calls.at(-1)![0].requestId;
+    reply(child, requestId);
+    expect(await pending).toMatchObject({ ok: true, type: 'library.closed' });
+    expect(onTerminal).toHaveBeenCalledExactlyOnceWith('response');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clears the shutdown deadline timer after an acknowledgement', async () => {
+    const { client, child } = harness(); await ready(client, child);
+    const shuttingDown = client.shutdown();
+    child.emit('message', { type: 'worker.shutdown.ack' }); await shuttingDown;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
 
 describe('requestTimeoutForCommand', () => {
   it('allows browser capture to finish its bounded download before Main times out', () => {

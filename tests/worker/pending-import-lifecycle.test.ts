@@ -1,14 +1,16 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   LibraryService,
   LibraryServiceError,
   openConfiguredDatabase,
   type ImportExpiryClock,
+  type LibraryServiceDiagnostic,
+  type LibraryServiceOptions,
 } from '../../src/worker/library-service';
 
 const temporaryRoots: string[] = [];
@@ -62,11 +64,136 @@ function expectCode(operation: () => unknown, code: LibraryServiceError['code'])
   expect((thrown as LibraryServiceError).code).toBe(code);
 }
 
+// Test-only access to ordinary private methods; production fault controls and
+// global filesystem patches are deliberately not added for this regression.
+interface OperationCleanupTestPort {
+  assertSafeOperationPath(operationPath: string): void;
+  removeOperation(operationPath: string): void;
+}
+
+function pendingFixture(options: Pick<LibraryServiceOptions, 'onDiagnostic'> = {}) {
+  const root = temporaryRoot();
+  const source = path.join(root, 'pending.png');
+  writeFileSync(source, 'incoming');
+  const clock = new ManualImportClock();
+  const service = new LibraryService({
+    ...options,
+    importClock: clock,
+    importTtlMs: 1_000,
+    observerFactory: () => ({ close() {} }),
+  });
+  const library = service.createLibrary({ displayName: 'Cleanup TTL', selectedParentPath: root });
+  const plan = service.prepareImport({
+    libraryId: library.libraryId,
+    sourceKind: 'files',
+    sourcePaths: [source],
+  });
+  const operationPath = path.join(library.libraryPath, '.super', 'operations', plan.importId);
+  return { root, source, clock, service, library, plan, operationPath };
+}
+
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) rmSync(root, { force: true, recursive: true });
 });
 
 describe('pending import lifecycle', () => {
+  it.each(['EPERM', 'ENOTEMPTY'])('contains TTL cleanup %s without reviving the expired token', (code) => {
+    const diagnostics: LibraryServiceDiagnostic[] = [];
+    const fixture = pendingFixture({ onDiagnostic: (entry) => diagnostics.push(entry) });
+    const { service, clock, library, plan, operationPath } = fixture;
+    const port = service as unknown as OperationCleanupTestPort;
+    const cleanupError = Object.assign(new Error(`Injected cleanup ${code}`), { code });
+    const cleanup = vi.spyOn(port, 'removeOperation').mockImplementation((target) => {
+      expect(target).toBe(operationPath);
+      port.assertSafeOperationPath(target);
+      throw cleanupError;
+    });
+    try {
+      expect(() => clock.advance(1_000)).not.toThrow();
+      expectCode(() => service.abandonImport(plan.importId), 'IMPORT_NOT_FOUND');
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(existsSync(operationPath)).toBe(true);
+      expect(diagnostics).toContainEqual({
+        scope: 'import.expiry.cleanup',
+        error: cleanupError,
+        context: { libraryId: library.libraryId, operationId: plan.importId },
+      });
+      expect(service.searchAssets({ libraryId: library.libraryId, query: null }).items).toEqual([]);
+      // A consumed timer/token must not retry or resurrect when time advances.
+      clock.advance(10_000);
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      cleanup.mockRestore();
+      service.closeAll();
+      const database = openConfiguredDatabase(path.join(library.libraryPath, '.super', 'library.db'));
+      try {
+        expect(database.prepare('SELECT status, error_code FROM file_operations WHERE operation_id = ?')
+          .get(plan.importId)).toEqual({ status: 'rolled_back', error_code: 'IMPORT_EXPIRED' });
+      } finally {
+        database.close();
+      }
+      // Residual staging is safely recoverable once the transient fault clears.
+      service.openLibrary(library.libraryPath);
+      expect(existsSync(operationPath)).toBe(false);
+      expectCode(() => service.abandonImport(plan.importId), 'IMPORT_NOT_FOUND');
+    } finally {
+      cleanup.mockRestore();
+      service.closeAll();
+    }
+  });
+
+  it('contains a failing diagnostic sink after TTL cleanup fails', () => {
+    const report = vi.fn(() => { throw new Error('Diagnostic sink unavailable'); });
+    const { service, clock, plan, operationPath } = pendingFixture({ onDiagnostic: report });
+    const port = service as unknown as OperationCleanupTestPort;
+    const cleanup = vi.spyOn(port, 'removeOperation').mockImplementation((target) => {
+      expect(target).toBe(operationPath);
+      port.assertSafeOperationPath(target);
+      throw Object.assign(new Error('Cleanup permission denied'), { code: 'EPERM' });
+    });
+    try {
+      expect(() => clock.advance(1_000)).not.toThrow();
+      expect(report).toHaveBeenCalledWith(expect.objectContaining({ scope: 'import.expiry.cleanup' }));
+      expectCode(() => service.abandonImport(plan.importId), 'IMPORT_NOT_FOUND');
+      expect(existsSync(operationPath)).toBe(true);
+    } finally {
+      cleanup.mockRestore();
+      service.closeAll();
+    }
+  });
+
+  it('keeps unsafe staging links untouched while containing the expiry failure', () => {
+    const diagnostics: LibraryServiceDiagnostic[] = [];
+    const { root, service, clock, plan, operationPath } = pendingFixture({
+      onDiagnostic: (entry) => diagnostics.push(entry),
+    });
+    const externalPath = path.join(root, 'outside-operation');
+    mkdirSync(externalPath);
+    const sentinelPath = path.join(externalPath, 'keep.txt');
+    writeFileSync(sentinelPath, 'external data');
+    const stagePath = path.join(operationPath, 'stage');
+    // Both paths are in this test's fresh mkdtemp root. The actual Service
+    // safety assertion must reject the substituted stage, not follow it.
+    rmSync(stagePath, { recursive: true, force: true });
+    symlinkSync(externalPath, stagePath, process.platform === 'win32' ? 'junction' : 'dir');
+    try {
+      expect(() => clock.advance(1_000)).not.toThrow();
+      expectCode(() => service.abandonImport(plan.importId), 'IMPORT_NOT_FOUND');
+      expect(readFileSync(sentinelPath, 'utf8')).toBe('external data');
+      expect(existsSync(operationPath)).toBe(true);
+      expect(diagnostics).toContainEqual(expect.objectContaining({
+        scope: 'import.expiry.cleanup',
+        error: expect.objectContaining({ code: 'LIBRARY_CORRUPT' }),
+      }));
+    } finally {
+      // Remove only the test-owned junction itself, never its target contents.
+      try {
+        unlinkSync(stagePath);
+      } finally {
+        service.closeAll();
+      }
+    }
+  });
+
   it('expires a pending token at its TTL and removes its staged operation', () => {
     const root = temporaryRoot();
     const incoming = path.join(root, 'incoming');

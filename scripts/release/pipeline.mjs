@@ -2,16 +2,19 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
-  collectMakeArtifacts,
   currentVersion,
   repoRoot,
   resolvePackagedExecutable,
   runNpmScript,
-  writeChecksumManifest,
 } from './lib.mjs';
 import { currentPlatformKey } from '../media-binaries-lib.mjs';
+import { MAINLINE_STAGES, getGate } from './gate-manifest.mjs';
+import { runGates } from './run-gates.mjs';
+import { createArtifactManifest, writeArtifactChecksums } from './artifact-manifest.mjs';
+import { loadPackageBuildProvenance } from './build-with-provenance.mjs';
 
 const PHASES = ['verify', 'media', 'package', 'e2e', 'make', 'checksums', 'all'];
 
@@ -132,7 +135,14 @@ function phaseMediaBuildLocally() {
 
 function phaseVerify() {
   runReleaseScript('rebuild:native');
-  runReleaseScript('verify:mainline');
+  const environment = process.platform === 'darwin' && process.arch === 'arm64'
+    ? { ...process.env, ...pipelineEnv, SUPER_REQUIRE_REAL_MEDIA: '1' }
+    : { ...process.env, ...pipelineEnv };
+  const report = runGates({ stages: MAINLINE_STAGES, root: repoRoot, environment,
+    onResult: (result) => console.log(`[release:verify] ${result.id}: ${result.status} (${result.reason})`),
+  });
+  console.log(JSON.stringify(report, null, 2));
+  if (report.exitCode !== 0) process.exit(report.exitCode);
 }
 
 function phaseMedia({ buildMediaLocally }) {
@@ -147,13 +157,13 @@ function phaseMedia({ buildMediaLocally }) {
 }
 
 function phasePackage() {
-  runReleaseScript('package');
-  runReleaseScript('verify:package');
+  runReleaseScript(getGate('package').argv[1]);
+  runReleaseScript(getGate('verify-package').argv[1]);
 }
 
 function phaseE2E() {
   const executable = resolvePackagedExecutable();
-  runReleaseScript('test:e2e:packaged', {
+  runReleaseScript(getGate('packaged-startup').argv[1], {
     SUPER_E2E_PACKAGED_EXECUTABLE: executable,
   });
 }
@@ -171,27 +181,18 @@ function phaseMake() {
   }
 }
 
-function phaseChecksums() {
-  const artifacts = collectMakeArtifacts();
-  if (artifacts.length === 0) {
-    console.error('[release:checksums] No artifacts found under out/make/. Did make succeed?');
-    process.exit(1);
-  }
-
-  const manifestPath = path.join(
-    repoRoot,
-    'out',
-    'make',
-    `SHA256SUMS-${currentPlatformKey()}.txt`,
-  );
-  writeChecksumManifest(artifacts, manifestPath);
-
-  for (const artifact of artifacts) {
-    writeChecksumManifest([artifact], `${artifact}.sha256`);
-  }
+export async function writeReleaseChecksums(options = {}) {
+  const root = options.repoRoot ?? repoRoot;
+  const platform = options.platform ?? currentPlatformKey();
+  const targetVersion = options.targetVersion ?? currentVersion();
+  const packageRoot = options.packageRoot ?? path.join(root, 'out', `Super-${platform}`);
+  const packageReceipt = await loadPackageBuildProvenance({ repoRoot: root, packageRoot, targetVersion, platform });
+  const ports = { repoRoot: root, packageRoot, packageReceipt, targetVersion, platform };
+  const manifest = await createArtifactManifest(ports);
+  return await writeArtifactChecksums({ ...ports, manifest, outputPath: path.join(root, 'out/make', `SHA256SUMS-${platform}.txt`) });
 }
 
-function main() {
+async function main() {
   const { flags, phase } = parseArgs(process.argv.slice(2));
 
   if (!PHASES.includes(phase)) {
@@ -242,12 +243,14 @@ function main() {
       package: phasePackage,
       e2e: phaseE2E,
       make: phaseMake,
-      checksums: phaseChecksums,
+      checksums: writeReleaseChecksums,
     };
-    runners[step]();
+    await runners[step]();
   }
 
   console.log(`\n[release] Phase ${phase} completed successfully.`);
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => { console.error(error.message); process.exitCode = 1; });
+}

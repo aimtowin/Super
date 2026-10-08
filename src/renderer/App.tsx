@@ -118,6 +118,8 @@ import type { ApplicationMenuCommand } from "../shared/application-menu";
 import type { SuperMcpSettingsApi } from "../shared/mcp";
 import type { AssetChangeEvent, HistoryStatus } from "../shared/protocol/responses";
 import { createCoalescedRefresh } from "./coalesced-refresh";
+import { hydrateContent } from "./content-hydration";
+import { nextAssetNotificationCandidate } from "./watcher-notification-policy";
 import { createSerialPoll } from "./serial-poll";
 import { invalidateChangedAssetArtifacts } from "./asset-change-cache";
 import { isEditableTextTarget } from "../shared/edit-context-menu";
@@ -192,6 +194,7 @@ import { LibraryRecoveryDialog } from "./LibraryRecoveryDialog";
 import { ScriptSandboxPreviewDialog } from "./ScriptSandboxPreviewDialog";
 import {
   shouldApplyLibraryLifecycleEvent,
+  shouldUpdateLibrarySummaryEvent,
   shouldDetachLibraryOnOpening,
 } from "./library-lifecycle-sync";
 import { shouldRefreshContentForLibraryChange } from "./library-change-refresh";
@@ -260,6 +263,7 @@ import { useBatchActions } from "./useBatchActions";
 import { useShellFileActions } from "./use-shell-file-actions";
 import { useInspectorMultiEdit } from "./use-inspector-multi-edit";
 import { useInspectorAssetMetadata } from "./use-inspector-asset-metadata";
+import { createMetadataReadController, type MetadataSessionOwner } from "./metadata-read-controller";
 import { useInspectorFieldHandlers } from "./use-inspector-field-handlers";
 import { useAssetDragDropHandlers } from "./use-asset-drag-drop-handlers";
 import { useDialogEscapeDismiss } from "./use-dialog-escape-dismiss";
@@ -974,9 +978,13 @@ function AppInner() {
   // generation that is no longer current so stale reads cannot cover the
   // undoable mutation receipt with a misleading error toast.
   const contentLoadGenerationRef = useRef(0);
-  const reloadCurrentContentRef = useRef<() => Promise<void>>(
+  const reloadCurrentContentRef = useRef<(options?: { awaitHydration?: boolean }) => Promise<void>>(
     async () => undefined,
   );
+  const backgroundContentRefreshRef = useRef<{
+    owner: MetadataSessionOwner;
+    request: (assetIds?: readonly string[], options?: { reportError?: boolean }) => Promise<void> | undefined;
+  } | null>(null);
   const loadAiContentForAssetRef = useRef<(assetId: string) => Promise<void>>(
     async () => undefined,
   );
@@ -992,8 +1000,13 @@ function AppInner() {
   useEffect(() => {
     selectedAssetIdRef.current = selectedAssetId;
   }, [selectedAssetId]);
-  const metadataByAssetRef = useRef(new Map<string, AssetMetadataResult>());
-  const metadataConflictAssetIdsRef = useRef(new Set<string>());
+  const [metadataController] = useState(() => createMetadataReadController(async (input) => {
+    const libraryApi = (window as RendererWindow).super?.library;
+    if (!libraryApi) throw new Error("Library bridge unavailable");
+    return libraryApi.getAssetMetadata(input);
+  }));
+  const [metadataSession, setMetadataSession] = useState<MetadataSessionOwner | null>(null);
+  const metadataSessionRef = useRef<MetadataSessionOwner | null>(null);
   // Pending edit values
   const [editDescription, setEditDescription] = useState("");
   const [editRating, setEditRating] = useState(0);
@@ -1034,6 +1047,10 @@ function AppInner() {
   // Super-ws4k: paginated browse/search loading. First pages render
   // immediately; a scroll sentinel appends the next page; select-all/invert
   // resolve the full scope id set on demand (idsOnly).
+  const onBrowseLoadMoreFailed = useCallback(
+    () => setError(t("toast.loadMoreFailed")),
+    [setError, t],
+  );
   const browsePagination = useBrowsePagination({
     api: api ?? null,
     setAssets,
@@ -1042,8 +1059,7 @@ function AppInner() {
     setSearchTotal,
     setSearchOffset,
     setSearchSnippets,
-    onLoadMoreFailed: () =>
-      setError(t("toast.loadMoreFailed")),
+    onLoadMoreFailed: onBrowseLoadMoreFailed,
   });
   // All controller members are stable useCallback identities; destructure so
   // downstream useCallback deps do not churn every render.
@@ -1057,6 +1073,8 @@ function AppInner() {
 
   const {
     multiEdit,
+    metadataReadState: multiMetadataReadState,
+    retryMetadata: retryMultiMetadata,
     rebuildAndApplyMultiEdit,
     saveMetadataForSelection,
     batchSetRatingForSelection,
@@ -1065,8 +1083,8 @@ function AppInner() {
     library,
     selectedAssetIds,
     selectedAssetIdRef,
-    metadataByAssetRef,
-    metadataConflictAssetIdsRef,
+    metadataController,
+    metadataSession,
     setEditDescription,
     setEditRating,
     setEditFavorite,
@@ -1437,20 +1455,23 @@ function AppInner() {
 
   const {
     loadMetadata,
+    metadataReadState: singleMetadataReadState,
+    retryMetadata: retrySingleMetadata,
     loadAiContentForAsset,
     aiContentLoadedAssetId,
     saveMetadata,
-    applyLoadedMetadata,
   } = useInspectorAssetMetadata({
     api: api ?? null,
     library,
     selectedAssetId,
+    selectedAssetIds,
     selectedAssetIdRef,
     selectedAssetIdsRef,
-    metadataByAssetRef,
-    metadataConflictAssetIdsRef,
+    metadataController,
+    metadataSession,
     assetMetadata,
     setAssetMetadata,
+    editDescription,
     setVersionConflict,
     setEditDescription,
     setEditRating,
@@ -1465,6 +1486,36 @@ function AppInner() {
     setNotice,
     setError,
   });
+
+  const activateMetadataSession = useCallback((summary: RendererLibrarySummary | null) => {
+    const owner = summary ? metadataController.activateSession(summary) : null;
+    if (!summary) metadataController.disposeSession(metadataSessionRef.current);
+    metadataSessionRef.current = owner;
+    setMetadataSession(owner);
+    setLibrary(summary);
+    setAssetMetadata(null);
+    setVersionConflict(false);
+    setAiContent(null);
+    setDescriptionIsAi(false);
+  }, [metadataController]);
+  const updateMetadataSessionSummary = useCallback((owner: MetadataSessionOwner, summary: RendererLibrarySummary) => {
+    if (!metadataController.updateSessionSummary(owner, summary)) return;
+    setLibrary((current) => metadataController.isCurrent(owner) && current?.libraryId === owner.libraryId
+      ? { ...current, ...summary } : current);
+  }, [metadataController]);
+  const metadataLifetimeGenerationRef = useRef(0);
+  useEffect(() => {
+    const lifetime = metadataLifetimeGenerationRef;
+    const session = metadataSessionRef;
+    const generation = ++lifetime.current;
+    return () => {
+      // StrictMode cleanup/setup is one committed lifetime. Only a genuine
+      // unmount disposes the session; raw in-flight promises retain their slots.
+      queueMicrotask(() => {
+        if (lifetime.current === generation) metadataController.disposeSession(session.current);
+      });
+    };
+  }, [metadataController]);
 
   const analyzingAssetIdRef = useRef<string | null>(null);
   const analyzingBatchSizeRef = useRef(0);
@@ -1902,6 +1953,9 @@ function AppInner() {
     api: api ?? null,
     shellApi,
     library,
+    metadataController,
+    metadataSession,
+    selectedAssetIdRef,
     selectedAsset,
     selectedAssetId,
     selectedAssetIds,
@@ -3108,9 +3162,13 @@ function AppInner() {
         showIgnored?: boolean;
         /** Navigation keeps sidebar data; mutations/library open opt in to refresh. */
         refreshSidebar?: boolean;
+        /** Background leases include non-critical hydration; foreground stays fast. */
+        awaitHydration?: boolean;
       },
     ) => {
       if (!api) return;
+      const owner = metadataSessionRef.current;
+      if (!metadataController.isCurrent(owner) || owner.libraryId !== activeLibrary.libraryId) return;
       const trashMode = opts?.trashMode ?? false;
       const includeIgnored = opts?.showIgnored ?? showIgnoredItems;
       const refreshSidebar = opts?.refreshSidebar ?? true;
@@ -3121,6 +3179,9 @@ function AppInner() {
           : folderBrowseScope(scope, folderRecursiveRef.current));
       const libId = { libraryId: activeLibrary.libraryId };
       const generation = ++contentLoadGenerationRef.current;
+      const isCurrent = () => metadataController.isCurrent(owner)
+        && generation === contentLoadGenerationRef.current;
+      let hydration: Promise<void> | undefined;
       setContentLoading(true);
       try {
       const includeLibraryCounts =
@@ -3143,10 +3204,10 @@ function AppInner() {
         showIgnored: includeIgnored,
       });
       const assetResult = await primaryAssetPromise.catch((caught: unknown) => {
-        if (generation !== contentLoadGenerationRef.current) return null;
+        if (!isCurrent()) return null;
         throw caught;
       });
-      if (assetResult === null || generation !== contentLoadGenerationRef.current) {
+      if (assetResult === null || !isCurrent()) {
         return;
       }
       if (!assetResult.ok) throw new LibraryOperationError(assetResult.error);
@@ -3154,7 +3215,7 @@ function AppInner() {
       // real-asset layout fetch that gives the virtual canvas full geometry.
       // Super-2oga: drop stale failure badges when the list already has ready thumbs.
       setThumbnailFailures((current) => {
-        if (current.size === 0) return current;
+        if (!isCurrent() || current.size === 0) return current;
         const next = new Map(current);
         for (const asset of assetResult.value.items) {
           if (
@@ -3169,14 +3230,14 @@ function AppInner() {
       // The current scope's total comes with the foreground page and can be
       // painted now. Global/root/trash counters are non-critical hydration.
       if (!trashMode && scope === "all" && assetResult.value.totalIsExact !== false) {
-        setAllAssetCount(assetResult.value.total);
+        setAllAssetCount((current) => isCurrent() ? assetResult.value.total : current);
       }
       if (!trashMode && scope === "root" && assetResult.value.totalIsExact !== false) {
-        setRootAssetCount(assetResult.value.total);
+        setRootAssetCount((current) => isCurrent() ? assetResult.value.total : current);
       }
-      setSearchTotal(assetResult.value.total);
-      setSearchOffset(assetResult.value.offset);
-      setSearchSnippets(new Map());
+      setSearchTotal((current) => isCurrent() ? assetResult.value.total : current);
+      setSearchOffset((current) => isCurrent() ? assetResult.value.offset : current);
+      setSearchSnippets((current) => isCurrent() ? new Map() : current);
       // Super-ws4k: register the paginated query so the scroll sentinel can
       // append the next page with the exact same scope/sort/filters.
       registerBrowseSearchPage(beginBrowsePage, {
@@ -3192,80 +3253,40 @@ function AppInner() {
         offset: assetResult.value.offset,
       });
       // Let cards become interactive before posting lower-priority count and
-      // sidebar work. All responses are generation guarded; a navigation in
+      // sidebar work. All responses are session/generation guarded; a navigation in
       // the meantime leaves its current sidebar untouched rather than showing
       // stale folders or turning a successful browse into an error surface.
-      void (async () => {
-        const allAssetsPromise = includeLibraryCounts && (trashMode || scope !== "all")
-          ? api.searchAssets({ ...libId, query: null, limit: 1, offset: 0, showIgnored: includeIgnored })
-          : Promise.resolve(undefined);
-        const rootCountPromise = includeLibraryCounts && (trashMode || scope !== "root")
-          ? api.searchAssets({
-              ...libId,
-              query: null,
-              limit: 1,
-              offset: 0,
-              scope: { kind: "folder", folderId: null, recursive: false },
-              showIgnored: includeIgnored,
-            })
-          : Promise.resolve(undefined);
-        const trashCountPromise = includeLibraryCounts
-          ? api.searchAssets({
-              ...libId,
-              query: null,
-              limit: 1,
-              offset: 0,
-              scope: { kind: "trash" },
-              showIgnored: includeIgnored,
-            })
-          : Promise.resolve(undefined);
-        const sidebarPromise = refreshSidebar
-          ? Promise.all([
-              api.listFolders({ ...libId, showIgnored: includeIgnored }),
-              api.listLinkedFolders({ ...libId, showIgnored: includeIgnored }),
-              api.listTags(libId),
-              api.listCollections(libId),
-              api.listSmartCollections(libId),
-              trashMode
-                ? api.listTrashedFolders(libId)
-                : Promise.resolve(null),
-            ])
-          : Promise.resolve(null);
-        const [allResult, rootCountResult, trashCountResult, sidebarResult] = await Promise.all([
-          allAssetsPromise,
-          rootCountPromise,
-          trashCountPromise,
-          sidebarPromise,
-        ]);
-        if (generation !== contentLoadGenerationRef.current) return;
-        if (allResult?.ok) setAllAssetCount(allResult.value.total);
-        if (rootCountResult?.ok) setRootAssetCount(rootCountResult.value.total);
-        if (trashCountResult?.ok) setTrashedAssetCount(trashCountResult.value.total);
-        if (!sidebarResult) return;
-        const [folderResult, linkedResult, tagResult, collectionResult, smartResult, trashedFoldersResult] = sidebarResult;
-        if (folderResult.ok) setFolders(folderResult.value);
-        if (linkedResult.ok) setLinkedFolders(linkedResult.value);
-        if (tagResult.ok) setTags(tagResult.value);
-        if (collectionResult.ok) setCollections(collectionResult.value);
-        if (smartResult.ok) setSmartCollections(smartResult.value);
-        if (trashMode && trashedFoldersResult?.ok) {
-          setTrashedFolders(trashedFoldersResult.value);
-        } else if (!trashMode) {
-          setTrashedFolders([]);
-        }
-      })().catch(() => {
+      hydration = hydrateContent({
+        api, libraryId: activeLibrary.libraryId, scope, includeLibraryCounts,
+        refreshSidebar, trashMode, showIgnored: includeIgnored, isCurrent,
+        publish: (update) => {
+          if (!isCurrent()) return;
+          if (update.allAssetCount !== undefined) setAllAssetCount((current) => isCurrent() ? update.allAssetCount! : current);
+          if (update.rootAssetCount !== undefined) setRootAssetCount((current) => isCurrent() ? update.rootAssetCount! : current);
+          if (update.trashedAssetCount !== undefined) setTrashedAssetCount((current) => isCurrent() ? update.trashedAssetCount! : current);
+          if (update.folders !== undefined) setFolders((current) => isCurrent() ? update.folders! : current);
+          if (update.linkedFolders !== undefined) setLinkedFolders((current) => isCurrent() ? update.linkedFolders! : current);
+          if (update.tags !== undefined) setTags((current) => isCurrent() ? update.tags! : current);
+          if (update.collections !== undefined) setCollections((current) => isCurrent() ? update.collections! : current);
+          if (update.smartCollections !== undefined) setSmartCollections((current) => isCurrent() ? update.smartCollections! : current);
+          if (update.trashedFolders !== undefined) setTrashedFolders((current) => isCurrent() ? update.trashedFolders! : current);
+        },
+      }).catch(() => {
         // Non-critical hydration must not blank an already usable asset page.
       });
       return assetResult.value.items;
       } finally {
         // A superseded request must not turn off the loading surface that
         // belongs to the newer scope/library request.
-        if (generation === contentLoadGenerationRef.current) {
-          setContentLoading(false);
+        if (isCurrent()) {
+          setContentLoading((current) => isCurrent() ? false : current);
         }
+        // Close the foreground loading surface first. Only the background
+        // owner waits on this SAME helper lease, including failed raw siblings.
+        if (opts?.awaitHydration && hydration) await hydration;
       }
     },
-    [api, beginBrowsePage, showIgnoredItems],
+    [api, beginBrowsePage, metadataController, showIgnoredItems],
   );
 
   useBrowserSessionRestore({
@@ -3274,7 +3295,7 @@ function AppInner() {
     collectionRecursiveRef,
     folderRecursiveRef,
     setFolderRecursive,
-    setLibrary,
+    activateLibrary: activateMetadataSession,
     setShowTrash,
     setTrashedAssets,
     setAssetScope,
@@ -3434,6 +3455,11 @@ function AppInner() {
         return;
       }
       if (event.type !== "library.opened") return;
+      if (shouldUpdateLibrarySummaryEvent({ event, currentLibraryId: library?.libraryId })) {
+        const owner = metadataSessionRef.current;
+        if (owner) updateMetadataSessionSummary(owner, event.library);
+        return;
+      }
       if (!shouldApplyLibraryLifecycleEvent({
         event,
         currentLibraryId: library?.libraryId,
@@ -3461,12 +3487,10 @@ function AppInner() {
           setSelectedAssetIds([]);
           setAssetMetadata(null);
           setAiContent(null);
-          metadataByAssetRef.current.clear();
-          metadataConflictAssetIdsRef.current.clear();
           setSearchTotal(null);
           setAllAssetCount(0);
           resetBrowsePagination();
-          setLibrary(event.library);
+          activateMetadataSession(event.library);
           setPluginJobs(null);
           setHiddenPluginJobActivityId(null);
           setSidebarFolderScope("all");
@@ -3491,6 +3515,7 @@ function AppInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     api,
+    activateMetadataSession,
     closeAssetPreview,
     library?.libraryId,
     locale,
@@ -3500,6 +3525,7 @@ function AppInner() {
     setError,
     setNotice,
     t,
+    updateMetadataSessionSummary,
   ]);
   useEffect(() => {
     if (!api) return;
@@ -3562,7 +3588,7 @@ function AppInner() {
       }, 240);
     };
     const unsubscribe = api.onThumbnailEvent((event) => {
-      if (event.libraryId !== library?.libraryId) return;
+      if (event.libraryId !== library?.libraryId || !metadataController.isCurrent(metadataSession)) return;
       if (event.type === "asset.dimensions.ready") {
         queuePatch(event.assetId, {
           width: event.width,
@@ -3571,26 +3597,14 @@ function AppInner() {
         return;
       }
       if (event.type === "asset.derived.ready") {
-        // Secondary media work is deliberately delayed so it cannot compete
-        // with the visible thumbnail wave. Refresh only the selected
-        // Inspector metadata when that work completes; a full canvas reload
-        // here would turn one palette into a library-wide render storm.
+        // Expire metadata for this ID (including a non-primary multi-selection
+        // member). Only interested consumers re-read it; never reload the grid
+        // or prefetch unrelated assets for a derived artifact completion.
         if (
           (event.kind === "extract_metadata" || event.kind === "extract_palette") &&
-          selectedAssetIdRef.current === event.assetId &&
-          library
+          metadataSession
         ) {
-          void api
-            .getAssetMetadata({
-              libraryId: library.libraryId,
-              assetId: event.assetId,
-            })
-            .then((result) => {
-              if (result.ok && selectedAssetIdRef.current === event.assetId) {
-                applyLoadedMetadata(event.assetId, result.value);
-              }
-            })
-            .catch(() => undefined);
+          metadataController.invalidate(metadataSession, [event.assetId]);
         }
         return;
       }
@@ -3657,11 +3671,11 @@ function AppInner() {
         window.clearTimeout(folderBrowseRefreshTimer);
       }
     };
-  }, [api, applyLoadedMetadata, library, library?.libraryId, t]);
+  }, [api, metadataController, metadataSession, library, library?.libraryId, t]);
   useEffect(() => {
     if (!api || !library) return;
     const unsubscribeProgress = api.onAiProgress((event) => {
-      if (event.libraryId !== library.libraryId) return;
+      if (event.libraryId !== library.libraryId || !metadataController.isCurrent(metadataSession)) return;
       // Super-u0tn: do not arm analyzing UI for background/import auto jobs
       // when no user-initiated batch size was set (JOBS-007 rollback residue).
       setAiJobs((current) =>
@@ -3686,10 +3700,12 @@ function AppInner() {
       if (aiAnalyzingRef.current) refreshAiBatchStatusRef.current();
     });
     const unsubscribeCompleted = api.onAiCompleted((event) => {
-      if (event.libraryId !== library.libraryId) return;
+      if (event.libraryId !== library.libraryId || !metadataController.isCurrent(metadataSession)) return;
+      metadataController.invalidate(metadataSession, [event.assetId]);
       // Refresh only — completion toast is owned by queue-drain (Super-4i18).
-      void reloadCurrentContentRef.current();
-      if (selectedAssetIdRef.current === event.assetId) {
+      const background = backgroundContentRefreshRef.current;
+      if (background?.owner === metadataSession) background.request([event.assetId]);
+      if (selectedAssetIdRef.current === event.assetId || selectedAssetIdsRef.current.includes(event.assetId)) {
         // Super-c9r3: refreshAfterAi refreshes the primary's metadata and
         // (for multi-selections) every selected asset's metadata, then
         // rebuilds the batch-edit Inspector model — without the rebuild the
@@ -3698,8 +3714,9 @@ function AppInner() {
       }
     });
     const unsubscribeCleared = api.onAiCleared((event) => {
-      if (event.libraryId !== library.libraryId) return;
-      setAiContent(null);
+      if (event.libraryId !== library.libraryId || !metadataController.isCurrent(metadataSession)) return;
+      metadataController.invalidate(metadataSession, event.affectedAssetIds);
+      if (selectedAssetIdRef.current && event.affectedAssetIds.includes(selectedAssetIdRef.current)) setAiContent(null);
       setNotice(t("toast.aiContentCleared", { count: event.affectedAssetCount }));
       // Super-c9r3: clearing AI must NOT disturb the browsing view, selection
       // or scroll position — so we deliberately do NOT call reloadCurrentContent
@@ -3718,6 +3735,7 @@ function AppInner() {
         selectedIds.some((id) => affected.has(id));
       if (selectedAffected && primary) {
         void refreshAfterAiRef.current(primary).then(() => {
+          if (!metadataController.isCurrent(metadataSession)) return;
           if (selectedAssetIdsRef.current.length >= 2) {
             rebuildAndApplyMultiEditRef.current([...selectedAssetIdsRef.current]);
           }
@@ -3729,7 +3747,7 @@ function AppInner() {
       unsubscribeCompleted();
       unsubscribeCleared();
     };
-  }, [api, library, locale, setError, setFatal, setNotice, t]);
+  }, [api, library, metadataController, metadataSession, locale, setError, setFatal, setNotice, t]);
 
   function syncNavHistoryUi() {
     setNavHistoryUi({
@@ -3997,7 +4015,7 @@ function AppInner() {
       // untouched.
       await closeAssetPreview(false);
       opened = true;
-      setLibrary(result.value);
+      activateMetadataSession(result.value);
       setPluginJobs(null);
       setHiddenPluginJobActivityId(null);
       setSidebarFolderScope("all");
@@ -4331,18 +4349,23 @@ function AppInner() {
 
   async function handleCreateTagInManagement(name: string): Promise<boolean> {
     if (!api || !library) return false;
+    const owner = metadataSession;
+    if (!metadataController.isCurrent(owner)) return false;
     try {
       const result = await api.createTag({
         libraryId: library.libraryId,
         name,
       });
       if (!result.ok) throw new LibraryOperationError(result.error);
+      if (!metadataController.isCurrent(owner)) return false;
       const tagResult = await api.listTags({ libraryId: library.libraryId });
       if (!tagResult.ok) throw new LibraryOperationError(tagResult.error);
+      if (!metadataController.isCurrent(owner)) return false;
       setTags(tagResult.value);
       setNotice(t("toast.tagCreated", { name }), result.value.historyEntryId);
       return true;
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return false;
       setError(toMessage(caught, t("toast.createTagFailed"), locale));
       return false;
     }
@@ -4353,6 +4376,8 @@ function AppInner() {
     name: string,
   ): Promise<boolean> {
     if (!api || !library) return false;
+    const owner = metadataSession;
+    if (!metadataController.isCurrent(owner)) return false;
     try {
       const result = await api.renameTag({
         libraryId: library.libraryId,
@@ -4360,12 +4385,16 @@ function AppInner() {
         name,
       });
       if (!result.ok) throw new LibraryOperationError(result.error);
+      if (!metadataController.isCurrent(owner)) return false;
+      metadataController.invalidate(owner);
       const tagResult = await api.listTags({ libraryId: library.libraryId });
       if (!tagResult.ok) throw new LibraryOperationError(tagResult.error);
+      if (!metadataController.isCurrent(owner)) return false;
       setTags(tagResult.value);
       setNotice(t("toast.tagRenamed", { name }), result.value.historyEntryId);
       return true;
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return false;
       setError(toMessage(caught, t("toast.renameTagFailed"), locale));
       return false;
     }
@@ -4375,6 +4404,8 @@ function AppInner() {
     tagIds: string[],
   ): Promise<boolean> {
     if (!api || !library || tagIds.length === 0) return false;
+    const owner = metadataSession;
+    if (!metadataController.isCurrent(owner)) return false;
     try {
       const result =
         tagIds.length === 1
@@ -4384,8 +4415,11 @@ function AppInner() {
             })
           : await api.deleteTags({ libraryId: library.libraryId, tagIds });
       if (!result.ok) throw new LibraryOperationError(result.error);
+      if (!metadataController.isCurrent(owner)) return false;
+      metadataController.invalidate(owner);
       const tagResult = await api.listTags({ libraryId: library.libraryId });
       if (!tagResult.ok) throw new LibraryOperationError(tagResult.error);
+      if (!metadataController.isCurrent(owner)) return false;
       setTags(tagResult.value);
       setNotice(
         tagIds.length === 1
@@ -4395,6 +4429,7 @@ function AppInner() {
       );
       return true;
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return false;
       setError(toMessage(caught, t("toast.deleteTagFailed"), locale));
       return false;
     }
@@ -4405,6 +4440,8 @@ function AppInner() {
     name: string,
   ): Promise<boolean> {
     if (!api || !library || tagIds.length < 2 || !name.trim()) return false;
+    const owner = metadataSession;
+    if (!metadataController.isCurrent(owner)) return false;
     try {
       const result = await api.mergeTags({
         libraryId: library.libraryId,
@@ -4412,12 +4449,16 @@ function AppInner() {
         name: name.trim(),
       });
       if (!result.ok) throw new LibraryOperationError(result.error);
+      if (!metadataController.isCurrent(owner)) return false;
+      metadataController.invalidate(owner);
       const tagResult = await api.listTags({ libraryId: library.libraryId });
       if (!tagResult.ok) throw new LibraryOperationError(tagResult.error);
+      if (!metadataController.isCurrent(owner)) return false;
       setTags(tagResult.value);
       setNotice(t("toast.tagMerged", { name: name.trim() }), result.value.historyEntryId);
       return true;
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return false;
       setError(toMessage(caught, t("toast.mergeTagsFailed"), locale));
       return false;
     }
@@ -4431,7 +4472,14 @@ function AppInner() {
     match: "all" | "any",
   ) {
     if (!api || !library || tagNames.length === 0) return;
+    const owner = metadataSessionRef.current;
+    if (!metadataController.isCurrent(owner) || owner.libraryId !== library.libraryId) return;
+    const generation = ++contentLoadGenerationRef.current;
+    const isCurrent = () => metadataController.isCurrent(owner)
+      && generation === contentLoadGenerationRef.current;
+    setContentLoading((current) => isCurrent() ? false : current);
     await closeAssetPreview(false);
+    if (!isCurrent()) return;
     closeContextMenu();
     const joined = tagNames.join(", ");
     workspaceCanvasRef.current?.scrollTo({ top: 0, left: 0 });
@@ -4466,8 +4514,9 @@ function AppInner() {
         offset: 0,
         showIgnored: showIgnoredItems,
       });
+      if (!isCurrent()) return;
       if (!result.ok) throw new LibraryOperationError(result.error);
-      applySearchResult(result.value);
+      applySearchResult(result.value, isCurrent);
       registerBrowseSearchPage(beginBrowsePage, {
         libraryId: library.libraryId,
         query: definition.search ?? null,
@@ -4481,18 +4530,26 @@ function AppInner() {
         offset: result.value.offset,
       });
     } catch (caught) {
+      if (!isCurrent()) return;
       setError(toMessage(caught, t("toast.readTagAssetsFailed"), locale));
     } finally {
-      setUiState("ready");
+      if (isCurrent()) setUiState((current) => isCurrent() ? "ready" : current);
     }
   }
 
   async function chooseTag(tagId: string) {
     if (!api || !library) return;
-    await closeAssetPreview(false);
-    closeContextMenu();
+    const owner = metadataSessionRef.current;
+    if (!metadataController.isCurrent(owner) || owner.libraryId !== library.libraryId) return;
     const tag = tags.find((candidate) => candidate.tagId === tagId);
     if (!tag) return;
+    const generation = ++contentLoadGenerationRef.current;
+    const isCurrent = () => metadataController.isCurrent(owner)
+      && generation === contentLoadGenerationRef.current;
+    setContentLoading((current) => isCurrent() ? false : current);
+    await closeAssetPreview(false);
+    if (!isCurrent()) return;
+    closeContextMenu();
     workspaceCanvasRef.current?.scrollTo({ top: 0, left: 0 });
     setShowTrash(false);
     setShowTagManagement(false);
@@ -4522,8 +4579,9 @@ function AppInner() {
         offset: 0,
         showIgnored: showIgnoredItems,
       });
+      if (!isCurrent()) return;
       if (!result.ok) throw new LibraryOperationError(result.error);
-      applySearchResult(result.value);
+      applySearchResult(result.value, isCurrent);
       registerBrowseSearchPage(beginBrowsePage, {
         libraryId: library.libraryId,
         query: definition.search ?? null,
@@ -4538,14 +4596,17 @@ function AppInner() {
       });
       recordNavigation({ kind: "tag", tagId });
     } catch (caught) {
+      if (!isCurrent()) return;
       setError(toMessage(caught, t("toast.readTagAssetsFailed"), locale));
     } finally {
-      setUiState("ready");
+      if (isCurrent()) setUiState((current) => isCurrent() ? "ready" : current);
     }
   }
 
   async function assignAssetToTag(assetId: string, tagId: string) {
     if (!api || !library) return;
+    const owner = metadataSession;
+    if (!metadataController.isCurrent(owner)) return;
     try {
       const result = await api.assignTags({
         libraryId: library.libraryId,
@@ -4553,9 +4614,12 @@ function AppInner() {
         tagIds: [tagId],
       });
       if (!result.ok) throw new LibraryOperationError(result.error);
-      await refreshTagAndMetadataState(assetId);
+      if (!metadataController.isCurrent(owner)) return;
+      await refreshTagAndMetadataState(assetId, owner);
+      if (!metadataController.isCurrent(owner)) return;
       setNotice(t("toast.tagAdded"), result.value.historyEntryId);
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return;
       setError(toMessage(caught, t("toast.addTagFailed"), locale));
     }
   }
@@ -4563,6 +4627,8 @@ function AppInner() {
   async function handleRemoveTagFromAsset(tagId: string) {
     if (!api || !library || !selectedAssetId) return;
     const targetAssetId = selectedAssetId;
+    const owner = metadataSession;
+    if (!metadataController.isCurrent(owner)) return;
     try {
       const result = await api.removeTags({
         libraryId: library.libraryId,
@@ -4570,9 +4636,12 @@ function AppInner() {
         tagIds: [tagId],
       });
       if (!result.ok) throw new LibraryOperationError(result.error);
-      await refreshTagAndMetadataState(targetAssetId);
+      if (!metadataController.isCurrent(owner)) return;
+      await refreshTagAndMetadataState(targetAssetId, owner);
+      if (!metadataController.isCurrent(owner)) return;
       setNotice(t("toast.tagRemoved"), result.value.historyEntryId);
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return;
       setError(toMessage(caught, t("toast.removeTagFailed"), locale));
     }
   }
@@ -4580,24 +4649,30 @@ function AppInner() {
   async function handleCreateAndAssignTag(tagName: string) {
     if (!api || !library || !selectedAssetId || !tagName.trim()) return;
     const targetAssetId = selectedAssetId;
+    const owner = metadataSession;
+    if (!metadataController.isCurrent(owner)) return;
     try {
       const createResult = await api.createTag({
         libraryId: library.libraryId,
         name: tagName.trim(),
       });
       if (!createResult.ok) throw new LibraryOperationError(createResult.error);
+      if (!metadataController.isCurrent(owner)) return;
       const assignResult = await api.assignTags({
         libraryId: library.libraryId,
         assetIds: [targetAssetId],
         tagIds: [createResult.value.tagId],
       });
       if (!assignResult.ok) throw new LibraryOperationError(assignResult.error);
-      await refreshTagAndMetadataState(targetAssetId);
+      if (!metadataController.isCurrent(owner)) return;
+      await refreshTagAndMetadataState(targetAssetId, owner);
+      if (!metadataController.isCurrent(owner)) return;
       setNotice(
         t("toast.tagCreatedAssigned", { name: tagName.trim() }),
         assignResult.value.historyEntryId,
       );
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return;
       setError(toMessage(caught, t("toast.createTagFailed"), locale));
     }
   }
@@ -4610,55 +4685,48 @@ function AppInner() {
     assetIds: string[],
   ) {
     if (!api || !library || assetIds.length === 0 || !tagName.trim()) return;
+    const owner = metadataSession;
+    if (!metadataController.isCurrent(owner)) return;
     try {
       const createResult = await api.createTag({
         libraryId: library.libraryId,
         name: tagName.trim(),
       });
       if (!createResult.ok) throw new LibraryOperationError(createResult.error);
+      if (!metadataController.isCurrent(owner)) return;
       await batchAssignTagToSelection(createResult.value.tagId, assetIds);
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return;
       setError(toMessage(caught, t("toast.createTagFailed"), locale));
     }
   }
 
-  async function refreshTagAndMetadataState(assetId: string) {
-    if (!api || !library) return;
-    const targetLibraryId = library.libraryId;
+  async function refreshTagAndMetadataState(assetId: string, owner = metadataSession) {
+    if (!api || !owner || !metadataController.isCurrent(owner)) return;
+    metadataController.invalidate(owner, [assetId]);
     const [tagResult, metadataResult] = await Promise.all([
-      api.listTags({ libraryId: targetLibraryId }),
-      api.getAssetMetadata({ libraryId: targetLibraryId, assetId }),
+      api.listTags({ libraryId: owner.libraryId }),
+      metadataController.request(owner, assetId, "primary"),
     ]);
+    if (!metadataController.isCurrent(owner)) return;
     if (!tagResult.ok) throw new LibraryOperationError(tagResult.error);
-    if (!metadataResult.ok) throw new LibraryOperationError(metadataResult.error);
+    if (!metadataResult.ok && metadataResult.error.code !== "CANCELLED") throw new LibraryOperationError(metadataResult.error);
     setTags(tagResult.value);
-    // Keep cache and Inspector editor fields coherent. Updating only
-    // `assetMetadata` leaves editRating/editFavorite stale, which made a
-    // completed script look as though its metadata write had not applied.
-    applyLoadedMetadata(assetId, metadataResult.value);
+    // Observer callbacks publish the current epoch through the same controller.
   }
 
-  // REQ-MENU-007: Inspector tag operations apply to the whole multi-selection.
-  // The shared batch helpers only refresh the tag list, so after a batch op
-  // also refresh the primary asset's metadata to keep the Inspector's tag
-  // chips in sync (single-asset handlers already do this themselves).
-  async function refreshInspectorTagStateAfterBatch() {
-    const ids =
-      selectedAssetIds.length >= 2
-        ? [...new Set(selectedAssetIds)]
-        : selectedAssetId
-          ? [selectedAssetId]
-          : [];
-    if (ids.length === 0) return;
+  async function refreshInspectorTagStateAfterBatch(owner = metadataSession) {
+    if (!owner || !metadataController.isCurrent(owner)) return;
+    const ids = selectedAssetIds.length >= 2 ? [...new Set(selectedAssetIds)]
+      : selectedAssetId ? [selectedAssetId] : [];
     try {
-      for (const assetId of ids) {
-        await refreshTagAndMetadataState(assetId);
-      }
-      if (ids.length >= 2) {
-        rebuildAndApplyMultiEdit(ids);
-      }
+      const results = await Promise.all(ids.map((id) => metadataController.request(owner, id, "bulk")));
+      if (!metadataController.isCurrent(owner)) return;
+      const failed = results.find((result) => !result.ok && result.error.code !== "CANCELLED");
+      if (failed && !failed.ok) throw new LibraryOperationError(failed.error);
+      if (ids.length >= 2) rebuildAndApplyMultiEdit(ids);
     } catch (caught) {
-      setError(toMessage(caught, t("toast.tagUpdatedRefreshFailed"), locale));
+      if (metadataController.isCurrent(owner)) setError(toMessage(caught, t("toast.tagUpdatedRefreshFailed"), locale));
     }
   }
 
@@ -4947,7 +5015,14 @@ function AppInner() {
     sourceFolderId: string | null = null,
   ) {
     if (!api || !library) return;
+    const owner = metadataSessionRef.current;
+    if (!metadataController.isCurrent(owner) || owner.libraryId !== library.libraryId) return;
+    const generation = ++contentLoadGenerationRef.current;
+    const isCurrent = () => metadataController.isCurrent(owner)
+      && generation === contentLoadGenerationRef.current;
+    setContentLoading((current) => isCurrent() ? false : current);
     await closeAssetPreview(false);
+    if (!isCurrent()) return;
     closeContextMenu();
     workspaceCanvasRef.current?.scrollTo({ top: 0, left: 0 });
     setShowTrash(false);
@@ -4983,8 +5058,9 @@ function AppInner() {
         offset: 0,
         showIgnored: showIgnoredItems,
       });
+      if (!isCurrent()) return;
       if (!result.ok) throw new LibraryOperationError(result.error);
-      applySearchResult(result.value);
+      applySearchResult(result.value, isCurrent);
       registerBrowseSearchPage(beginBrowsePage, {
         libraryId: library.libraryId,
         query: null,
@@ -5008,9 +5084,10 @@ function AppInner() {
         recursive,
       });
     } catch (caught) {
+      if (!isCurrent()) return;
       setError(toMessage(caught, t("toast.readCollectionFailed"), locale));
     } finally {
-      setUiState("ready");
+      if (isCurrent()) setUiState((current) => isCurrent() ? "ready" : current);
     }
   }
 
@@ -5283,17 +5360,18 @@ function AppInner() {
       offset: number;
       snippets?: Array<{ assetId: string; text: string }>;
     },
+    isCurrent: () => boolean = () => true,
   ) {
     // Super-87pd: canvas slots come from beginPage. Replacing the list with
     // the first window here would collapse the scrollbar to 100 items.
-    setSearchTotal(result.total);
-    setSearchOffset(result.offset + result.items.length);
-    setSearchSnippets(
-      new Map(
+    setSearchTotal((current) => isCurrent() ? result.total : current);
+    setSearchOffset((current) => isCurrent() ? result.offset + result.items.length : current);
+    setSearchSnippets((current) => isCurrent()
+      ? new Map(
         (result.snippets ?? []).map(
           (snippet) => [snippet.assetId, snippet.text] as const,
         ),
-      ),
+      ) : current,
     );
   }
 
@@ -5317,7 +5395,7 @@ function AppInner() {
     return undefined;
   }
 
-  async function reloadCurrentContent() {
+  async function reloadCurrentContent(options?: { awaitHydration?: boolean }) {
     if (!library) return;
     if (activeSmartCollectionId) {
       const collection = smartCollections.find(
@@ -5338,6 +5416,7 @@ function AppInner() {
       await loadContent(library, "all", {
         trashMode: true,
         searchScope: { kind: "trash" },
+        awaitHydration: options?.awaitHydration,
       });
       return;
     }
@@ -5350,6 +5429,7 @@ function AppInner() {
     await loadContent(library, assetScope, {
       discovery,
       searchScope: currentSearchScope(),
+      awaitHydration: options?.awaitHydration,
     });
   }
 
@@ -5361,6 +5441,7 @@ function AppInner() {
   const deferredReconcileTimerRef = useRef<number | undefined>(undefined);
   const applyLocalAssetRemoval = useCallback(
     (assetIds: string[], options?: { removedCount?: number }) => {
+      const owner = metadataSessionRef.current;
       const removed = new Set(assetIds);
       const removedCount = options?.removedCount ?? assetIds.length;
       setAssets((current) => removeAssetIdsLocally(current, removed));
@@ -5375,21 +5456,27 @@ function AppInner() {
       }
       deferredReconcileTimerRef.current = window.setTimeout(() => {
         deferredReconcileTimerRef.current = undefined;
+        if (!metadataController.isCurrent(owner)) return;
+        const background = backgroundContentRefreshRef.current;
+        if (background?.owner !== owner) return;
         // Keep the user's scroll position across the silent reconcile — a
         // replaced first page must not yank the canvas to the bottom.
         const canvas = workspaceCanvasRef.current;
         const scrollTopBefore = canvas?.scrollTop ?? 0;
-        void reloadCurrentContentRef.current()
+        const read = background.request(undefined, { reportError: false });
+        if (!read) return;
+        void read
           .catch(() => undefined)
           .finally(() => {
             const nextCanvas = workspaceCanvasRef.current;
-            if (nextCanvas && nextCanvas.scrollTop !== scrollTopBefore) {
+            if (metadataController.isCurrent(owner) && nextCanvas && nextCanvas === canvas
+              && nextCanvas.scrollTop !== scrollTopBefore) {
               nextCanvas.scrollTo({ top: scrollTopBefore });
             }
           });
       }, 1500);
     },
-    [removeLocallyFromBrowse],
+    [metadataController, removeLocallyFromBrowse],
   );
 
   function openInlineCollectionRename(collectionId: string, currentName: string) {
@@ -5552,15 +5639,19 @@ function AppInner() {
   });
 
   async function refreshAfterAutomationScript() {
+    const owner = metadataSession;
+    if (!metadataController.isCurrent(owner)) return;
+    metadataController.invalidate(owner);
     try {
       // A script may issue hundreds of write commands. Refresh once after the
       // execution settles so cards retain the current browse scope/selection
       // and Inspector reflects committed metadata without a reload per batch.
       await reloadCurrentContent();
+      if (!metadataController.isCurrent(owner)) return;
       const selected = selectedAssetIdRef.current;
-      if (selected) await refreshTagAndMetadataState(selected);
+      if (selected) await refreshTagAndMetadataState(selected, owner);
     } catch (caught) {
-      setError(toMessage(caught, t("toast.diskChangedRefreshFailed"), locale));
+      if (metadataController.isCurrent(owner)) setError(toMessage(caught, t("toast.diskChangedRefreshFailed"), locale));
     }
   }
 
@@ -5576,6 +5667,8 @@ function AppInner() {
   } = useBatchActions({
     api: api ?? null,
     library,
+    metadataController,
+    metadataSession,
     setUiState,
     setTags,
     setCollections,
@@ -6019,6 +6112,14 @@ function AppInner() {
 
   async function executeSearchDefinition(definition: SearchDefinition) {
     if (!api || !library) return;
+    const owner = metadataSessionRef.current;
+    if (!metadataController.isCurrent(owner) || owner.libraryId !== library.libraryId) return;
+    // Direct discovery/tag/collection searches share browse generation with
+    // background hydration. A newer visible query owns all of its publications.
+    const generation = ++contentLoadGenerationRef.current;
+    const isCurrent = () => metadataController.isCurrent(owner)
+      && generation === contentLoadGenerationRef.current;
+    setContentLoading((current) => isCurrent() ? false : current);
     // A draft smart collection is a rule-editing surface: its first query is
     // composed with the normal discovery controls, then saved by the sidebar
     // action.  Keep that draft selected while its controls are being edited;
@@ -6043,20 +6144,24 @@ function AppInner() {
       limit: BROWSE_PAGE_SIZE,
       offset: 0,
       showIgnored: showIgnoredItems,
+    }).catch((caught: unknown) => {
+      if (!isCurrent()) return null;
+      throw caught;
     });
+    if (result === null || !isCurrent()) return;
     if (!result.ok) throw new LibraryOperationError(result.error);
     if (requestGeneration !== searchRequestGenerationRef.current) return;
-    setShowTrash(false);
-    setShowTagManagement(false);
-    setActivePluginSidebarViewId(null);
-    if (!tagFilter.trim()) setActiveTagId(null);
+    setShowTrash((current) => isCurrent() ? false : current);
+    setShowTagManagement((current) => isCurrent() ? false : current);
+    setActivePluginSidebarViewId((current) => isCurrent() ? null : current);
+    if (!tagFilter.trim()) setActiveTagId((current) => isCurrent() ? null : current);
     if (!keepDraftSmartCollectionSelected) {
-      setActiveSmartCollectionId(null);
+      setActiveSmartCollectionId((current) => isCurrent() ? null : current);
     }
     if (!pendingRevealRef.current) {
       clearAssetSelection({ preserveFolders: true });
     }
-    applySearchResult(result.value);
+    applySearchResult(result.value, isCurrent);
     // Super-ws4k: subsequent pages must reuse the same query/scope/sort.
     registerBrowseSearchPage(beginBrowsePage, {
       libraryId: library.libraryId,
@@ -6079,16 +6184,24 @@ function AppInner() {
   ) {
     event?.preventDefault();
     if (!api || !library) return;
+    const owner = metadataSessionRef.current;
+    if (!metadataController.isCurrent(owner) || owner.libraryId !== library.libraryId) return;
     await closeAssetPreview(false);
+    if (!metadataController.isCurrent(owner)) return;
+    let generation: number | undefined;
     try {
       const definition = currentQueryDefinition();
-      const result = await executeSearchDefinition(definition);
+      const read = executeSearchDefinition(definition);
+      generation = contentLoadGenerationRef.current;
+      const result = await read;
+      if (!metadataController.isCurrent(owner) || generation !== contentLoadGenerationRef.current) return;
       // Super-huvw: discovery debounce / reload must not toast "搜索完成"
       // and wipe AI completion / error toasts.
       if (result && !opts?.silent) {
         setNotice(t("toast.searchDone", { total: result.total }));
       }
     } catch (caught) {
+      if (!metadataController.isCurrent(owner) || (generation !== undefined && generation !== contentLoadGenerationRef.current)) return;
       setError(toMessage(caught, t("toast.searchFailed"), locale));
     }
   }
@@ -6231,7 +6344,11 @@ function AppInner() {
 
   async function refreshSmartCollectionResults(collectionId: string) {
     if (!api || !library) return;
+    const owner = metadataSessionRef.current;
+    if (!metadataController.isCurrent(owner) || owner.libraryId !== library.libraryId) return;
     const generation = ++contentLoadGenerationRef.current;
+    const isCurrent = () => metadataController.isCurrent(owner)
+      && generation === contentLoadGenerationRef.current;
     try {
       const result = await api.executeSmartCollection({
         libraryId: library.libraryId,
@@ -6240,10 +6357,10 @@ function AppInner() {
         limit: BROWSE_PAGE_SIZE,
         offset: 0,
       });
-      if (generation !== contentLoadGenerationRef.current) return;
+      if (!isCurrent()) return;
       if (!result.ok) throw new LibraryOperationError(result.error);
       setSmartCollections((current) =>
-        current.map((collection) =>
+        !isCurrent() ? current : current.map((collection) =>
           collection.collectionId === collectionId
             ? { ...collection, assetCount: result.value.total }
             : collection,
@@ -6258,7 +6375,7 @@ function AppInner() {
         offset: result.value.offset,
       });
     } catch (caught) {
-      if (generation === contentLoadGenerationRef.current) {
+      if (isCurrent()) {
         setError(toMessage(caught, t("toast.smartCollectionRunFailed"), locale));
       }
     }
@@ -6336,28 +6453,24 @@ function AppInner() {
   loadAiContentForAssetRef.current = loadAiContentForAsset;
   rebuildAndApplyMultiEditRef.current = rebuildAndApplyMultiEdit;
   refreshAfterAiRef.current = async (assetId: string) => {
+    const owner = metadataSession;
+    if (!api || !owner || !metadataController.isCurrent(owner)) return;
+    // The event/caller synchronously invalidated the affected IDs already.
+    // listTags once; all selected-ID reads share the bounded scheduler.
+    const ids = [...new Set(selectedAssetIdsRef.current.length >= 2
+      ? selectedAssetIdsRef.current : [assetId])];
     try {
-      await refreshTagAndMetadataState(assetId);
+      const [tagResult] = await Promise.all([
+        api.listTags({ libraryId: owner.libraryId }),
+        ...ids.map((id) => metadataController.request(owner, id, "bulk")),
+      ]);
+      if (!metadataController.isCurrent(owner)) return;
+      if (tagResult.ok) setTags(tagResult.value);
+      const primary = selectedAssetIdRef.current;
+      if (primary && ids.includes(primary)) await loadAiContentForAsset(primary);
+      if (metadataController.isCurrent(owner) && ids.length >= 2) rebuildAndApplyMultiEdit(ids);
     } catch {
-      // Best-effort; AI content load still proceeds.
-    }
-    await loadAiContentForAsset(assetId);
-    // Multi-selection: the batch-edit Inspector reads the multiEdit model
-    // built from per-asset metadata (intersection), so every selected
-    // asset's metadata must be fresh before the model is rebuilt — the
-    // primary alone was refreshed above (Super-c9r3 regression: batch AI
-    // analysis completed but the Inspector stayed stale until a reselect).
-    if (selectedAssetIdsRef.current.length >= 2) {
-      const ids = [...new Set(selectedAssetIdsRef.current)];
-      for (const id of ids) {
-        if (id === assetId) continue;
-        try {
-          await refreshTagAndMetadataState(id);
-        } catch {
-          // Best-effort per asset; the rebuild still proceeds.
-        }
-      }
-      rebuildAndApplyMultiEdit(ids);
+      // Metadata failures remain explicit/retryable in the Inspector.
     }
   };
 
@@ -6852,7 +6965,7 @@ function AppInner() {
   }
 
   function applyClosedLibraryUi() {
-    setLibrary(null);
+    activateMetadataSession(null);
     setPluginJobs(null);
     setHiddenPluginJobActivityId(null);
     setFolders([]);
@@ -7111,7 +7224,8 @@ function AppInner() {
       document.execCommand("undo");
       return;
     }
-    if (!api || !library) return;
+    const owner = metadataSession;
+    if (!api || !library || !metadataController.isCurrent(owner)) return;
     const current = operationHistory?.undoTop;
     const historyEntryId = expectedHistoryEntryId ?? current?.historyEntryId;
     if (!historyEntryId) return;
@@ -7122,25 +7236,29 @@ function AppInner() {
         expectedHistoryEntryId: historyEntryId,
       });
       if (!result.ok) throw new LibraryOperationError(result.error);
+      if (!metadataController.isCurrent(owner)) return;
+      metadataController.invalidateAfterHistoryRestore(owner);
       setOperationHistory(result.value);
       setNotice(
         t("toast.historyUndoDone", { count: current?.affectedCount ?? 1 }),
       );
       await reloadCurrentContentRef.current();
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return;
       setError(toMessage(caught, t("toast.historyUndoFailed"), locale));
       await refreshOperationHistory();
     } finally {
-      setUiState("ready");
+      if (metadataController.isCurrent(owner)) setUiState("ready");
     }
-  }, [api, library, locale, operationHistory, refreshOperationHistory, setError, setNotice, t]);
+  }, [api, library, metadataController, metadataSession, locale, operationHistory, refreshOperationHistory, setError, setNotice, t]);
 
   const redoLastOperation = useCallback(async () => {
     if (isEditableTextTarget(document.activeElement)) {
       document.execCommand("redo");
       return;
     }
-    if (!api || !library) return;
+    const owner = metadataSession;
+    if (!api || !library || !metadataController.isCurrent(owner)) return;
     const current = operationHistory?.redoTop;
     if (!current) return;
     setUiState("loading");
@@ -7150,16 +7268,19 @@ function AppInner() {
         expectedHistoryEntryId: current.historyEntryId,
       });
       if (!result.ok) throw new LibraryOperationError(result.error);
+      if (!metadataController.isCurrent(owner)) return;
+      metadataController.invalidateAfterHistoryRestore(owner);
       setOperationHistory(result.value);
       setNotice(t("toast.historyRedoDone", { count: current.affectedCount }));
       await reloadCurrentContentRef.current();
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return;
       setError(toMessage(caught, t("toast.historyRedoFailed"), locale));
       await refreshOperationHistory();
     } finally {
-      setUiState("ready");
+      if (metadataController.isCurrent(owner)) setUiState("ready");
     }
-  }, [api, library, locale, operationHistory, refreshOperationHistory, setError, setNotice, t]);
+  }, [api, library, metadataController, metadataSession, locale, operationHistory, refreshOperationHistory, setError, setNotice, t]);
 
   async function deletePermanentFromTrash(assetIds: string[]) {
     if (!api || !library || assetIds.length === 0) return;
@@ -7761,7 +7882,7 @@ function AppInner() {
         throw new Error(t("toast.importFailed"));
       }
       await closeAssetPreview(false);
-      setLibrary(summary);
+      activateMetadataSession(summary);
       setPluginJobs(null);
       setHiddenPluginJobActivityId(null);
       setShowTrash(false);
@@ -7864,43 +7985,90 @@ function AppInner() {
     }
   }
 
+  const backgroundLibraryId = library?.libraryId ?? null;
+  const backgroundContentPortsRef = useRef({ locale, t, setError, setNotice, networkStorage: library?.networkStorage });
   useEffect(() => {
-    if (!api || !library) return;
+    backgroundContentPortsRef.current = { locale, t, setError, setNotice, networkStorage: library?.networkStorage };
+  }, [locale, t, setError, setNotice, library?.networkStorage]);
+  useEffect(() => {
+    if (!api || !backgroundLibraryId || !metadataController.isCurrent(metadataSession)
+      || metadataSession.libraryId !== backgroundLibraryId) return;
+    const owner = metadataSession;
     let reloadTimer: number | undefined;
     let disposed = false;
     let pendingAssetEvent: AssetChangeEvent | undefined;
+    let pendingNotificationCandidate: AssetChangeEvent | undefined;
+    const pendingAiAssetIds = new Set<string>();
     let networkReloadCooldownTimer: number | undefined;
     let lastNetworkReloadAt = 0;
     let assetChangeDebounceTimer: number | undefined;
     // Share the same bounded read for import, ordinary changes and NAS signals.
     // A long read must not accumulate another full query every debounce period.
     const reconciliation = createCoalescedRefresh(async () => {
+      if (disposed || !metadataController.isCurrent(owner)) return;
       const event = pendingAssetEvent;
+      const notification = pendingNotificationCandidate;
+      const aiAssetIds = new Set(pendingAiAssetIds);
       pendingAssetEvent = undefined;
-      await reloadCurrentContentRef.current();
-      if (disposed || !event) return;
+      pendingNotificationCandidate = undefined;
+      pendingAiAssetIds.clear();
+      const read = reloadCurrentContentRef.current({ awaitHydration: true });
+      const generation = contentLoadGenerationRef.current;
+      const isCurrent = () => !disposed && metadataController.isCurrent(owner)
+        && generation === contentLoadGenerationRef.current;
+      await read;
+      if (!isCurrent()) return;
       const selected = selectedAssetIdRef.current;
-      if (selected) {
-        const metadata = await api.getAssetMetadata({ libraryId: library.libraryId, assetId: selected });
-        if (!disposed && metadata.ok && selectedAssetIdRef.current === selected) {
-          applyLoadedMetadata(selected, metadata.value);
-        }
+      if (selected && (event || aiAssetIds.has(selected))) {
+        await metadataController.request(owner, selected, "primary");
       }
-      if (disposed) return;
-      if (event.source === "text-save") {
+      if (!isCurrent() || !notification) return;
+      const { t, setNotice } = backgroundContentPortsRef.current;
+      if (notification.source === "text-save") {
         setNotice(t("toast.textFileSaved"));
-      } else if (event.source === "watcher") {
-        const missing = event.missingCount
-          ? t("toast.diskSyncedMissing", { count: event.missingCount })
+      } else if (notification.source === "watcher") {
+        const missing = notification.missingCount
+          ? t("toast.diskSyncedMissing", { count: notification.missingCount })
           : "";
-        setNotice(t("toast.diskSyncedAuto", { count: event.changedCount, missing }));
+        setNotice(t("toast.diskSyncedAuto", { count: notification.changedCount, missing }));
       }
     });
+    // Observe one terminal failure for a shared promise, not one catch for
+    // each notification attached to that promise while its read is pending.
+    let observed: { promise: Promise<void>; reportError: boolean } | undefined;
+    const refreshReconciliation = (reportError: boolean) => {
+      if (disposed || !metadataController.isCurrent(owner)) return;
+      const promise = reconciliation.refresh();
+      if (observed?.promise === promise) {
+        observed.reportError ||= reportError;
+        return promise;
+      }
+      const observation = { promise, reportError };
+      observed = observation;
+      const finished = () => { if (observed === observation) observed = undefined; };
+      void promise.then(finished, (caught: unknown) => {
+        if (observation.reportError && !disposed && metadataController.isCurrent(owner)) {
+          const { t, setError, locale } = backgroundContentPortsRef.current;
+          setError(toMessage(caught, t("toast.diskChangedRefreshFailed"), locale));
+        }
+        finished();
+      });
+      return promise;
+    };
+    const background = {
+      owner,
+      request: (assetIds?: readonly string[], options?: { reportError?: boolean }) => {
+        if (disposed || !metadataController.isCurrent(owner)) return;
+        for (const assetId of assetIds ?? []) pendingAiAssetIds.add(assetId);
+        return refreshReconciliation(options?.reportError ?? true);
+      },
+    };
+    backgroundContentRefreshRef.current = background;
     const scheduleSilentReload = () => {
       if (reloadTimer !== undefined) window.clearTimeout(reloadTimer);
       reloadTimer = window.setTimeout(() => {
         reloadTimer = undefined;
-        void reconciliation.refresh().catch(() => undefined);
+        refreshReconciliation(false);
       }, 120);
     };
     const scheduleNetworkLibraryReload = () => {
@@ -7922,8 +8090,13 @@ function AppInner() {
       }, NETWORK_LIBRARY_RELOAD_INTERVAL_MS - elapsed);
     };
     const unsubscribe = api.onAssetsChanged((event) => {
-      if (event.libraryId !== library.libraryId) return;
-      setLayoutThumbnailArtifacts((current) => invalidateChangedAssetArtifacts(current, event));
+      if (event.libraryId !== owner.libraryId || !metadataController.isCurrent(owner)) return;
+      // Domain reconciliation always receives the event, including import and
+      // watchers whose presentation alone is suppressed.
+      pendingAssetEvent = event;
+      metadataController.invalidate(owner, event.assetIds);
+      setLayoutThumbnailArtifacts((current) => metadataController.isCurrent(owner)
+        ? invalidateChangedAssetArtifacts(current, event) : current);
       scheduleHistoryRefresh();
       // Super-yqrl: while a user import is applying, each committed asset
       // triggers a silent canvas refresh so cards appear one-by-one.
@@ -7931,6 +8104,7 @@ function AppInner() {
         scheduleSilentReload();
         return;
       }
+      pendingNotificationCandidate = nextAssetNotificationCandidate(pendingNotificationCandidate, event);
       // Super-关联刷新: batch mutations (delete/trash/relink) broadcast one
       // asset.changed per asset — debounce so a 500-asset delete triggers one
       // reconcile instead of 500 queued full reloads. Local removal already
@@ -7938,13 +8112,9 @@ function AppInner() {
       if (assetChangeDebounceTimer !== undefined) {
         window.clearTimeout(assetChangeDebounceTimer);
       }
-      const latestEvent = event;
       assetChangeDebounceTimer = window.setTimeout(() => {
         assetChangeDebounceTimer = undefined;
-        pendingAssetEvent = latestEvent;
-        void reconciliation.refresh().catch((caught) => {
-          if (!disposed) setError(toMessage(caught, t("toast.diskChangedRefreshFailed"), locale));
-        });
+        refreshReconciliation(true);
       }, 300);
     });
     let historyTimer: number | undefined;
@@ -7956,17 +8126,19 @@ function AppInner() {
       }, 1500);
     };
     const unsubscribeLibraryChanged = api.onLibraryChanged((event) => {
-      if (event.libraryId !== library.libraryId) return;
+      if (event.libraryId !== owner.libraryId || !metadataController.isCurrent(owner)) return;
       scheduleHistoryRefresh();
       // Cross-process change-sequence bumps are not asset mutation counts.
       // Refresh silently without forging an asset.changed payload.
       const importing =
         uiStateRef.current === "importing" || Boolean(importProgressRef.current);
+      const { networkStorage } = backgroundContentPortsRef.current;
       if (shouldRefreshContentForLibraryChange({
-        networkStorage: library.networkStorage,
+        networkStorage,
         importing,
       })) {
-        if (!importing && library.networkStorage === true) {
+        metadataController.invalidate(owner);
+        if (!importing && networkStorage === true) {
           scheduleNetworkLibraryReload();
         } else {
           scheduleSilentReload();
@@ -7983,6 +8155,7 @@ function AppInner() {
     return () => {
       disposed = true;
       reconciliation.dispose();
+      if (backgroundContentRefreshRef.current === background) backgroundContentRefreshRef.current = null;
       if (reloadTimer !== undefined) window.clearTimeout(reloadTimer);
       if (networkReloadCooldownTimer !== undefined) {
         window.clearTimeout(networkReloadCooldownTimer);
@@ -7994,7 +8167,7 @@ function AppInner() {
       unsubscribe();
       unsubscribeLibraryChanged();
     };
-  }, [api, applyLoadedMetadata, library, locale, refreshOperationHistory, setError, setNotice, t]);
+  }, [api, backgroundLibraryId, metadataController, metadataSession, refreshOperationHistory]);
 
   useEffect(() => {
     if (!api) return;
@@ -9006,7 +9179,8 @@ function AppInner() {
   }
 
   async function handleClearAiContent(assetIds: string[]) {
-    if (!api || !library || assetIds.length === 0) return;
+    const owner = metadataSession;
+    if (!api || !library || assetIds.length === 0 || !metadataController.isCurrent(owner)) return;
     // Product brief: batch clear requires confirmation (UI gate; worker only
     // enforces confirm for folder/library scopes).
     if (
@@ -9023,12 +9197,14 @@ function AppInner() {
         scope: { kind: "asset", assetIds },
         confirm: assetIds.length > 1,
       });
+      if (!metadataController.isCurrent(owner)) return;
       if (!result.ok) {
         setError(
           toMessage(result.error, t("toast.aiContentClearFailed"), locale),
         );
         return;
       }
+      metadataController.invalidate(owner, assetIds);
       if (
         selectedAssetId &&
         assetIds.includes(selectedAssetId)
@@ -9037,6 +9213,7 @@ function AppInner() {
       }
       // Toast + list refresh also arrive via onAiCleared.
     } catch (caught) {
+      if (!metadataController.isCurrent(owner)) return;
       setError(toMessage(caught, t("toast.aiContentClearFailed"), locale));
     }
   }
@@ -9076,7 +9253,8 @@ function AppInner() {
   }
 
   async function refreshAiBatchStatus() {
-    if (!api || !library) return;
+    const owner = metadataSession;
+    if (!api || !library || !metadataController.isCurrent(owner)) return;
     const jobIds = aiBatchJobIdsRef.current;
     if (jobIds.length === 0) return;
     const requestNumber = ++aiBatchStatusRequestRef.current;
@@ -9086,6 +9264,7 @@ function AppInner() {
         jobIds,
       });
       if (
+        !metadataController.isCurrent(owner) ||
         !result.ok ||
         requestNumber !== aiBatchStatusRequestRef.current ||
         aiBatchJobIdsRef.current !== jobIds
@@ -9097,6 +9276,7 @@ function AppInner() {
       });
       setAiBatchProgress(progress);
       if (progress.done < progress.batchTotal) return;
+      metadataController.invalidate(owner, result.value.jobs.filter((job) => job.status === "succeeded").map((job) => job.assetId));
 
       // Completion is defined by this batch's durable job IDs, not by the
       // whole library becoming idle. Other manual or automatic jobs may run.
@@ -9187,7 +9367,10 @@ function AppInner() {
       } else if (batchSize > 0) {
         setNotice(t("toast.aiAnalyzeDone"));
       }
-      void reloadCurrentContentRef.current();
+      const background = backgroundContentRefreshRef.current;
+      if (background?.owner === owner) {
+        background.request(result.value.jobs.filter((job) => job.status === "succeeded").map((job) => job.assetId));
+      }
     } catch {
       // A transient status query must not finish or miscount an active batch;
       // the next throttled progress event will retry this refresh.
@@ -9394,13 +9577,17 @@ function AppInner() {
   }
 
   async function resolveAiReanalysis(assetId: string, accept: boolean) {
-    if (!api || !library) return;
+    const owner = metadataSession;
+    if (!api || !library || !metadataController.isCurrent(owner)) return;
     const result = await api.resolveAiReanalysis({ libraryId: library.libraryId, assetId, accept });
+    if (!metadataController.isCurrent(owner)) return;
     if (!result.ok) {
       setError(toMessage(result.error, t("toast.aiAnalyzeFailed"), locale));
       return;
     }
+    metadataController.invalidate(owner, [assetId]);
     await loadAiContentForAsset(assetId);
+    if (!metadataController.isCurrent(owner)) return;
     setNotice(accept ? "已采用新的 AI 分析结果" : "已保留原有 AI 分析结果");
   }
 
@@ -11565,7 +11752,7 @@ function AppInner() {
         allAssetCount={allAssetCount}
         allTags={tags}
         api={api}
-        assetMetadata={assetMetadata}
+        assetMetadata={singleMetadataReadState.status === "ready" ? assetMetadata : null}
         automaticPaletteRatios={automaticPaletteRatios}
         displayedPalette={displayedPalette}
         editDescription={editDescription}
@@ -11600,6 +11787,9 @@ function AppInner() {
         onRemoveTagFromAsset={(tagId) => void handleInspectorRemoveTag(tagId)}
         selectedAsset={selectedAsset}
         selectedAssets={selectedAssets}
+        selectedAssetIds={selectedAssetIds}
+        metadataReadState={selectedAssetIds.length >= 2 ? multiMetadataReadState : singleMetadataReadState}
+        onRetryMetadata={selectedAssetIds.length >= 2 ? retryMultiMetadata : retrySingleMetadata}
         multiEdit={multiEdit}
         versionConflict={versionConflict}
         pluginApi={(window as RendererWindow).super?.plugins}
@@ -11932,13 +12122,15 @@ function AppInner() {
           setLibrarySettingsOpen(false);
         }}
         onSaveName={async (name) => {
-          if (!api || !library) return;
+          const owner = metadataSession;
+          if (!api || !library || !metadataController.isCurrent(owner)) return;
           const result = await api.rename({ libraryId: library.libraryId, displayName: name });
+          if (!metadataController.isCurrent(owner)) return;
           if (!result.ok) {
             setError(messageForPublicError(result.error, locale, t("toast.librarySettingsSaveFailed")));
             return;
           }
-          setLibrary(result.value);
+          updateMetadataSessionSummary(owner, result.value);
           setNotice(t("toast.librarySettingsSaved"));
         }}
         onSaveGitignore={async (content) => {

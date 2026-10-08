@@ -1,10 +1,14 @@
 import { createHash } from 'node:crypto';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { createReadStream, createWriteStream, existsSync, readdirSync } from 'node:fs';
 import {
   access,
+  lstat,
   mkdir,
   mkdtemp,
+  open,
   readFile,
+  realpath,
   rename,
   rm,
   stat,
@@ -28,6 +32,7 @@ import type {
   AppUpdateInstallResult,
   AppUpdateProgress,
 } from '../shared/app-update';
+import { pendingUpdateSchema, type InstallerReceipt, type PendingAppUpdate } from './pending-app-update';
 
 export const SUPER_UPDATE_PUBLIC_ORIGIN = 'https://liuyangyang.me';
 export const SUPER_UPDATE_MANIFEST_URL =
@@ -112,6 +117,44 @@ export type AppUpdateServiceOptions = {
   logger?: AppUpdateLogger;
 };
 
+/** Main's installer handoff: spawning a child object is not proof that exec succeeded. */
+export function createAppUpdateInstallerLauncher(options: {
+  platform: string;
+  openPath(filePath: string): Promise<string>;
+  spawnChild?: (filePath: string, args: string[], options: {
+    detached: true; stdio: 'ignore'; windowsHide: false;
+  }) => Pick<ChildProcess, 'once' | 'removeListener' | 'unref'>;
+}): NonNullable<AppUpdateServiceOptions['launchInstaller']> {
+  return async (installerPath, mode) => {
+    if (options.platform !== 'win32') {
+      const openError = await options.openPath(installerPath);
+      if (openError !== '') throw new Error(openError);
+      return;
+    }
+    const args = mode === 'silent'
+      ? ['/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS']
+      : [];
+    await new Promise<void>((resolve, reject) => {
+      // A synchronous dispatch throw is rejected by the Promise executor.
+      const child = (options.spawnChild ?? spawn)(installerPath, args, {
+        detached: true, stdio: 'ignore', windowsHide: false,
+      });
+      const cleanup = () => {
+        child.removeListener('spawn', onSpawn);
+        child.removeListener('error', onError);
+      };
+      const onError = (error: Error) => { cleanup(); reject(error); };
+      const onSpawn = () => {
+        cleanup();
+        try { child.unref(); resolve(); }
+        catch (error) { reject(error); }
+      };
+      child.once('error', onError);
+      child.once('spawn', onSpawn);
+    });
+  };
+}
+
 type CachedUpdate = {
   release: GitHubRelease;
   target: AppUpdateTarget;
@@ -125,6 +168,9 @@ type PreparedInstaller = {
   version: string;
   distribution: 'installed';
   releaseNotes: string;
+  receipt: InstallerReceipt;
+  /** An owned download/extraction root; never supplied by restored metadata. */
+  verificationRoot: string;
 };
 
 type UpdatePartialMetadata = {
@@ -144,12 +190,7 @@ type ResumableDownload = {
   metadata: UpdatePartialMetadata;
 };
 
-export type RestoredPreparedUpdate = {
-  installerPath: string;
-  cleanupPath: string;
-  version: string;
-  releaseNotes: string;
-};
+export type RestoredPreparedUpdate = PendingAppUpdate;
 
 function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === 'object' && input !== null;
@@ -656,6 +697,96 @@ async function sha256File(filePath: string): Promise<string> {
   return hash.digest('hex');
 }
 
+function isContainedPath(directory: string, target: string): boolean {
+  const relative = path.relative(path.resolve(directory), path.resolve(target));
+  return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+/** Check every descendant before following realpath: junctions/symlinks are not installer files. */
+async function checkedInstallerPath(root: string, filePath: string): Promise<string> {
+  const resolvedRoot = path.resolve(root);
+  const resolvedFile = path.resolve(filePath);
+  if (!isContainedPath(resolvedRoot, resolvedFile)) throw new Error('Installer escaped its owned update directory.');
+  const rootStat = await lstat(resolvedRoot);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error('Unsafe installer verification root.');
+  const realRoot = await realpath(resolvedRoot);
+  const parts = path.relative(resolvedRoot, resolvedFile).split(path.sep);
+  let cursor = resolvedRoot;
+  for (const [index, part] of parts.entries()) {
+    cursor = path.join(cursor, part);
+    const entry = await lstat(cursor);
+    if (entry.isSymbolicLink() || (index === parts.length - 1 ? !entry.isFile() : !entry.isDirectory())) {
+      throw new Error('Installer path contains a link or non-regular entry.');
+    }
+  }
+  const realFile = await realpath(resolvedFile);
+  if (!isContainedPath(realRoot, realFile)) throw new Error('Installer realpath escaped its owned update directory.');
+  return realFile;
+}
+
+/** Stream from one handle and detect replacement/mutation while hashing. This is not a signature. */
+async function inspectInstaller(root: string, filePath: string): Promise<{ installerPath: string; bytes: number; sha256: string }> {
+  const installerPath = await checkedInstallerPath(root, filePath);
+  const handle = await open(installerPath, 'r');
+  try {
+    const before = await handle.stat();
+    if (!before.isFile() || before.size < 1 || before.size > MAX_DOWNLOAD_BYTES) throw new Error('Invalid installer file size.');
+    const hash = createHash('sha256');
+    let bytes = 0;
+    for await (const chunk of handle.createReadStream({ autoClose: false })) {
+      bytes += chunk.length;
+      if (bytes > MAX_DOWNLOAD_BYTES) throw new Error('Installer grew beyond its byte limit.');
+      hash.update(chunk);
+    }
+    const after = await handle.stat();
+    const currentPath = await checkedInstallerPath(root, filePath);
+    const current = await lstat(currentPath);
+    if (before.size !== bytes || after.size !== before.size || after.mtimeMs !== before.mtimeMs
+      || after.ctimeMs !== before.ctimeMs || currentPath !== installerPath
+      || current.dev !== before.dev || current.ino !== before.ino || current.size !== before.size
+      || current.mtimeMs !== before.mtimeMs || current.ctimeMs !== before.ctimeMs) {
+      throw new Error('Installer changed while it was being verified.');
+    }
+    return { installerPath, bytes, sha256: hash.digest('hex') };
+  } finally {
+    await handle.close();
+  }
+}
+
+async function verifyPreparedInstaller(prepared: PreparedInstaller): Promise<boolean> {
+  try {
+    const receipt = prepared.receipt;
+    if (receipt.schemaVersion !== 1 || receipt.appVersion !== prepared.version
+      || receipt.installerPath !== prepared.installerPath) return false;
+    const inspected = await inspectInstaller(prepared.verificationRoot, prepared.installerPath);
+    return inspected.installerPath === receipt.installerPath && inspected.bytes === receipt.bytes && inspected.sha256 === receipt.sha256;
+  } catch {
+    return false;
+  }
+}
+
+/** Prepared paths have an explicit owner; never follow a replaced cache root during cleanup. */
+async function removePreparedInstallerArtifact(prepared: PreparedInstaller): Promise<void> {
+  const root = path.resolve(prepared.verificationRoot);
+  const cleanup = path.resolve(prepared.cleanupPath);
+  const rootStat = await lstat(root);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || await realpath(root) !== root) {
+    throw new Error('Refusing cleanup through a redirected update root.');
+  }
+  if (cleanup !== root && !isContainedPath(root, cleanup)) throw new Error('Prepared cleanup path escaped its owner.');
+  let cursor = root;
+  for (const part of path.relative(root, cleanup).split(path.sep).filter(Boolean)) {
+    cursor = path.join(cursor, part);
+    const entry = await lstat(cursor).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      throw error;
+    });
+    if (entry === undefined) return;
+    if (entry.isSymbolicLink()) throw new Error('Refusing cleanup through an update link.');
+  }
+  await removeUpdateArtifact(cleanup);
+}
+
 async function nextAvailableDownloadPath(
   directory: string,
   fileName: string,
@@ -746,28 +877,34 @@ export class AppUpdateService {
       cleanupPath: prepared.cleanupPath,
       version: prepared.version,
       releaseNotes: prepared.releaseNotes,
+      receipt: { ...prepared.receipt },
     };
   }
 
-  restorePreparedUpdate(update: RestoredPreparedUpdate): boolean {
+  async restorePreparedUpdate(input: unknown): Promise<boolean> {
     const cacheDirectory = this.#options.preparedUpdateDirectory;
     if (cacheDirectory === undefined || this.#busy || this.#preparedInstaller !== undefined) return false;
-    const isWithinCache = (candidate: string) => {
-      const relative = path.relative(path.resolve(cacheDirectory), path.resolve(candidate));
-      return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
-    };
-    if (!isWithinCache(update.installerPath) || !isWithinCache(update.cleanupPath) || !existsSync(update.installerPath)) {
+    // Legacy files are deliberately not re-hashed to manufacture new trust.
+    const parsed = pendingUpdateSchema.safeParse(input);
+    if (!parsed.success || this.#options.platform !== 'win32'
+      || !isContainedPath(cacheDirectory, parsed.data.installerPath)
+      || !isContainedPath(cacheDirectory, parsed.data.cleanupPath)
+      || !isContainedPath(parsed.data.cleanupPath, parsed.data.installerPath)
+      || !path.basename(parsed.data.cleanupPath).startsWith('super-update-')) return false;
+    this.#busy = true;
+    try {
+      const update = parsed.data;
+      const prepared: PreparedInstaller = { ...update, platform: 'win32', distribution: 'installed', verificationRoot: cacheDirectory };
+      if (!await verifyPreparedInstaller(prepared)) return false;
+      prepared.verificationRoot = await realpath(cacheDirectory);
+      this.#preparedInstaller = prepared;
+      return true;
+    } catch (error) {
+      this.#options.logger?.error('app-update.verify', error, { phase: 'restore' });
       return false;
+    } finally {
+      this.#busy = false;
     }
-    this.#preparedInstaller = {
-      installerPath: update.installerPath,
-      cleanupPath: update.cleanupPath,
-      platform: 'win32',
-      version: update.version,
-      distribution: 'installed',
-      releaseNotes: update.releaseNotes,
-    };
-    return true;
   }
 
   async checkForUpdates(): Promise<AppUpdateCheckResult> {
@@ -891,7 +1028,6 @@ export class AppUpdateService {
 
   async #prepareUpdateOnce(): Promise<AppUpdateInstallResult> {
     if (this.#busy) return installResultError('busy');
-    await this.discardPreparedUpdate();
     this.#busy = true;
     this.#lastAttemptedUpdate = undefined;
     this.#downloadAbort = new AbortController();
@@ -900,6 +1036,7 @@ export class AppUpdateService {
     let extractedInstallerDirectory: string | undefined;
     let keepDownloadedUpdate = false;
     try {
+      await this.discardPreparedUpdate();
       const cached = this.#cachedUpdate;
       const checked = cached === undefined ? await this.checkForUpdates() : undefined;
       const update = cached ?? (checked?.status === 'available' ? this.#cachedUpdate : undefined);
@@ -1091,24 +1228,33 @@ export class AppUpdateService {
         extractedInstallerDirectory = extracted.outputDirectory;
       }
       let cleanupPath: string;
+      let verificationRoot: string;
       if (update.target.platform === 'win32') {
         if (extractedInstallerDirectory === undefined) {
           return installResultError('download-failed');
         }
         cleanupPath = updateDirectory ?? extractedInstallerDirectory;
-        extractedInstallerDirectory = undefined;
+        verificationRoot = installedCacheDirectory ?? extractedInstallerDirectory;
       } else {
         cleanupPath = downloadPath;
-        keepDownloadedUpdate = true;
+        verificationRoot = updateDirectory ?? this.#options.downloadsDirectory;
       }
+      // Only a fresh verified download reaches this point. The receipt is for
+      // the extracted executable, not a self-attestation of an old cache file.
+      const inspected = await inspectInstaller(verificationRoot, launchPath);
       this.#preparedInstaller = {
-        installerPath: launchPath,
-        cleanupPath,
+        installerPath: inspected.installerPath,
+        cleanupPath: await realpath(cleanupPath),
         platform: update.target.platform,
         version: update.release.version,
         distribution: 'installed',
         releaseNotes: update.release.notes,
+        receipt: { schemaVersion: 1, sha256: inspected.sha256, bytes: inspected.bytes,
+          appVersion: update.release.version, installerPath: inspected.installerPath },
+        verificationRoot: await realpath(verificationRoot),
       };
+      if (update.target.platform === 'win32') extractedInstallerDirectory = undefined;
+      else keepDownloadedUpdate = true;
       this.#cachedUpdate = undefined;
       return {
         ok: true,
@@ -1149,12 +1295,21 @@ export class AppUpdateService {
   /** Launch a previously verified installer. The caller must then exit Super. */
   async launchPreparedUpdate(
     mode: 'interactive' | 'silent' = 'interactive',
+    options?: { beforeLaunch?: () => Promise<void> },
   ): Promise<AppUpdateInstallResult> {
     if (this.#busy) return installResultError('busy');
     const prepared = this.#preparedInstaller;
     if (prepared === undefined) return installResultError('not-available');
     this.#busy = true;
     try {
+      if (!await verifyPreparedInstaller(prepared)) {
+        await this.discardPreparedUpdate().catch((error: unknown) => this.#options.logger?.error('app-update.cleanup', error));
+        this.#options.logger?.info('app-update.verify', 'Prepared installer failed its final integrity check.', { version: prepared.version });
+        return installResultError('verification-failed');
+      }
+      // Completion must not be persisted until the final guard has passed.
+      // Keep the callback inside this same flight; a failed write cannot spawn.
+      await options?.beforeLaunch?.();
       emitDownloadProgress(this.#options.onDownloadProgress, {
         phase: 'launching',
         downloadedBytes: 0,
@@ -1172,7 +1327,7 @@ export class AppUpdateService {
       }
       this.#preparedInstaller = undefined;
       if (prepared.platform !== 'win32') {
-        await removeUpdateArtifact(prepared.cleanupPath);
+        await removePreparedInstallerArtifact(prepared);
       }
       this.#options.logger?.info('app-update.install', 'Update installer opened.', {
         version: prepared.version,
@@ -1201,7 +1356,7 @@ export class AppUpdateService {
     const prepared = this.#preparedInstaller;
     this.#preparedInstaller = undefined;
     if (prepared === undefined) return;
-    await removeUpdateArtifact(prepared.cleanupPath);
+    await removePreparedInstallerArtifact(prepared);
   }
 
   /** Keep the existing explicit-update API as prepare followed by launch. */
