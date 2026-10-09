@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 1,
+  "commandKind": "Equivalent reproduction commands; reporting flags and argument ordering are omitted",
+  "auditDate": "2026-10-09",
+  "product": "Super Lib",
+  "version": "2.3.17",
+  "sourceCommit": "fcf074d6e771fb69394f30dcdb79d531848a51c7",
+  "baseline": {
+    "tag": "v0.1.4",
+    "commit": "6aeb146c8f893a2f4be9249195c838a653bcb090"
+  },
+  "upstream": {
+    "tag": "v0.2.9",
+    "commit": "f58701a6c06a41c075ef8fe8c6f48b7a6305f498",
+    "releases": [
+      {
+        "tag": "v0.1.5",
+        "publishedAt": "2026-08-29T14:51:33Z",
+        "url": "https://github.com/dolag233/Serpent/releases/tag/v0.1.5"
+      },
+      {
+        "tag": "v0.2.0",
+        "publishedAt": "2026-09-06T13:32:39Z",
+        "url": "https://github.com/dolag233/Serpent/releases/tag/v0.2.0"
+      },
+      {
+        "tag": "v0.2.1",
+        "publishedAt": "2026-09-10T14:02:38Z",
+        "url": "https://github.com/dolag233/Serpent/releases/tag/v0.2.1"
+      },
+      {
+        "tag": "v0.2.3",
+        "publishedAt": "2026-09-14T16:19:03Z",
+        "url": "https://github.com/dolag233/Serpent/releases/tag/v0.2.3"
+      },
+      {
+        "tag": "v0.2.4",
+        "publishedAt": "2026-09-17T01:49:25Z",
+        "url": "https://github.com/dolag233/Serpent/releases/tag/v0.2.4"
+      },
+      {
+        "tag": "v0.2.5",
+        "publishedAt": "2026-09-18T01:46:32Z",
+        "url": "https://github.com/dolag233/Serpent/releases/tag/v0.2.5"
+      },
+      {
+        "tag": "v0.2.6",
+        "publishedAt": "2026-09-19T14:43:40Z",
+        "url": "https://github.com/dolag233/Serpent/releases/tag/v0.2.6"
+      },
+      {
+        "tag": "v0.2.7",
+        "publishedAt": "2026-09-23T11:18:18Z",
+        "url": "https://github.com/dolag233/Serpent/releases/tag/v0.2.7"
+      },
+      {
+        "tag": "v0.2.8",
+        "publishedAt": "2026-09-25T02:14:11Z",
+        "url": "https://github.com/dolag233/Serpent/releases/tag/v0.2.8"
+      },
+      {
+        "tag": "v0.2.9",
+        "publishedAt": "2026-09-27T02:19:45Z",
+        "url": "https://github.com/dolag233/Serpent/releases/tag/v0.2.9"
+      }
+    ]
+  },
+  "htmlSource": {
+    "bytes": 534773,
+    "sha256": "058fed38f0c6da372b31dda9e04d894169d714bc79f08313181298bef297e396"
+  },
+  "environment": {
+    "platform": "win32",
+    "arch": "x64",
+    "node": "24.15.0",
+    "electron": "43.1.0",
+    "vitest": "4.1.10"
+  },
+  "runs": [
+    {
+      "name": "unfixed-desired-behaviour",
+      "startedAt": "2026-10-09T10:59:58.578Z",
+      "total": 10,
+      "passed": 2,
+      "failed": 8,
+      "skipped": 0,
+      "exitCode": 1,
+      "command": "node scripts/run-vitest-with-electron.mjs run --config vitest.serpent-audit.config.ts --reporter=verbose",
+      "files": [
+        "tests/audit/serpent-followup.test.ts"
+      ],
+      "cases": [
+        {
+          "name": "U01 linked-folder trash must not move external sources",
+          "status": "failed"
+        },
+        {
+          "name": "control: explicit unlink already leaves external sources untouched",
+          "status": "passed"
+        },
+        {
+          "name": "U02 temporary missing local file must not delete a synced remote file",
+          "status": "failed"
+        },
+        {
+          "name": "U03 red hue filter must exclude a zero-saturation gray swatch",
+          "status": "failed"
+        },
+        {
+          "name": "U04 invalid EXIF dimensions must not poison an asset-list response",
+          "status": "failed"
+        },
+        {
+          "name": "U05 unchanged-hash local rename must produce a remote path action",
+          "status": "failed"
+        },
+        {
+          "name": "U06 GBK Chinese text must render without replacement characters",
+          "status": "failed"
+        },
+        {
+          "name": "U07 a filename alone must not desaturate an ordinary image preview",
+          "status": "failed"
+        },
+        {
+          "name": "U08 filesystem reconciliation must not silently merge numbered images",
+          "status": "failed"
+        },
+        {
+          "name": "control: UTF-8 Chinese text remains readable",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "focused-regression-1",
+      "startedAt": "2026-10-09T10:11:22.087Z",
+      "total": 99,
+      "passed": 99,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "command": "node scripts/run-vitest-with-electron.mjs run --config vitest.config.ts tests/worker/import-source-stability.test.ts tests/worker/linked-folder-index.test.ts tests/worker/linked-folders.test.ts tests/worker/pending-import-lifecycle.test.ts tests/unit/background-reconciliation-wiring.test.ts tests/unit/client-shuffle.test.ts tests/unit/color-filter-presets.test.ts tests/unit/import-confirmation-dialog.test.ts tests/unit/raw-image-metadata.test.ts",
+      "files": [
+        "tests/worker/import-source-stability.test.ts",
+        "tests/worker/linked-folder-index.test.ts",
+        "tests/worker/linked-folders.test.ts",
+        "tests/worker/pending-import-lifecycle.test.ts",
+        "tests/unit/background-reconciliation-wiring.test.ts",
+        "tests/unit/client-shuffle.test.ts",
+        "tests/unit/color-filter-presets.test.ts",
+        "tests/unit/import-confirmation-dialog.test.ts",
+        "tests/unit/raw-image-metadata.test.ts"
+      ]
+    },
+    {
+      "name": "focused-regression-2",
+      "startedAt": "2026-10-09T10:59:08.364Z",
+      "total": 179,
+      "passed": 179,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "command": "node scripts/run-vitest-with-electron.mjs run --config vitest.config.ts tests/unit/ai-search-planner.test.ts tests/unit/app-update-launcher.test.ts tests/unit/app-update-service.test.ts tests/unit/asset-browse-load-more.test.ts tests/unit/asset-drag-drop.test.ts tests/unit/browse-layout-preview.test.ts tests/unit/browse-pagination-lifecycle.test.ts tests/unit/browse-window-slots.test.ts tests/unit/filter-clause-schema.test.ts tests/unit/folder-browse-tag-filter.test.ts tests/unit/font-color-preferences.test.ts tests/unit/format-filter-presets.test.ts tests/unit/import-confirmation-dialog.test.ts tests/unit/media-formats.test.ts tests/unit/metadata-read-controller.test.ts tests/unit/native-asset-drag-ipc.test.ts tests/unit/native-asset-drag.test.ts tests/unit/pending-app-update.test.ts tests/unit/pending-update-integrity.test.ts tests/unit/preview-poll.test.ts tests/unit/update-native-ui.test.ts tests/unit/update-retention-policy.test.ts tests/unit/viewer-preview-policy.test.ts",
+      "files": [
+        "tests/unit/ai-search-planner.test.ts",
+        "tests/unit/app-update-launcher.test.ts",
+        "tests/unit/app-update-service.test.ts",
+        "tests/unit/asset-browse-load-more.test.ts",
+        "tests/unit/asset-drag-drop.test.ts",
+        "tests/unit/browse-layout-preview.test.ts",
+        "tests/unit/browse-pagination-lifecycle.test.ts",
+        "tests/unit/browse-window-slots.test.ts",
+        "tests/unit/filter-clause-schema.test.ts",
+        "tests/unit/folder-browse-tag-filter.test.ts",
+        "tests/unit/font-color-preferences.test.ts",
+        "tests/unit/format-filter-presets.test.ts",
+        "tests/unit/import-confirmation-dialog.test.ts",
+        "tests/unit/media-formats.test.ts",
+        "tests/unit/metadata-read-controller.test.ts",
+        "tests/unit/native-asset-drag-ipc.test.ts",
+        "tests/unit/native-asset-drag.test.ts",
+        "tests/unit/pending-app-update.test.ts",
+        "tests/unit/pending-update-integrity.test.ts",
+        "tests/unit/preview-poll.test.ts",
+        "tests/unit/update-native-ui.test.ts",
+        "tests/unit/update-retention-policy.test.ts",
+        "tests/unit/viewer-preview-policy.test.ts"
+      ]
+    }
+  ],
+  "focusedRegressionTotals": {
+    "passedExecutions": 278,
+    "uniqueCases": 277,
+    "repeatedExecutions": 1
+  },
+  "staticAndDocumentChecks": {
+    "typecheck": "passed",
+    "auditFilesEslint": "passed",
+    "gitDiffCheck": "passed",
+    "documentToolTestsPassed": 5,
+    "markdownFiles": 142,
+    "localReferences": 567,
+    "brokenLocalReferences": 0
+  },
+  "limitations": [
+    "No product behaviour fixes, packaging, release creation or ECS writes",
+    "No real user library or installed application mutated",
+    "U01 OS trash replaced with owned recoverable fixture moves",
+    "U02 real service and engine, in-memory transport only",
+    "U04 EXIF and OIIO injected; actual persistence and protocol tested; no original failing photo or real decoder",
+    "U05 and U07 production-function unit probes, no real WebDAV MOVE or visual screenshot",
+    "No full-suite, NAS/SMB/long-session, macOS or real external-service acceptance"
+  ]
+}

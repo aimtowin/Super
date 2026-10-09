@@ -86,6 +86,9 @@ npm run make:inno
 | 文档 | 内容 |
 | --- | --- |
 | [完整图文功能指南](docs/user-guide/features.md) | 每项用户功能的真实截图、入口、用法与边界 |
+| [后续开发决策与优化里程碑](docs/POST_DEVELOPMENT_DECISIONS.md) | 接力开发的真实决策、52 个版本节点、349 条对话索引及未完成事项 |
+| [当前确认未修复的问题](docs/plans/confirmed-unfixed-2026-10-09.md) | 对照 Serpent 后续版本，隔离复现的 8 项缺陷及数据安全提醒 |
+| [上游修复审计 / 差异化能力](docs/reference/serpent-followup-audit-2026-10-09.md) · [能力清单](docs/reference/superlib-differentiators-2026-10-09.md) | 0.1.4→0.2.9 的真实对照、通过/待验收边界与非宣传式优势 |
 | [快速上手](docs/user-guide/quick-start.md) | 从下载安装到创建资产库、可选配置和第一次导入 |
 | [外观设置](docs/user-guide/appearance.md) | 深浅主题、自定义背景、字体大小与实际界面配图 |
 | [使用手册](docs/user-guide/README.md) | 安装、导入、浏览、搜索、标签、合集、同步、AI、插件与故障排查 |
@@ -96,3 +99,5 @@ npm run make:inno
 第三方组件、媒体运行时和素材的许可信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 及各组件随附的许可文件。
 
 维护者可运行 `node --test scripts/docs/audit-docs.test.mjs` 与 `node scripts/docs/audit-docs.mjs` 检查本地文档引用。仓库分类与清理边界见[仓库指南](docs/REPOSITORY_GUIDE.md)，本次修订证据见[文档审查报告](docs/reference/documentation-review-2.3.17.md)。
+
+借鉴说明：Super Lib 基于原开源项目 [dolag233/Serpent](https://github.com/dolag233/Serpent) 进行借鉴与后续开发，感谢原作者及贡献者，并继续以 [MIT 许可证](LICENSE) 开源。

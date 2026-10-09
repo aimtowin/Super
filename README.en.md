@@ -86,6 +86,9 @@ On Windows, `npm run make:inno` creates `out/make/inno/SuperSetup.exe`. Reposito
 | Document | Content |
 | --- | --- |
 | [Illustrated feature catalogue (Chinese)](docs/user-guide/features.md) | Real screenshots, entry points, instructions and limits for each user feature |
+| [Post-development decisions and milestones (Chinese)](docs/POST_DEVELOPMENT_DECISIONS.md) | Decisions, 52 version milestones, 349 conversation entries, and outstanding work |
+| [Confirmed unresolved defects (Chinese)](docs/plans/confirmed-unfixed-2026-10-09.md) | Eight isolated reproductions, including linked-source and sync data-safety warnings |
+| [Upstream release audit](docs/reference/serpent-followup-audit-2026-10-09.md) · [Differentiators](docs/reference/superlib-differentiators-2026-10-09.md) (Chinese) | Evidence-based comparison with Serpent 0.1.4–0.2.9, verification limits and distinct capabilities |
 | [Quick start](docs/user-guide/quick-start.en.md) | Installation, local library creation, optional setup, and first import |
 | [Appearance](docs/user-guide/appearance.en.md) | Color modes, backgrounds, text size, and screenshots |
 | [User guide](docs/user-guide/README.en.md) | Install, import, browse, search, tags, collections, sync, AI, plugins, and troubleshooting |
@@ -94,3 +97,5 @@ On Windows, `npm run make:inno` creates `out/make/inno/SuperSetup.exe`. Reposito
 | [Glossary](docs/glossary.md) | Definitions for libraries, automation, plugins, sync, and more |
 
 License notices for third-party components, media runtimes, and assets are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the license files shipped with each component.
+
+Acknowledgement: Super Lib builds upon the original open-source project [dolag233/Serpent](https://github.com/dolag233/Serpent); we thank its authors and contributors and continue to release Super Lib under the [MIT License](LICENSE).
