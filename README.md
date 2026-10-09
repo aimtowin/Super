@@ -100,4 +100,4 @@ npm run make:inno
 
 维护者可运行 `node --test scripts/docs/audit-docs.test.mjs` 与 `node scripts/docs/audit-docs.mjs` 检查本地文档引用。仓库分类与清理边界见[仓库指南](docs/REPOSITORY_GUIDE.md)，本次修订证据见[文档审查报告](docs/reference/documentation-review-2.3.17.md)。
 
-借鉴说明：Super Lib 基于原开源项目 [dolag233/Serpent](https://github.com/dolag233/Serpent) 进行借鉴与后续开发，感谢原作者及贡献者，并继续以 [MIT 许可证](LICENSE) 开源。
+借鉴说明：Super Lib 基于原开源项目 [dolag233/Serpent](https://github.com/dolag233/Serpent) v0.1.4进行借鉴与后续开发，感谢原作者及贡献者，并继续以 [MIT 许可证](LICENSE) 开源。
