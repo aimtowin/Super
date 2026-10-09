@@ -2,9 +2,9 @@
 
 这是 2026-10-08 的实施增量，不替换 [2026-10-07 完整审查快照](../2026-10-07-review/README.md)。原快照的清点 SHA、统计、SVG/PNG 和 Proposed ADR 保持历史意义，不能当作现在源码仍未改变。当前版本已由根任务提升至 2.3.17，package/lock 仅提升根版本、未升级依赖；用户已明确授权打包并发布 GitHub 与旧 ECS 自动更新源。真实成品与实际发布结果由根任务另行登记，不因授权或版本提升而记为 PASS。
 
-阶段 A 代码实施已冻结：A4/A5/A6/A7 App 接线与 A1b 末端源码漂移修复均完成。根任务默认并行执行的 `checkpoint-contract-final.json` 为 71 文件、1152 PASS / 0 FAIL / 1 平台不适用 SKIP，实际 exit 0；A1b 最终七文件 166 PASS、exit 0。UI 检查点 21 PASS、媒体检查点 8 PASS、2.3.17 fresh A2 UtilityProcess 探针 1 PASS，均实际 exit 0；严格 typecheck、全仓 lint、diff-check 与 extension:verify 均 exit 0。历史失败仍保留，覆盖范围不能相加扩大为全量套件或性能证明。最终 native/结构验收与真实 package/make/publish 结果待根任务登记，整体尚不以本页替代 release-ready 证明。实际结果以 [持续验收台账](../../plans/2026-10-08-architecture-stage-a-continuation.md)、[兼容性矩阵](compatibility-matrix.md) 和原始报告为准。
+阶段 A 实施及限定检查点已完成：A4/A5/A6/A7 App 接线与 A1b 末端源码漂移修复均已冻结。根任务默认并行执行的 `checkpoint-contract-final.json` 为 71 文件、1152 PASS / 0 FAIL / 1 平台不适用 SKIP，实际 exit 0；A1b 最终七文件166 PASS。UI21、媒体8、版本17 fresh UtilityProcess探针1、fresh native九场景，均exit 0；严格typecheck/lint/diff/extension通过。SVG/PNG与离线页面实际渲染验收、1490文件全源SHA及16本地链接通过。实际包7992文件、Forge与Inno均已构建成功，实际成品四项基础/筛选E2E通过；增量与远程发布结果由[本版验证记录](../../releases/v2.3.17-validation.md)登记。历史失败保留，限定通过不扩大成历史全量套件或性能证明。具体证据见[持续台账](../../plans/2026-10-08-architecture-stage-a-continuation.md)、[兼容矩阵](compatibility-matrix.md)。
 
-离线结构产物：[浏览索引](index.html)、[完整 SVG](architecture-overview.svg)、[运行结构 Mermaid 源](diagrams/runtime.mmd)。结构说明不代替门禁；Mermaid 渲染、SVG 可视验收及最终源码清点以根任务实际记录为准。
+离线结构产物：[浏览索引](index.html)、[完整 SVG](architecture-overview.svg)、[PNG 预览](architecture-overview.png)、[运行结构 Mermaid 源](diagrams/runtime.mmd)。SVG/PNG 与页面已实际渲染验收；Mermaid 源未运行引擎渲染，不伪称验证。结构说明不代替代码门禁与最终源码清点。
 
 ## 约束与非功能要求
 
@@ -113,8 +113,8 @@ flowchart TB
 | A7 | `content-hydration.ts` + 既有 coalescer + App 两个 AI full-refresh 入口 | 实施与 App 接线已冻结；导航/租约与本地移除真实 red 后最终六文件 100 PASS、exit 0；UI 检查点 21 PASS、exit 0 |
 | A8 | `pending-render-rpc.ts`、`model-render-orchestrator.ts`、实际 worker wiring | 各终态 cleanup、迟到回复和 abort checkpoint 已验证；fresh model-thumbnail/model-viewer 媒体检查点 8 PASS、exit 0，不是取消已运行 GPU/共享转换 |
 | A9 | `extension-upload-staging.ts`、Server/Main/WorkerClient terminal | 不按 deadline/disconnect 删后台源；实际终态/origin契约纳入最终默认并行联合回归，不冒充扩展→生产 Worker 完整 E2E |
-| A10 | `pending-app-update.ts`、`app-update-service.ts`、Main 薄 resume/launcher | 60 项通过、fresh native 9 场景通过；没有实际安装或发行构建 |
-| A1b | `build-provenance.mjs` → 薄 launcher/Forge hooks → exact artifact manifest | 前两片安全回归 109 项、第三片先 164 项通过；末端源码漂移真实 red 1 PASS / 1 FAIL 后最小修复，最终 `a1b-final-green.json` 七文件 166 PASS / 0 FAIL / 0 SKIP、exit 0；真实 package/make NOT_RUN |
+| A10 | `pending-app-update.ts`、`app-update-service.ts`、Main 薄 resume/launcher | 60 项通过；版本17 native九场景实际PASS/exit0，保自动打开与失败重试；隔离probe不等于运行用户安装器 |
+| A1b | `build-provenance.mjs` → 薄 launcher/Forge hooks → exact artifact manifest | 七文件最终166 PASS/exit 0；实际包7992文件、Forge skip-package/make、Inno与完整ZIP已生成验证，历史增量/远程发行见本版记录 |
 
 ## 决策状态与取舍
 
@@ -133,4 +133,4 @@ flowchart TB
 
 恢复旧来源判断或取消保护不是“旧路径已安全”的证明；回滚之后仍需对应门禁。具体动作应由实际 patch 与证据确认，不能整文件覆盖长期未提交的用户改动。
 
-当前已登记最小修复、最终联合/静态/UI/媒体与 fresh IPC 结果；根任务仍需完成最终 native/结构验收、冻结后全源 fingerprint 与真正产物发布记录。2.3.17 版本提升已完成，打包与 GitHub/旧 ECS 更新源发布已获授权；实际 package/make/publish 结果尚待登记，不能以本地 fixture 或授权替代成品验收。不会推进 B/C、ECS 迁移或账号服务；不运行真实安装器。
+当前已登记阶段A限定验收及实际成品构建/基础回归；发行输入与输出关联见本版验证记录。全源快照1490文件 fingerprint为`977b76babc85296270380a1e5c23e6d829cb1c3cd28e84c417b7400b738e1165`，对应发行源提交4516e0a。不会推进B/C、ECS迁移或账号服务；不运行用户安装器。实际GitHub与ECS更新源晋升必须核远程附件，不能由本地fixture或授权推断。

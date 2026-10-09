@@ -11,18 +11,18 @@
 
 | 项目 | 实施状态 | 验证状态与剩余工作 |
 | --- | --- | --- |
-| A0 / A1a | 前批已实施 | 保留前批能力、基线及门禁清单证据；最终源冻结后再运行共同门禁 |
-| A2 | 前批已实施 | 隔离真实 Service / UtilityProcess 探针已有通过证据；最终必须重编新探针，不复用旧 source fingerprint |
-| A3 | 前批已实施 | 下载预算、暂停/取消链和相关回归已有通过证据；小 fixture 内存样本不等于真实 256 MiB RSS 上限 |
-| A8 | 前批已实施 | RPC settle-once / 真正被 Worker 调用的 orchestrator 已验证；不承诺撤销已派发 GPU/共享 FBX 工作 |
-| A9 | 前批已实施 | staging / Worker actual terminal 已验证；最终仍要保留期限到达不删活跃 Worker 源的门禁 |
-| A10 | 已实施，局部门禁通过 | 首次目标红测 23 PASS / 13 FAIL；首版 54 PASS / 1 ESM spy 夹具 FAIL；修夹具后 launcher 专项 27 PASS / 2 真实 FAIL；最终六文件 60 PASS，exit 0；fresh native 九场景 PASS，未实际安装 |
-| A4 | 已实施，局部门禁通过 | `a4-red.json`: 22 PASS / 12 FAIL；`a4-green.json`: 34 PASS / 0 FAIL / 0 SKIP，实际 exit 0；真实 Electron UI 回归待共同检查点 |
-| A5 | 已实施，复核局部门禁通过 | 草稿、历史恢复、人工/AI 来源及实际 Panel 回归后 `a5-layout-reviewed-green.json` 十一文件 83 PASS / 0 FAIL / 0 SKIP，实际 exit 0；最终真实 UI 门禁待验收 |
-| A6 | 全链接线已冻结，局部门禁通过 | 非 App 八文件 179 PASS，实际 exit 0；App 独立 domain/notification capture/clear 已接线，联合 A7 100 项通过；真实呈现门禁正在运行 |
-| A7 | App 已冻结，局部门禁通过 | 导航租约 10 真实 red 后联合 79 PASS；本地删除夹具纠正后 2 PASS / 4 真实 FAIL，最小修复后 `a7-local-final-green.json` 六文件 100 PASS / 0 FAIL / 0 SKIP，实际 exit 0；最终 Electron 回归正在运行 |
-| A1b | 前两片通过，第三片实施中 | source/media/payload/Forge/npm 及 Mac links、sidecar 两真实缺口补修后 `a1b-provenance-safe-green.json` 四文件 109 PASS，实际 exit 0；第三片 8 静态接线缺口 + 47 新合同 TDD red 待实现，真实 package/make 明确 NOT_RUN |
-| A 检查点 | 未完成 | typecheck/lint/diff、基线/新增回归、fresh development E2E、媒体 E2E、fresh native、fresh A2 IPC、功能矩阵/回滚与结构产物均待最终冻结后审计 |
+| A0 / A1a | 已完成 | 最终默认并行 71 文件 1152 PASS / 1 Windows 不适用 SKIP、exit 0；严格静态门禁通过；来源清点1490文件逐项hash通过 |
+| A2 | 已完成 | 新 GUID c48189bd... 版本17 fresh编译真实Service / UtilityProcess探针，1 PASS、exit 0；当前source/compiled hash现场复验 |
+| A3 | 已完成 | 下载预算、暂停/取消链和相关回归纳入最终联合验收；小 fixture 内存样本不等于真实 256 MiB RSS 上限 |
+| A8 | 已完成 | RPC settle-once / 真正被 Worker 调用的 orchestrator 与 fresh 媒体已验证；不承诺撤销已派发 GPU/共享 FBX 工作 |
+| A9 | 已完成 | staging / Worker actual terminal 纳入最终联合验收，期限到达不删活跃 Worker 源；生产扩展全链路未测 |
+| A10 | 已完成 | 首次目标红测 23 PASS / 13 FAIL；首版 54 PASS / 1 ESM spy 夹具 FAIL；修夹具后 launcher 专项 27 PASS / 2 真实 FAIL；最终六文件 60 PASS，exit 0；版本17 fresh native 九场景 PASS，未实际安装 |
+| A4 | 已完成 | 原真实红测修复后34 PASS；最终fresh UI 21项与实际成品筛选通过，旧finally只清自己的占位 |
+| A5 | 已完成 | 草稿、历史恢复、人工/AI来源、完整多选、原始4/3预算、Panel及实际hooks十一文件83 PASS；最终联合/真实UI通过 |
+| A6 | 已完成 | 非App179 PASS、联合A7六文件100 PASS；独立domain/notification接线及真实UI验收通过，领域事件不因静音消失 |
+| A7 | 已完成 | 保留导航与local1500真实red；最小修复后100 PASS；fresh UI覆盖AI单项/批量、延迟计数及四种全屏scope，21 PASS/exit 0 |
+| A1b | 三片及实际发行已完成 | 最终七文件166 PASS/exit 0；实际package、Forge/Inno、full ZIP、20delta、canonical checksum及成品4E2E通过；GitHub46附件digest、ECS22binary完整远端SHA与公开feed/完整delta通过 |
+| A 检查点 | 已完成限定实施验收及新增发行 | typecheck/lint/diff/extension、71文件联合、21UI、8媒体、9native、1fresh A2 IPC、结构图/矩阵/回滚与1490文件全源清点已验；2.3.17正式GitHub/ECS已发布，不宣称历史全量mainline绿或真实安装PASS |
 
 不得把“代码已写”“focused assertions 全绿”或“单次诊断运行退出成功”替换为全部清单完成或 release-ready。
 
@@ -45,13 +45,13 @@ A6 修复后 `runtime-after-a6-green.json` 与 `runtime-drained-fixture.json` / 
 
 ## 兼容与安全边界
 
-- 版本仍为 2.3.16；无依赖升级、schema49 迁移或 durability 降级。
+- 发行版本为 2.3.17；仅根版本提升，无依赖升级、schema49 迁移或 durability 降级。
 - A4 不改 100/500 分页边界、trash、深页/布局 fallback、观察器 loading rearm；locale-aware callback 保留。
 - A5 统计原始 metadata API Promise，而非取消后的逻辑 consumer；多选必须全部 ID，不用成功子集或可见 summaries 代替。
 - A10 receipt 只由可信下载/解包生成，legacy 需重新准备；最终 guard 不等于数字签名，也不消除同用户恶意程序的最后 exec 竞争。
 - 所有 fixture/userData/探针输出独立拥有；不操作用户图库、已安装软件、旧 out/baseline 或历史日志。
 
-后续实际命令、源 hash、门禁与未测能力会增补于本台账；当前没有将整个阶段 A 标记完成。
+阶段 A 原清单及限定共同验收已完成；新增2.3.17发行任务于2026-10-09完成，实际产物与远程状态以本版验证记录为准。未执行的历史全量门禁、真实安装和性能测量不计为通过。
 
 ## 本批新增真实证据
 
