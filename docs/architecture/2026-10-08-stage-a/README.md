@@ -105,7 +105,7 @@ flowchart TB
 | 切片 | 实际生产边界 | 已有证据与最终剩余 |
 | --- | --- | --- |
 | A0/A1a | `scripts/release/gate-manifest.mjs`、`run-gates.mjs`、mainline/pipeline/run-e2e | 单一显式门禁、五态和 capability 已实施；冻结后默认并行联合 71 文件 1152 PASS / 1 平台 SKIP、exit 0；严格静态门禁通过 |
-| A2 | `LibraryService.scheduleImportExpiry` | TTL callback 故障不复活 token；2.3.17 fresh UtilityProcess probe 1 PASS、exit 0，[新 GUID manifest](../../../tmp/architecture-stage-a-c48189bd-9349-4c29-b1b3-07179be1eda1/import-expiry-probe/manifest.json)记录 source/compiled hashes，不复用旧包 |
+| A2 | `LibraryService.scheduleImportExpiry` | TTL callback 故障不复活 token；2.3.17 fresh UtilityProcess probe 1 PASS、exit 0，本机 `tmp/architecture-stage-a-c48189bd-9349-4c29-b1b3-07179be1eda1/import-expiry-probe/manifest.json` 记录 source/compiled hashes，不复用旧包；临时证据不随 GitHub 发布，关键结论保留于此 |
 | A3 | Main 插件 client / install operation / package manager | 接收前 bytes 上限、pause/abort/deadline、update/fallback 链已验证；不称 256 MiB RSS 上限 |
 | A4 | `use-browse-pagination.ts` | 实施与 App 接线已冻结；真实 hook 34 项通过，旧 finally 只清自己的占位；本轮 UI 检查点 21 项通过，不等同于大图库性能测量 |
 | A5 | `metadata-read-controller.ts`、两个 Inspector hooks、相关 cache writers | 实施与 App 接线已冻结；83 项复核通过，保全选、旧 owner/raw slots、dirty draft、真实 undo/redo 与来源呈现；本轮 UI 检查点已通过 |

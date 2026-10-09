@@ -1,8 +1,8 @@
 # 插件分发、Release 命名与更新策略
 
-> 状态：产品规范（2026-08-01）  
-> 安装通道：**GitHub** · **本地 ZIP** · **本地文件夹**  
-> 实现跟踪：`Super-u3nx`（Release asset + 平台匹配）、`Super-8r91`（更新提示与自动更新）  
+> 原始规范：2026-08-01；当前安装/替换流程于 2026-10-09 对照 v2.3.17 源码复核。平台 token 是命名规范，不保证软件或插件已发布每个平台的包。文末路线图/跟踪编号是历史规划，不属于当前可用功能保证。
+> 安装通道：**GitHub** · **本地 ZIP** · **本地文件夹**
+> 实现跟踪：`Super-u3nx`（Release asset + 平台匹配）、`Super-8r91`（更新提示与自动更新）
 
 > 相关：[插件开发手册](development.md)、[插件开发最佳实践](best-practices.md)、[插件 API 参考](api-reference.md)
 
@@ -137,8 +137,8 @@ com.example.palette-tools-2.0.1-any.zip
 
 用户粘贴 GitHub 相关 URL 时，建议顺序：
 
-1. **Release / tag 页** → 解析 owner/repo + tag → 列 assets → 选平台 ZIP  
-2. **仓库根 URL** → 取 **最新稳定 Release**（非 draft/prerelease，除非用户显式选预发布）→ 同上  
+1. **Release / tag 页** → 解析 owner/repo + tag → 列 assets → 选平台 ZIP
+2. **仓库根 URL** → 取 **最新稳定 Release**（非 draft/prerelease，除非用户显式选预发布）→ 同上
 3. **兼容回退（过渡期）**：若 Release 无规范 asset，但 tag/默认分支 zipball 内已有成品包，可继续旧行为并提示作者迁移到 Release asset（过渡结束后可移除）
 
 不默认执行：对源码归档跑 package manager。
@@ -151,18 +151,18 @@ com.example.palette-tools-2.0.1-any.zip
 
 设置 → 插件列表中，对 GitHub 安装的包：
 
-- 定期或打开设置时检查：是否存在更高 SemVer 的 Release，且含当前平台（或 `any`）asset  
-- 若有：显示「有可用更新：{newVersion}」与「更新」按钮  
+- 定期或打开设置时检查：是否存在更高 SemVer 的 Release，且含当前平台（或 `any`）asset
+- 若有：显示「有可用更新：{newVersion}」与「更新」按钮
 - 更新前复用既有 **来源/权限/运行时模式变更** 确认；包哈希变化时资源库插件需按信任规则处理
 
 ### 5.2 自动更新（可选勾选）
 
-- 默认：**关闭**  
+- 默认：**关闭**
 - 勾选前必须展示风险说明（阻塞确认），文案要点：
 
-  - 将从 GitHub 下载并替换本机插件代码，**可能引入恶意或不兼容变更**  
-  - 新版本可能提升权限、改为无限制模式或附带原生模块  
-  - 网络与 GitHub 可用性影响更新；失败时保持旧版本  
+  - 将从 GitHub 下载并替换本机插件代码，**可能引入恶意或不兼容变更**
+  - 新版本可能提升权限、改为无限制模式或附带原生模块
+  - 网络与 GitHub 可用性影响更新；失败时保持旧版本
   - 自动更新**不会**跳过本机信任与高风险确认（若策略要求仍弹窗，则自动更新只负责下载，启用前仍确认）
 
 - 策略建议（实现默认）：
@@ -181,14 +181,14 @@ Safe Mode 只停用无限制插件；自动更新检查可继续，但**不得**
 
 ## 6. 作者发布检查清单
 
-1. `npm ci && npm run build`（或等价）产出成品目录  
-2. 按平台打 ZIP（原生依赖必须打进对应平台包，勿假设用户有编译链）  
-3. 抽查 ZIP 条目为相对 POSIX 路径，无 `./`、`\`、`..`  
-4. 按 §4.2 命名并上传到 GitHub Release  
-5. 清单 `version` 与 Release tag / 文件名 version 一致  
-6. 无限制插件填写正确的 `nativeModules`（platform/arch/nodeAbi）  
-7. README 写明支持的平台 token 列表  
-8. Unix 可执行文件不要假设解压后仍有执行位；运行时按需 `chmod`  
+1. `npm ci && npm run build`（或等价）产出成品目录
+2. 按平台打 ZIP（原生依赖必须打进对应平台包，勿假设用户有编译链）
+3. 抽查 ZIP 条目为相对 POSIX 路径，无 `./`、`\`、`..`
+4. 按 §4.2 命名并上传到 GitHub Release
+5. 清单 `version` 与 Release tag / 文件名 version 一致
+6. 无限制插件填写正确的 `nativeModules`（platform/arch/nodeAbi）
+7. README 写明支持的平台 token 列表
+8. Unix 可执行文件不要假设解压后仍有执行位；运行时按需 `chmod`
 
 ## 7. 实现分期
 

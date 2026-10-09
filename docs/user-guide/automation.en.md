@@ -1,6 +1,6 @@
 # Automation
 
-> Applies to Super Lib v2.2.8; package availability follows release attachments.
+> Reviewed for Super Lib v2.3.17 (2026-10-09); package availability follows release attachments.
 
 Super offers two kinds of automation: scripts for batch organization, and MCP for connecting an external AI tool to Super. Normal browsing, importing, and viewing do not require either one.
 
@@ -15,7 +15,7 @@ Scripts are useful for repeated organizing work, such as adding tags in bulk, ch
 
 Scripts modify a library only through the operations Super provides; they do not run arbitrary programs on your computer. Use scripts from sources you trust and back up important libraries before a large batch.
 
-![Current automation-script panel; empty editor, no script executed](../assets/ui/live-2.2.8/automation-scripts.png)
+![Current automation-script panel; empty editor, no script executed](../assets/ui/live-2.3.17/15-automation-script.png)
 
 ## Connect an external AI tool (MCP)
 
@@ -33,10 +33,14 @@ The default address is `http://127.0.0.1:47342/mcp`. Each client connection has 
 
 After connecting, the Agent receives the basic usage rules in the MCP server instructions and `tools/list`. It should then call `super_library_list_open` or `super_library_list_recent` to obtain a `libraryId`; if it asks which library to use, let it list the libraries first and choose by ID. Every library-scoped call must include that explicit `libraryId`; critical operations also require the Agent's second-step confirmation.
 
-![Current MCP settings; service was already enabled, no client was added](../assets/ui/live-2.2.8/mcp-settings.png)
+![Current MCP settings; service disabled, no client created](../assets/ui/live-2.3.17/settings-mcp.png)
 
 Only enable the connection for a local AI tool you trust. Super still asks for confirmation before impactful operations such as deleting or moving assets.
 
 ## More information
 
 For complete commands, development guidance, and integration examples, see the [extension author manual](../manual/README.md).
+
+## Current packaged Console limitation
+
+An isolated v2.3.17 package run on 2026-10-09 failed with `RUNTIME_PROCESS_EXITED`: its utility process cannot resolve `typescript`. The Console entry exists, but successful packaged script execution is not verified. See the [review record](../reference/documentation-review-2.3.17.md) and [real screenshot](features.md#自动化脚本-console). Script source APIs remain documented separately; no new binary release was made in this documentation task.

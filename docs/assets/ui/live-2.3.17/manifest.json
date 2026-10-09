@@ -1,0 +1,471 @@
+{
+  "version": "2.3.17",
+  "packaged": true,
+  "sourceTag": "v2.3.17",
+  "capturedAt": "2026-10-09T09:20:45.977Z",
+  "executableSha256": "d5e6d76d68394ec1b9f667ae5f4879760e1e2f4918ac7672196925258f60f4d1",
+  "fixtureOwnership": "Generated illustrations/audio/video/PDF/text and repository-owned model fixtures; isolated disposable library.",
+  "externalServices": "No AI provider, WebDAV server, MCP credential or third-party plugin connected.",
+  "screenshots": [
+    {
+      "file": "01-onboarding.png",
+      "title": "首次使用引导",
+      "width": 1440,
+      "height": 960,
+      "sha256": "077c2eaacbe3d567fdcfb813b3a0d8713058241d8dcd4ab3afe1de2e9b43856b"
+    },
+    {
+      "file": "02-library-start.png",
+      "title": "本地资源库入口",
+      "width": 1440,
+      "height": 960,
+      "sha256": "3abd155159ea187832c2c8cd12e92cf9ffc9fbd95fdb0933fdcefbba6905d5c7"
+    },
+    {
+      "file": "03-create-library.png",
+      "title": "创建本地资源库",
+      "width": 1440,
+      "height": 960,
+      "sha256": "316b8672811a78ad1200a0e8162764894c12d953f041b6d20a90e2d6dfb9def1"
+    },
+    {
+      "file": "04-workspace.png",
+      "title": "画布、资源库、文件夹与合集",
+      "width": 1440,
+      "height": 960,
+      "sha256": "2656af2654a27670e50bc5dd9c01eee28ab45c608f64ccdb3f5aaadf3e460d27"
+    },
+    {
+      "file": "05-inspector.png",
+      "title": "属性、标签、评分、收藏、来源与描述",
+      "width": 1440,
+      "height": 960,
+      "sha256": "cab5e6dca5f88a2308019596672ea6c932ef5d28f674a3865bbbf0fe7354e6c1"
+    },
+    {
+      "file": "06-asset-actions.png",
+      "title": "资产操作、导出、分析和删除",
+      "width": 1440,
+      "height": 960,
+      "sha256": "855215169533e2efbaf6ceddf884ed068f9b5da1e3f573218eafca95a7648d82"
+    },
+    {
+      "file": "07-folder-actions.png",
+      "title": "文件夹操作与规则",
+      "width": 1440,
+      "height": 960,
+      "sha256": "98f0d372291d698321f2ac7c7acf328a20fb6b8188f7ee534c347d83c13b08cf"
+    },
+    {
+      "file": "08-folder-icon.png",
+      "title": "自定义 Emoji 图标",
+      "width": 1440,
+      "height": 960,
+      "sha256": "6dc35b52cb8d73ebd505ef4776902db70c6eb4073f13a9908e3159d8e8769011"
+    },
+    {
+      "file": "settings-general.png",
+      "title": "general 设置（外部服务未连接）",
+      "width": 1440,
+      "height": 960,
+      "sha256": "8309008ec2d0e1ecddeef1b09553952ca815d328bd9cda52941e5b9192e251ea"
+    },
+    {
+      "file": "settings-general-details.png",
+      "title": "general 设置下半页",
+      "width": 1440,
+      "height": 960,
+      "sha256": "40370555015196c799f5f8af0cd034e95607dccda04fcbe3b371fddf3fb12ead"
+    },
+    {
+      "file": "settings-assets.png",
+      "title": "assets 设置（外部服务未连接）",
+      "width": 1440,
+      "height": 960,
+      "sha256": "11024a377ddc5794c180bb39ced39a9a9d27f9fe6430de88bb8c5179964477e2"
+    },
+    {
+      "file": "settings-appearance.png",
+      "title": "appearance 设置（外部服务未连接）",
+      "width": 1440,
+      "height": 960,
+      "sha256": "06fb92bce72ee7ee45865347d63589333090c0a5e859085407964d80be9dd992"
+    },
+    {
+      "file": "settings-appearance-details.png",
+      "title": "appearance 设置下半页",
+      "width": 1440,
+      "height": 960,
+      "sha256": "1038e25ca075409cb5c61a9818ec4b0096cdfec12d59e28630da8621af67b7b5"
+    },
+    {
+      "file": "settings-browse.png",
+      "title": "browse 设置（外部服务未连接）",
+      "width": 1440,
+      "height": 960,
+      "sha256": "23415a6d49e96c92bdc58db89a07a7c883b5106b1c69f6f72b587194b5e33b3a"
+    },
+    {
+      "file": "settings-ai.png",
+      "title": "ai 设置（外部服务未连接）",
+      "width": 1440,
+      "height": 960,
+      "sha256": "a92817c238ed7347c2decd39a7954b4a625940aedd7910c1094a2862496692b1"
+    },
+    {
+      "file": "settings-ai-details.png",
+      "title": "ai 设置下半页",
+      "width": 1440,
+      "height": 960,
+      "sha256": "2e132221f3e45270e6e6461295679f268890f518dc9b13c3cc3463c8a39202e4"
+    },
+    {
+      "file": "settings-mcp.png",
+      "title": "mcp 设置（外部服务未连接）",
+      "width": 1440,
+      "height": 960,
+      "sha256": "d5be201e1ba0c089cc25c38018fdd114244cbf23a6658fa7e61f16f485a61469"
+    },
+    {
+      "file": "settings-plugins.png",
+      "title": "plugins 设置（外部服务未连接）",
+      "width": 1440,
+      "height": 960,
+      "sha256": "9e7902ae869fa0dca23a87ab58c1be9d242a78dfcd0a5583eafefc7c0ff363e9"
+    },
+    {
+      "file": "settings-sync.png",
+      "title": "sync 设置（外部服务未连接）",
+      "width": 1440,
+      "height": 960,
+      "sha256": "7420a90bdbc7dacf59a05e2ed7a8b6c26804be4219394a8a61b73ad0347c6935"
+    },
+    {
+      "file": "library-general.png",
+      "title": "资源库 general 设置",
+      "width": 1440,
+      "height": 960,
+      "sha256": "a5dc0faad0c168cbc30b050dacc8fadab40a2e190256a440779e539f85519bec"
+    },
+    {
+      "file": "library-ignore.png",
+      "title": "资源库 ignore 设置",
+      "width": 1440,
+      "height": 960,
+      "sha256": "15cd319abb251a35bf9c637ffff5e1a7c15d533a2a6e82bcdb51ed78eef5ee60"
+    },
+    {
+      "file": "library-sync.png",
+      "title": "资源库 sync 设置",
+      "width": 1440,
+      "height": 960,
+      "sha256": "80847082576680b4dc5770b17f75e1e6d86ccb50cd9531dfee15ad0d2b50e0a9"
+    },
+    {
+      "file": "filter-color.png",
+      "title": "color 筛选条件",
+      "width": 1440,
+      "height": 960,
+      "sha256": "fd8741ff9d88468c7f5ed6eaa0f33809e30fc3a0a3eb86b9ea879d778f40ae14"
+    },
+    {
+      "file": "filter-tags.png",
+      "title": "tags 筛选条件",
+      "width": 1440,
+      "height": 960,
+      "sha256": "240a5a379aa1eb175db842a19b46d45ffb9e92f98ed71dac4d1f9845df390233"
+    },
+    {
+      "file": "filter-shape.png",
+      "title": "shape 筛选条件",
+      "width": 1440,
+      "height": 960,
+      "sha256": "132eeb6f7357eb7353cad07967587600bdb8529f1b30041b9d76fa131ebe0fed"
+    },
+    {
+      "file": "filter-rating.png",
+      "title": "rating 筛选条件",
+      "width": 1440,
+      "height": 960,
+      "sha256": "8c55d4d276a2fa0abbc733ae7b61611662aa58d1e2ba6b1d27899f07f1c9da5e"
+    },
+    {
+      "file": "filter-analysis.png",
+      "title": "analysis 筛选条件",
+      "width": 1440,
+      "height": 960,
+      "sha256": "2d97336b979e807dc843c23294e83a9e38273bcf5d6d9afc7827ef79ad869921"
+    },
+    {
+      "file": "filter-format.png",
+      "title": "format 筛选条件",
+      "width": 1440,
+      "height": 960,
+      "sha256": "d0a917adcd311e024f66ea7c985f06819da2871898ae7dfe98d2718c75935799"
+    },
+    {
+      "file": "filter-more.png",
+      "title": "more 筛选条件",
+      "width": 1440,
+      "height": 960,
+      "sha256": "884ea497ca35a900a1eee13ae1c389a657107f3168643eb278e3675ab9619bd2"
+    },
+    {
+      "file": "filter-exclusion.png",
+      "title": "排除格式与当前条件摘要",
+      "width": 1440,
+      "height": 960,
+      "sha256": "43af5e658161a0bf2776868513a53ea30272d128f11e55ae2dd42c7f2d7cf94d"
+    },
+    {
+      "file": "filter-summary.png",
+      "title": "生效条件、排除标记与清除",
+      "width": 1440,
+      "height": 960,
+      "sha256": "5c0a892c72703e172aaca4e5acbb86ef8697b61ba92f61d9462f078c1c835abc"
+    },
+    {
+      "file": "09-tag-manager.png",
+      "title": "标签管理",
+      "width": 1440,
+      "height": 960,
+      "sha256": "a324db51fe219f3cc3f290190f0b4b5aa26b3fb9c369844e10763b97b670f1b3"
+    },
+    {
+      "file": "viewer-image.png",
+      "title": "image 查看器",
+      "width": 1440,
+      "height": 960,
+      "sha256": "24849b92b79f6d45a19b340efa1e6067df237793482c77d9893fb88fc8911308"
+    },
+    {
+      "file": "floating-image.png",
+      "title": "image 悬浮参考窗口",
+      "width": 960,
+      "height": 640,
+      "sha256": "9257f7fa1ec6ed262ac45ac5bf21ebf0b93effa9c0a42e236014e96f75c5003f"
+    },
+    {
+      "file": "viewer-video.png",
+      "title": "video 查看器",
+      "width": 1440,
+      "height": 960,
+      "sha256": "821d4c4fcd689efe36950c0f182aaea530f2beaf94c4f62a50dd1fd6f3c759f2"
+    },
+    {
+      "file": "viewer-audio.png",
+      "title": "audio 查看器",
+      "width": 1440,
+      "height": 960,
+      "sha256": "ef23809ef0aaf457152c9ecfd07636a8cd1a5cb8c1060d3af5e9a804166f1f4b"
+    },
+    {
+      "file": "viewer-model.png",
+      "title": "model 查看器",
+      "width": 1440,
+      "height": 960,
+      "sha256": "5598ee3270b1fb13bca7ac11585d30707653120d5c591fc054b3ceb4a8d081f2"
+    },
+    {
+      "file": "viewer-pdf.png",
+      "title": "pdf 查看器",
+      "width": 1440,
+      "height": 960,
+      "sha256": "a154e3e8e7a92addf81c69c2c21426759d5ace53e370f10b1b3038504325b233"
+    },
+    {
+      "file": "floating-pdf.png",
+      "title": "pdf 悬浮参考窗口",
+      "width": 960,
+      "height": 640,
+      "sha256": "3e0a67b9529e961d82806c525e51e2c5bf265c36b0fad498a482bd2edc5b7e55"
+    },
+    {
+      "file": "viewer-text.png",
+      "title": "text 查看器",
+      "width": 1440,
+      "height": 960,
+      "sha256": "aa01cd1c22978e70a278af1d6703b9ed64f2bbcb46189a8c24e1371e026e8f1d"
+    },
+    {
+      "file": "viewer-html.png",
+      "title": "html 查看器",
+      "width": 1440,
+      "height": 960,
+      "sha256": "cf0cf06e8cf4cb4eb504105dec851f30431e366e19c0186b8e432a102417e4d6"
+    },
+    {
+      "file": "11-tools.png",
+      "title": "批量命令与自动化入口",
+      "width": 1440,
+      "height": 960,
+      "sha256": "369c9c847d181515d4172a37a026ebb80d1c7335541bc55dd57183f3035ccb37"
+    },
+    {
+      "file": "15-automation-script.png",
+      "title": "受限脚本编辑与执行",
+      "width": 1440,
+      "height": 960,
+      "sha256": "f140e95c49a9c53e9c4ea7eb3b68b77e60a4ae70ecfdd2181b0f781341928c8e"
+    },
+    {
+      "file": "16-ai-search.png",
+      "title": "已分析素材的 AI 查询（未提交外部请求）",
+      "width": 1440,
+      "height": 960,
+      "sha256": "489781f63ce5e70613abeb9f98b48be15d46a8612a28874c8738b0203000c6fa"
+    },
+    {
+      "file": "17-collection.png",
+      "title": "合集虚拟分组与手动排序",
+      "width": 1440,
+      "height": 960,
+      "sha256": "05832e55f6162a37e03bc2805d5dc47748e15d343ebb2355f77f124001f335ac"
+    },
+    {
+      "file": "18-collection-actions.png",
+      "title": "合集管理、嵌套与图标",
+      "width": 1440,
+      "height": 960,
+      "sha256": "c5c75f9823c71f4580c15c0ce4783d791c0cb6c9eb46a9607888bd1aae44554b"
+    },
+    {
+      "file": "19-smart-collection.png",
+      "title": "根据当前查询新建智能合集",
+      "width": 1440,
+      "height": 960,
+      "sha256": "49a9cb4719ec316337224f1a9cfb2de6bcf7ed18bfbfad05b51ccc3f4398878a"
+    },
+    {
+      "file": "20-import-menu.png",
+      "title": "托管导入与链接导入",
+      "width": 1440,
+      "height": 960,
+      "sha256": "b09bfd0a64ac1ec07666e68ab2314443ea026dbc66ddfa04693570c70a79688f"
+    },
+    {
+      "file": "21-library-menu.png",
+      "title": "切换资源库、索引与云端库入口",
+      "width": 1440,
+      "height": 960,
+      "sha256": "a6c21d7b126414e2d73df6ba3b82a2c0c689acc3d3e62d252f8bb83abcbe2859"
+    },
+    {
+      "file": "22-library-index.png",
+      "title": "资源库索引（隔离测试模式不存最近记录）",
+      "width": 1440,
+      "height": 960,
+      "sha256": "d4bd0bbf7505a21ac1908625076246f2351a5d6569e910f666ebb604f0e551db"
+    },
+    {
+      "file": "23-search.png",
+      "title": "字段限定、AND/OR/排除语法",
+      "width": 1440,
+      "height": 960,
+      "sha256": "9d74e1e70e9c087cfc352f47ec130d1eebe9443fae2bf02297c3e9cea84fde65"
+    },
+    {
+      "file": "24-linked-folder.png",
+      "title": "原位链接目录、重连、规则及转为托管",
+      "width": 1440,
+      "height": 960,
+      "sha256": "30a4550d206594dc47793cd7acb1f1dbf3a5ee839a19d1a8467538325dd57561"
+    },
+    {
+      "file": "25-import-conflicts.png",
+      "title": "重复内容与同名冲突处理",
+      "width": 1440,
+      "height": 960,
+      "sha256": "e1952736d3437053891961576a3cc47029a1ce512fc5979eb2b4c600386b3bf0"
+    },
+    {
+      "file": "26-trash.png",
+      "title": "回收站、恢复与不可逆删除入口",
+      "width": 1440,
+      "height": 960,
+      "sha256": "24bc04270b279c34bf88596c08dd1b38d40b42ed00aaf6d8e07c3a7cd23c43a9"
+    },
+    {
+      "file": "27-trash-actions.png",
+      "title": "恢复与永久删除的不同操作",
+      "width": 1440,
+      "height": 960,
+      "sha256": "94b73b5fb83d966a376678f3233311775ddc4822c928fdc92d58ce6bd85f8a5d"
+    },
+    {
+      "file": "28-script-runtime-error.png",
+      "title": "实际成品脚本运行失败：缺少 typescript；记录已知限制而非通过",
+      "width": 1440,
+      "height": 960,
+      "sha256": "8e942bf9fa354b98bc2c8aa9a5147d7c1a4373bf1c3e3e17d10768ed6378bb35"
+    },
+    {
+      "file": "29-grid-view.png",
+      "title": "平铺视图、缩略图与多选",
+      "width": 1440,
+      "height": 960,
+      "sha256": "b5f5fc7cbf4db2b7b4a3f6e1be48836f89af1af1efde0552921817711cc5aa3b"
+    },
+    {
+      "file": "31-dark-theme.png",
+      "title": "暗色主题与外观",
+      "width": 1440,
+      "height": 960,
+      "sha256": "1242ac2d6e5f739dd3dc71e7906747113d2a5a67977353c08023dd9a65b84fc8"
+    },
+    {
+      "file": "32-background.png",
+      "title": "自定义背景设置",
+      "width": 1440,
+      "height": 960,
+      "sha256": "959e0d95a590e08f7359f05299ebb39298171b4c0489abcd835e685f39ad7854"
+    },
+    {
+      "file": "12-background-jobs.png",
+      "title": "后台任务、状态与取消",
+      "width": 1440,
+      "height": 960,
+      "sha256": "8de8eed30a8d9ccc7e7be0923dcd208a14f75750c09f82b56297c25934d28b93"
+    },
+    {
+      "file": "13-diagnostics.png",
+      "title": "诊断日志入口",
+      "width": 1440,
+      "height": 960,
+      "sha256": "46d6529314133927e7bfbea36b317ecdd13f50c495a84ec3209eff7a887c45f1"
+    },
+    {
+      "file": "14-about-update.png",
+      "title": "当前版本与更新入口",
+      "width": 1440,
+      "height": 960,
+      "sha256": "f1aa1b9031c933081f8484962fd96934641729fb7c119ef158d36a90fc066319"
+    },
+    {
+      "file": "updater-progress.png",
+      "title": "原生更新窗口进度（当前 Inno 源码的安全预览，固定 56%，不实际安装）",
+      "width": 500,
+      "height": 260,
+      "sha256": "16b5e8746998c62639ad95decacd8fb5dc042e61321d5f8b35a9d105098cf2b4",
+      "captureMode": "native-current-source-isolated-preview"
+    },
+    {
+      "file": "updater-completed.png",
+      "title": "原生更新完成提示（安全预览，为截图暂时保持，不实际打开应用）",
+      "width": 500,
+      "height": 260,
+      "sha256": "ad6ac6abc8915c5dcd4cc9f95f33069392957cff607b5ec09270e4b073e8de55",
+      "captureMode": "native-current-source-isolated-preview"
+    }
+  ],
+  "failures": [],
+  "knownProductIssues": [
+    {
+      "feature": "Desktop Console script execution",
+      "code": "RUNTIME_PROCESS_EXITED",
+      "cause": "Packaged utility process cannot resolve typescript.",
+      "status": "Observed in isolated 2.3.17 package; not fixed or re-released in the documentation task.",
+      "evidence": "28-script-runtime-error.png"
+    }
+  ]
+}

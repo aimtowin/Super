@@ -1,10 +1,10 @@
 # Search and filters
 
-> Applies to Super Lib v2.2.8; package availability follows release attachments.
+> Reviewed for Super Lib v2.3.17 (2026-10-09); package availability follows release attachments.
 
 Click **Color** above the asset canvas to open the palette. Shift-click selects multiple colors; **Exclude** excludes the selected colors.
 
-![Current palette filter; Chinese UI](../assets/ui/live-2.2.8/color-filter.png)
+![Current palette filter; Chinese UI](../assets/ui/live-2.3.17/filter-color.png)
 
 ## Scope and updates
 
@@ -62,3 +62,7 @@ The bottom of the filter popover repeats “Hold Shift to multi-select”. Activ
 ## Sorting and smart collections
 
 Sort by name, modified time, created time, file size, resolution, duration, rating, color, or author, ascending or descending; shuffle is also available. A search, its filters, and its sort can be saved as a smart collection. Smart collections recalculate when opened, so their results follow library changes.
+
+## Exclusion versus selection inversion
+
+Include/exclude applies to the selected values of one filter dimension. Different dimensions combine with AND; values inside a dimension use OR. The active-condition summary shows exclusions and allows individual removal or clearing all. Asset selection inversion (`Ctrl+I` on Windows) changes selection in the current browse scope, not filter mode. See the [illustrated examples](features.md#包含--排除条件摘要与清空).

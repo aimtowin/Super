@@ -1,6 +1,8 @@
 # Desktop Console 脚本 API 参考
 
-本页是当前 Desktop Console 实际注入的 `super` API 逐项参考。方法调用均返回 Promise；输入会由 Automation Command Registry 严格校验。参数错误、资源不存在、权限/计划拒绝和并发冲突会以异常方式报告，脚本应使用 `try/catch` 处理并在需要时重新读取状态。
+本页是当前 Desktop Console 实际注入的 `superApi` API 逐项参考。方法调用均返回 Promise；输入会由 Automation Command Registry 严格校验。参数错误、资源不存在、权限/计划拒绝和并发冲突会以异常方式报告，脚本应使用 `try/catch` 处理并在需要时重新读取状态。
+
+> 核对源码版本：2.3.17（2026-10-09）。成品运行发现缺少 `typescript`，见[当前限制](../../reference/documentation-review-2.3.17.md#发现的当前成品问题)。API 签名核对不等于成品脚本执行已通过。Console 全局是 `superApi`，不是 JavaScript 保留词 `super`；插件的 `context.super` 是不同入口。
 
 ## 通用类型
 
@@ -16,7 +18,6 @@ interface Page<T> {
 interface Asset {
   id: string;
   name: string;
-  currentRevisionId: string;
   rating: number;
   favorite: boolean;
   locationKind: 'managed' | 'linked';
@@ -30,7 +31,7 @@ Host 命令失败会以异常方式进入脚本的 `catch`。错误对象至少�
 
 ```ts
 try {
-  await super.assets.setRating(assetIds, 4);
+  await superApi.assets.setRating(assetIds, 4);
 } catch (error) {
   if (error.code === 'AUTOMATION_CAPABILITY_DENIED') {
     console.log('当前脚本没有所需权限');
@@ -44,13 +45,13 @@ try {
 
 常见 Gateway 错误码包括 `AUTOMATION_INVALID_REQUEST`、`AUTOMATION_CAPABILITY_DENIED`、`AUTOMATION_LIBRARY_NOT_BOUND`、`AUTOMATION_EXECUTION_CANCELLED` 和 `AUTOMATION_EXECUTION_TIMED_OUT`；具体命令也可能返回 `ASSET_NOT_FOUND`、`FOLDER_NOT_FOUND`、`VERSION_CONFLICT`、`CANCELLED` 等 PublicError。脚本应按错误码决定是否提示、重新读取或停止，不要仅按英文文案判断。
 
-分页默认 `limit=50`，最大 `limit=200`；`offset` 从 0 开始。批量数组通常最多 10,000 项，具体以 Registry Schema 为准。`currentRevisionId` 是文件内容修订 token；元数据写入使用 `entityVersion`，两者不可混用。
+分页默认 `limit=50`，最大 `limit=200`；`offset` 从 0 开始。批量数组通常最多 10,000 项，具体以 Registry Schema 为准。资产摘要不含文件修订 token。内容操作先从 `assets.readContent()` 返回的 `revisionId` 取得当前 token；元数据写入使用 `entityVersion`，两者不可混用。
 
 ## `library`
 
 ### `library.inspect()`
 
-返回 `{ libraryId: string; displayName: string }`。不返回资源库路径。必须已绑定资源库。
+返回 `{ id: string; displayName: string }`（guest 投影把 `libraryId` 简化为 `id`）。不返回资源库路径。必须已绑定资源库。
 
 ### `library.changeSequence()`
 
@@ -61,7 +62,7 @@ try {
 未绑定资源库时可调用；成功后宿主绑定新库。
 
 ```ts
-super.library.create({
+superApi.library.create({
   displayName: string,          // 非空，最长 255
   selectedParentPath: string,  // 非空；由用户选择的父目录
   idempotencyKey?: string,     // 非空白，最长 128
@@ -75,7 +76,7 @@ super.library.create({
 ### `files.import(input)`
 
 ```ts
-super.files.import({
+superApi.files.import({
   sourceKind: 'files' | 'folder',
   sourcePaths: readonly string[], // 由用户/调用者提供的路径；结果不回显路径
   targetFolderId?: string,
@@ -108,7 +109,7 @@ type ImportResult =
 ### `folders.list(input?)`
 
 ```ts
-super.folders.list({ limit?: number; offset?: number }): Promise<Page<{
+superApi.folders.list({ limit?: number; offset?: number }): Promise<Page<{
   id: string; parentId: string | null; name: string;
 }>>
 ```
@@ -118,7 +119,7 @@ super.folders.list({ limit?: number; offset?: number }): Promise<Page<{
 ### `folders.create(name, parentFolderId?)`
 
 ```ts
-super.folders.create(
+superApi.folders.create(
   name: string,
   parentFolderId?: string | null,
 ): Promise<{ id: string; parentId: string | null; name: string }>
@@ -135,7 +136,7 @@ super.folders.create(
 ### `assets.search(input)`
 
 ```ts
-super.assets.search({
+superApi.assets.search({
   query: string | null,
   limit?: number,
   offset?: number,
@@ -150,7 +151,7 @@ super.assets.search({
 ### `assets.list(input?)`
 
 ```ts
-super.assets.list({
+superApi.assets.list({
   folderId?: string,
   recursive?: boolean, // 默认 false
   limit?: number,
@@ -193,7 +194,7 @@ super.assets.list({
 ### `assets.setMetadata(input)`
 
 ```ts
-super.assets.setMetadata({
+superApi.assets.setMetadata({
   assetId: string,
   expectedVersion: number,
   description?: string | null,  // 最长 10,000
@@ -215,7 +216,7 @@ super.assets.setMetadata({
 ### `assets.readContent(assetId, options?)`
 
 ```ts
-super.assets.readContent(assetId, { maxBytes?: number }): Promise<{
+superApi.assets.readContent(assetId, { maxBytes?: number }): Promise<{
   assetId: string; revisionId: string; byteSize: number;
   dataBase64: string; truncated: boolean; mimeType: string | null;
 }>
@@ -226,7 +227,7 @@ super.assets.readContent(assetId, { maxBytes?: number }): Promise<{
 ### `assets.replaceContent(assetId, dataBase64, options?)`
 
 ```ts
-super.assets.replaceContent(assetId, dataBase64, {
+superApi.assets.replaceContent(assetId, dataBase64, {
   expectedRevisionId?: string,
   mimeHint?: string,
 }): Promise<{ assetId: string; revisionId: string; byteSize: number }>
@@ -237,7 +238,7 @@ super.assets.replaceContent(assetId, dataBase64, {
 ### `assets.stageContent(assetId, dataBase64, options?)`
 
 ```ts
-super.assets.stageContent(assetId, dataBase64, {
+superApi.assets.stageContent(assetId, dataBase64, {
   stagingToken?: string,
   complete?: boolean, // 默认 false
 }): Promise<{ stagingToken: string; assetId: string; byteSize: number; complete: boolean }>
@@ -252,7 +253,7 @@ super.assets.stageContent(assetId, dataBase64, {
 ### `assets.moveToFolder(assetIds, targetFolderId, options?)`
 
 ```ts
-super.assets.moveToFolder(assetIds, targetFolderId, {
+superApi.assets.moveToFolder(assetIds, targetFolderId, {
   conflictStrategy?: 'keep-both' | 'replace' | 'skip',
 }): Promise<{
   movedCount: number; skippedCount: number;
@@ -313,7 +314,7 @@ super.assets.moveToFolder(assetIds, targetFolderId, {
 ### `palettes.mostFrequent(input?)`
 
 ```ts
-super.palettes.mostFrequent({ days?: number; limit?: number }): Promise<{
+superApi.palettes.mostFrequent({ days?: number; limit?: number }): Promise<{
   days: number; assetCount: number; paletteAssetCount: number;
   colors: readonly { hex: string; weight: number; assetCount: number }[];
 }>
@@ -326,15 +327,15 @@ super.palettes.mostFrequent({ days?: number; limit?: number }): Promise<{
 ### `ui.notify(input)`
 
 ```ts
-super.ui.notify({
+superApi.ui.notify({
   severity: 'info' | 'warning' | 'error',
   message: string, // 1..500
-  mode?: 'toast' | 'dialog', // 默认 toast
+  mode?: 'toast', // 仅非阻塞提示；旧 dialog 模式不再接受
   title?: string, // 1..120
 }): Promise<{ shown: true; mode; severity }>
 ```
 
-可在无绑定资源库的执行中调用。`dialog` 是 Desktop 提示，不是脚本获得的任意 UI 控制。
+可在无绑定资源库的执行中调用。仅接受非阻塞 `toast`；不能通过通知等待授权或打开任意 UI。Registry 生成类型中若仍出现旧 `dialog` 宽类型，以当前输入 Schema 为准。
 
 ## 错误、取消和执行限制
 
@@ -364,8 +365,8 @@ interface SuperAutomationScriptApi {
 }
 ```
 
-`scriptId`、`handle` 和 `executionId` 都是由 Main 签发的 opaque ID，不是路径、授权凭据或可自行生成的替代值。`undoGroupId` 仅为旧版本执行记录保留的兼容参数；新执行不把 Main JSON Undo Group 当作恢复权威，统一使用资源库 Worker 的 `historyEntryId`。文件 API 只处理 `.super.js` / `.super.ts`，源文本上限 64 KiB；结果中的文件名和错误码可供 UI 展示，但绝对路径不会返回给 Renderer 或脚本正文。
+`scriptId`、`handle` 和 `executionId` 都是由 Main 签发的 opaque ID，不是路径、授权凭据或可自行生成的替代值。`undoGroupId` 仅为旧版本执行记录保留的兼容参数；新执行不把 Main JSON Undo Group 当作恢复权威，统一使用资源库 Worker 的 `historyEntryId`。文件 API 只处理 `.superApi.js` / `.superApi.ts`，源文本上限 64 KiB；结果中的文件名和错误码可供 UI 展示，但绝对路径不会返回给 Renderer 或脚本正文。
 
 ## 不是当前脚本 API 的东西
 
-`super.jobs`、`execution.status`、MCP 的 `super_execution_status`、资源库变更通知、MCP resource URI、`super_desktop_*` 工具以及插件的 `setup`/events/hooks/providers/jobs/input/storage 都不是当前 Desktop Console 脚本公共 API。Registry 或 `automation-api.d.ts` 出现某个命令，不等于 guest API 已投影该命令；新增命令必须同时更新 Registry、Gateway、guest 投影、类型声明、测试和文档。
+`superApi.jobs`、`execution.status`、MCP 的 `super_execution_status`、资源库变更通知、MCP resource URI、`super_desktop_*` 工具以及插件的 `setup`/events/hooks/providers/jobs/input/storage 都不是当前 Desktop Console 脚本公共 API。Registry 或 `automation-api.d.ts` 出现某个命令，不等于 guest API 已投影该命令；新增命令必须同时更新 Registry、Gateway、guest 投影、类型声明、测试和文档。

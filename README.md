@@ -4,7 +4,7 @@
 
 </div>
 
-# Super Lib  v2.3.2
+# Super Lib v2.3.17
 
 <div align="center">
 
@@ -14,9 +14,12 @@
 
 Super Lib 是一款完全免费的本地素材管理应用。把图片、视频、音频和模型放进一个工作区，用文件夹、标签、颜色筛选与合集整理素材，也可以按需配置 AI 分析和自己的界面外观。
 
+> **[完整图文功能指南：从导入、整理到 AI、插件与自动化](docs/user-guide/features.md)**
+> 每项功能配真实运行截图、入口、操作步骤和限制；基于 Windows x64 正式版 **2.3.17**，截图使用独立演示资源库。
+
 [下载 Windows 安装包](https://github.com/aimtowin/Super/releases/latest/download/SuperSetup.exe) · [查看版本与其他下载文件](https://github.com/aimtowin/Super/releases/latest) · [快速上手](docs/user-guide/quick-start.md) · [反馈问题](https://github.com/aimtowin/Super/issues)
 
-![Super Lib 主界面：素材浏览、文件夹导航与自定义背景](docs/assets/ui/super-workspace-2.2.8.png)
+![Super Lib 2.3.17：隔离演示资源库的画布、导航和属性面板](docs/assets/ui/live-2.3.17/04-workspace.png)
 
 ## 从一个本地资产库开始
 
@@ -34,7 +37,8 @@ Super Lib 是一款完全免费的本地素材管理应用。把图片、视频�
 - **本地优先**：托管导入会复制素材进入资源库；链接文件夹则原位引用外部目录。资源库数据保存在本机，可按需使用 WebDAV 在设备间同步。
 - **浏览与预览**：缩略图、视频预览、资源信息、查看器和后台派生任务均以不阻塞浏览为原则。
 - **悬浮参考内容**：将当前图片或 PDF 放入可移动、可缩放的置顶浮窗，同时自动最小化主窗口；详见[悬浮预览](docs/user-guide/basics.md#floating-image-preview)。
-- **双位置悬浮说明**：按钮、侧栏和素材名称等已有提示，同时显示在窗口右下角独立气泡中，详见[提示气泡](docs/user-guide/basics.md#hover-hints)。
+- **统一悬浮说明**：按钮、侧栏和素材名称等提示统一显示在右下角，避免重复浮层遮挡操作，详见[提示气泡](docs/user-guide/basics.md#hover-hints)。
+- **可读的筛选与图标**：颜色、标签、形状等筛选支持包含/排除和条件摘要；文件夹、链接目录、合集和智能合集可设置 Emoji 图标。
 - **自动化与扩展**：支持插件、受控自动化脚本和 MCP 本机连接；所有写入能力受权限、执行计划与风险确认约束。
 - **AI 分析与查找**：为受支持媒体生成描述和标签，并用自然语言查找已分析素材、创建临时智能合集。AI 是可选功能，需自行配置服务。
 - **自定义外观**：深浅主题、自定义背景、主题色和 1–4 档应用字体大小。
@@ -42,7 +46,7 @@ Super Lib 是一款完全免费的本地素材管理应用。把图片、视频�
 
 ## 安装与使用
 
-当前 `v2.3.2` 提供 Windows x64 安装包。首次安装请下载 `SuperSetup.exe`；发布页上的完整更新 ZIP 和 delta 增量包用于更新交付，不是首次安装的首选入口。其他平台的安装包以发布页实际附件为准。
+当前 `v2.3.17` 提供 Windows x64 安装包。首次安装请下载 `SuperSetup.exe`；发布页上的完整更新 ZIP 和 delta 增量包用于更新交付，不是首次安装的首选入口。其他平台的安装包以发布页实际附件为准。
 
 资产库保存在创建时选择的位置。导入会复制素材进入库；链接文件夹会引用原位置的文件，原目录需要保持可访问。详情见[快速上手](docs/user-guide/quick-start.md)。
 
@@ -81,6 +85,7 @@ npm run make:inno
 
 | 文档 | 内容 |
 | --- | --- |
+| [完整图文功能指南](docs/user-guide/features.md) | 每项用户功能的真实截图、入口、用法与边界 |
 | [快速上手](docs/user-guide/quick-start.md) | 从下载安装到创建资产库、可选配置和第一次导入 |
 | [外观设置](docs/user-guide/appearance.md) | 深浅主题、自定义背景、字体大小与实际界面配图 |
 | [使用手册](docs/user-guide/README.md) | 安装、导入、浏览、搜索、标签、合集、同步、AI、插件与故障排查 |
@@ -89,3 +94,5 @@ npm run make:inno
 | [术语表](docs/glossary.md) | 资源库、自动化、插件、同步等领域定义 |
 
 第三方组件、媒体运行时和素材的许可信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 及各组件随附的许可文件。
+
+维护者可运行 `node --test scripts/docs/audit-docs.test.mjs` 与 `node scripts/docs/audit-docs.mjs` 检查本地文档引用。仓库分类与清理边界见[仓库指南](docs/REPOSITORY_GUIDE.md)，本次修订证据见[文档审查报告](docs/reference/documentation-review-2.3.17.md)。

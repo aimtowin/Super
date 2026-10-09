@@ -2,11 +2,11 @@
 
 > 适用对象：需要把 Super Lib 当前的 Windows 自动更新能力迁移到另一个 Electron/Node.js 应用的开发者或 AI 智能体。
 >
-> 当前实现版本：Super Lib `v2.2.3`。本文以当前源码为准；不要把历史计划文档当作运行时配置。
+> 当前核对版本：Super Lib `v2.3.17`（2026-10-09）。本文以当前源码为准；不要把历史计划文档当作运行时配置。
 
 ## 1. 模块目标与边界
 
-该模块实现的是 **用户确认下载、校验后更新、显式启动新版本** 的 Windows 更新闭环：
+该模块实现的是 **用户确认下载和重启、校验后更新、完成后自动启动新版本** 的 Windows 更新闭环：
 
 ```text
 启动后的自动检查（仅提示）
@@ -18,14 +18,14 @@
   -> 用户点击“重启并完成更新”
   -> 当前应用隐藏并退出
   -> Inno Setup 前台更新器替换文件，展示进度
-  -> 用户点击“启动 Super Lib”
+  -> 短暂完成提示后自动启动 Super Lib，并关闭更新小窗
   -> 新版本启动并消费“更新完成”记录
 ```
 
 关键设计取舍：
 
 - 更新源只信任一个固定 HTTPS 域名和下载路径前缀，**不信任服务端返回的任意 URL**。
-- 完整包永远存在；增量包只是优化。增量包下载、校验、解压或安装失败时，自动回退完整包。
+- 完整包永远存在；增量包只是优化。增量包下载、校验或解压准备失败时，自动回退一次完整包；安装器已经接管后的失败需另行诊断，不能承诺后台自动重新下载。
 - 下载成功不等于安装：安装器先持久化到用户目录，用户再决定何时重启安装。
 - 更新 UI 属于 Inno Setup 进程而不是 Electron 进程，因此应用退出后仍能持续显示真实安装进度。
 - 发布时先上传到服务器 staging 目录；只有所有文件上传成功后才原子替换 `latest.json`，防止客户端看到半成品版本。
@@ -76,26 +76,13 @@
 
 不要把 PEM 私钥、SSH 密码、云主机登录信息写进源码、`package.json`、发布说明或本文档。发布脚本只从环境变量读取私钥文件路径。
 
-### 3.1 Super Lib 当前 ECS 部署交接信息
+### 3.1 发布配置与授权边界
 
-以下是截至 `v2.2.3` 已由运行环境核验的 Super Lib 更新发布配置。它用于维护 Super Lib；迁移到另一款产品时，建议创建独立下载前缀和独立持久化目录，而不是与 Super 共用发布入口。
+客户端当前固定 HTTPS origin 为 `https://liuyangyang.me`，优先入口是 `/downloads/super/latest.json`，下载前缀为 `/downloads/super/`。旧 `/api/super/updates/latest` 只是兼容代码路径；最近发行验证记录显示其返回 404，不能当作有效发布入口。
 
-| 项目 | 当前值 | 备注 |
-| --- | --- | --- |
-| ECS/SSH 首选域名 | `liuyangyang.me` | 使用域名，不要在客户端硬编码 IP；HTTPS 证书也绑定此域名 |
-| SSH 用户 | `root` | 仅供已获授权的发布自动化使用 |
-| SSH 端口 | `22` | 已核验 `sshd` 监听 `0.0.0.0:22` |
-| 本机私钥文件 | `E:\\LoveLife\\DOCX\\geeee.pem` | 只传递**文件路径**；禁止读取、粘贴、提交或上传私钥内容 |
-| 更新 HTTPS origin | `https://liuyangyang.me` | 客户端固定信任边界 |
-| 原生 manifest | `https://liuyangyang.me/downloads/super/latest.json` | 当前优先入口 |
-| legacy fallback | `https://liuyangyang.me/api/super/updates/latest` | 兼容入口 |
-| 下载 URL 前缀 | `https://liuyangyang.me/downloads/super/` | 所有更新包必须位于其下 |
-| 服务器持久化目录 | `/www/wwwroot/resource/data/super-updates` | `latest.json` 与 `releases/<version>/` 均在此处 |
-| Web 服务器 | 宝塔管理的 Nginx `1.18.0 (Ubuntu)` | 不是 Caddy |
-| Nginx vhost | `/www/server/panel/vhost/nginx/blog.liuyangyang.me.conf` | `server_name liuyangyang.me www.liuyangyang.me`，监听 80/443 |
-| Nginx 上游 | `http://127.0.0.1:3000` | 根路径反代到 Docker 容器 `my-app` |
+服务器地址、SSH 身份、私钥路径及实际目录属于部署环境配置，不能从本文继承授权。每个新的部署任务必须由用户明确授权目标和范围。仓库清理、截图或文档维护均不授权登录 ECS、修改网站、Nginx、Docker、证书或账户。本次审查没有连接服务器。
 
-当前任务已经获得对上述 Super Lib 更新目录进行发布和核验的授权。若把本文件交给新的独立 AI 智能体，仍应在该新任务中明确授权它：只可通过该 PEM 路径和 SSH 发布/核验 Super Lib 更新目录；不得修改无关 Nginx、Docker、证书、网站内容或服务器账户。
+下文版本数字为协议/迁移示例，不是当前 Latest 的实时查询。正式发布状态见[2.3.17 验证记录](../releases/v2.3.17-validation.md)。
 
 ## 4. 服务端协议
 
@@ -223,7 +210,7 @@ Windows x64 + installed + 精确 delta  -> delta-installer
 没有受信且有 SHA-256 的匹配包       -> asset-missing
 ```
 
-`delta-installer` 失败后，服务只自动回退一次完整安装包；取消下载不触发回退。这保证增量包永远不会阻断升级。
+`delta-installer` 失败后，服务只自动回退一次完整安装包；取消下载不触发回退。这是下载与准备阶段的回退；不代表安装器接管之后的失败会自动重装。
 
 ### 5.3 断点续传、验证与缓存
 
@@ -316,7 +303,7 @@ Windows 安装包 ZIP 必须只解出名为 `SuperSetup.exe`（迁移后改成�
 
 - 在 `CurInstallProgressChanged(CurProgress, MaxProgress)` 传给 `UpdateSilentUpdateProgress`，展示真实文件应用进度；`MaxProgress <= 0` 使用不确定性动画。
 - `CurStepChanged(ssInstall)` 调 `ShowSilentUpdateProgress()`；`ssPostInstall` 才调 `ShowSilentUpdateCompletion()`。
-- 完成页必须由用户点击“启动”才用 `ExecAsOriginalUser('{app}\\<Product>.exe', '--updated', …)` 打开应用；不自动启动。
+- 成功页显示完成状态，约 1 秒后自动调用 `ExecAsOriginalUser` 启动目标应用并关闭更新窗口；启动失败保留失败提示和手动重试按钮。原生预览用 hold 参数延长停留仅用于测试，不是产品流程。
 - 原生对话框已显示时不能直接 `ShowModal`，要先 `Hide` 再 `ShowModal`，否则会出现 `Cannot make a visible window modal`。
 - 对 Inno 大计数使用浮点数算进度百分比，避免 32 位整数乘法溢出。
 - 需要保留键盘可达性；Super 的按钮仅通过 `WM_UPDATEUISTATE` 隐藏原生白色虚线焦点框，不移除 `TabStop`。
@@ -430,7 +417,7 @@ Web 服务进程需要对该目录有只读权限，发布 SSH 用户需要读�
 - [ ] 完整包和每个 delta 均可 `HEAD 200`，且 `Content-Length` 与 manifest 一致。
 - [ ] 下载完整 delta 后计算 SHA-256 与 manifest 一致。
 - [ ] `Range: bytes=1024-2047` 返回 `206`，且返回 1024 字节及正确 `Content-Range`。
-- [ ] 从上一版真实安装的应用更新：只下载 delta、安装页可见、安装完不自动启动、点击启动后版本正确。
+- [ ] 从上一版真实安装的应用更新：只下载 delta、安装页可见、安装完成后短暂提示、自动启动新版本并关闭小窗；自动启动失败显示可重试错误。
 - [ ] 故意让 delta 校验失败：客户端改下完整包且成功安装。
 - [ ] 中断下载再恢复：服务器记录到 Range 请求，客户端最终摘要正确。
 

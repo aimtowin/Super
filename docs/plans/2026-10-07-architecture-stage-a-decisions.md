@@ -14,7 +14,7 @@
 
 本次计划复核日期2026-10-07（Asia/Shanghai）。仓库 `C:/Users/Administrator/Desktop/Super-main`，版本2.3.16，HEAD `67298c17d792070b09adc05d5a3af3cac722ff4f`，未前进；原 inventory 的1,317份源/测试/扩展/脚本SHA-256全部匹配。git status只有既有文档修改和未跟踪文档。不要依赖环境中的旧Serpent-main路径。
 
-必读：根 `AGENTS.md`、[云端暂停交接](2026-09-22-development-pause-and-ecs-handoff.md)、[原架构审查](../architecture/2026-10-07-review/architecture-review.md)、[ADR提案](../architecture/2026-10-07-review/adr-proposals.md)、[原验证记录](../architecture/2026-10-07-review/verification.md)、[原完整计划](2026-10-07-architecture-optimization.md)。这些原文件保持不变；本文件收敛其阶段A的开放选择，并校正下文列出的验收边界。
+历史执行必读：根 `AGENTS.md` 和云端暂停交接文件仅在本机提供，属于私人操作边界，不随 GitHub 文档发布，也不由本计划继承新任务授权。仓库内依据为[原架构审查](../architecture/2026-10-07-review/architecture-review.md)、[ADR提案](../architecture/2026-10-07-review/adr-proposals.md)、[原验证记录](../architecture/2026-10-07-review/verification.md)、[原完整计划](2026-10-07-architecture-optimization.md)。本文件收敛其阶段 A 的开放选择；实施结果以带日期的最终验证记录为准。
 
 选择“先保行为修边界，再测量，再拆模块”。不选择只增大缓存/并发，也不选择全面重构。理由是已有体验和已完成优化良好，新增风险来自异步所有权，而非技术栈不适合。
 

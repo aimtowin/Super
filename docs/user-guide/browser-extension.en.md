@@ -2,7 +2,7 @@
 
 [User guide](README.en.md) · [简体中文](browser-extension.md)
 
-The browser extension is not currently offered as an available Super Lib user feature. The `v2.2.8` Release has no installable extension attachments, and compatibility with the current desktop release has not been verified through actual use.
+The browser extension is not currently offered as an available Super Lib user feature. The `v2.3.17` Release has no installable extension attachments, and compatibility with the current desktop release has not been verified through actual use.
 
 The previous installation, context-menu saving, and drag-to-capture instructions have been withdrawn. Do not follow the old tutorial to find an extension ZIP or Firefox XPI. An implementation in the source tree is not a released, usable product; desktop installers and delta update ZIPs are not browser extensions either.
 

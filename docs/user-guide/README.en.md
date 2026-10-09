@@ -1,6 +1,6 @@
 # User Guide
 
-A Super Lib guide for end users. The core guide was reviewed for `v2.2.8`, with folder-creation updates from `v2.3.0`, floating previews and hover hints from `v2.3.1`, and PDF floating previews from `v2.3.2` added. Chinese version: [README.md](README.md)
+A Super Lib v2.3.17 guide for end users, reviewed against release source and the actual Windows package on 2026-10-09. See the [illustrated feature catalogue (Chinese)](features.md). Chinese index: [README.md](README.md).
 
 Popular pages: [Quick start](quick-start.en.md) · [Appearance](appearance.en.md) · [Floating preview](basics.en.md#floating-image-preview) · [Corner hint bubble](basics.en.md#hover-hints) · [AI analysis and search](ai.en.md) · [Troubleshooting](troubleshooting.en.md)
 
@@ -30,7 +30,7 @@ Data stays in your local library directory; for syncing across machines, use Web
 
 A typical workspace has library navigation on the left, the asset canvas in the center, and the Inspector on the right. On Windows, the upper-left Main menu contains File, Edit, Window, Library, and Settings; macOS also exposes the same commands in the native menu. Import, search, filtering, and sorting stay in the top toolbar.
 
-![Super Lib library overview](../assets/ui/super-workspace-2.2.8.png)
+![Super Lib library overview](../assets/ui/live-2.3.17/04-workspace.png)
 
 See [Basics](basics.en.md) for the complete workflow.
 
@@ -52,4 +52,4 @@ flowchart LR
 
 This directory describes the current user-facing product. Screens and available features can change between releases; follow the latest installer and release notes.
 
-Images under `live-2.2.8/` come from the running application. Legacy screenshots have been replaced or withdrawn from this guide; screenshots illustrate the captured state, not end-to-end verification of every feature. Platform instructions do not guarantee a release attachment for that platform.
+The `live-2.3.17/` images are real captures in an isolated fixture library. External services were not connected; native update images are safe previews. These are not proof that every codec or external integration passes end-to-end testing. Older records remain historical snapshots.

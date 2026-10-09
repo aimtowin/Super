@@ -1,6 +1,6 @@
 # Basics
 
-> Updated with floating image/PDF previews and hover hints through Super Lib v2.3.2. Screenshots retain their capture versions; package availability follows release attachments.
+> Reviewed for Super Lib v2.3.17 (2026-10-09); current captures use an isolated fixture library. Package availability follows release attachments.
 
 [简体中文](basics.md) · [User guide](README.en.md) · [Floating image preview](#floating-image-preview) · [Corner hint bubble](#hover-hints)
 
@@ -32,7 +32,7 @@ The `?` help explains `*`, `?`, `**`, a trailing `/` for directories, a leading 
 
 After conversion, browsing, search, tags, AI analysis, and everything else work exactly like a local library, and the original files are left untouched.
 
-![Current external-library entry; no conversion started](../assets/ui/live-2.2.8/open-external-library.png)
+![Current external-library entry; no conversion started](../assets/ui/live-2.3.17/21-library-menu.png)
 
 ## Import assets
 
@@ -67,7 +67,7 @@ In the dialog, adjust the frame range and FPS, then choose whether to import onl
 
 Click to select and double-click to open the viewer. Drag on empty canvas space to marquee-select; use `⌘` on macOS or `Ctrl` on Windows while clicking to add to a selection. `Tab` moves focus between assets; `Shift` enables range selection where supported. Folders, collections, and smart collections support context-menu actions, inline `F2` rename, and `Delete`; deleting a non-empty container confirms first, and deleting a collection never deletes its assets.
 
-![Library, Inspector, filters, and AI overview; Chinese UI](../assets/ui/live-2.2.8/ai-analysis-result.png)
+![Library, Inspector, filters, and AI overview; Chinese UI](../assets/ui/live-2.3.17/05-inspector.png)
 
 ### Create a root-level folder
 
@@ -81,7 +81,7 @@ Double-click an asset to open the viewer. Images, SVG, RAW, PSD, TIFF, TGA, and 
 
 The viewer supports pan, wheel zoom, fit-to-view (numpad `.`), fullscreen, and rotate/horizontal/vertical mirror transforms for images and video. PDF preview supports zoom (0.25×–8×), pan, and fit-to-page; scrolling zooms around the mouse pointer. For formats other than PNG/JPEG, Super uses a detected color space when available and lets you choose among supported spaces. EXR can expose multiple planes/parts when present; this is not a professional channel-grading tool.
 
-![Current 3D viewer displaying an existing FBX asset](../assets/ui/live-2.2.8/model-viewer.png)
+![Current 3D viewer displaying a repository-owned OBJ fixture](../assets/ui/live-2.3.17/viewer-model.png)
 
 <a id="floating-image-preview"></a>
 
@@ -100,13 +100,13 @@ An image floating window uses its own fit-to-window view and does not inherit th
 
 ### Image viewer controls (updated in v2.3.1)
 
-The bottom controls leave space above the window edge, and tool hints appear above the buttons on the right. The color-space menu follows light and dark themes; dimmed options are unavailable for selection.
+The bottom controls leave space above the window edge, and tool hints use the unified lower-right bubble. The color-space menu follows light and dark themes; dimmed options are unavailable for selection.
 
 <a id="hover-hints"></a>
 
-## Corner hint bubble (new in v2.3.1)
+## Corner hint bubble (current behavior)
 
-In the main window, hover over a control or name that already has a hint to see the same text in an additional bubble at the lower right. The original hint near the pointer remains available.
+In the main window, hover over a control or name with a hint to see the unified lower-right bubble. The duplicate native hint near the pointer is suppressed.
 
 This includes toolbar buttons, sidebar folder, collection, and smart-collection names, plus asset names, list entries, and settings with existing hints. Long names wrap in the bubble so you can read the full text. Ordinary content without a hint does not receive an additional description.
 
@@ -129,6 +129,10 @@ Normal `Delete` / macOS `⌘⌫` moves an asset or folder to Trash. Windows `Shi
 ## WebDAV cloud sync
 
 Super can sync a library across machines over WebDAV: configure servers globally, bind each library, set auto-sync and the poll interval, and open remote synced libraries. See [Sync and external libraries](sync.en.md).
+
+### Custom icons
+
+Folders, collections and smart collections support custom Emoji icons through their context-menu icon settings. Saving/restoring an icon does not change disk names or membership. See the [illustrated guide](features.md).
 
 ## Shortcuts
 

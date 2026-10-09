@@ -7,4 +7,4 @@
 - 查决策演进：[项目历史](../PROJECT_DECISION_AND_RELEASE_HISTORY.md)。
 - 查发行附件：[GitHub Release](https://github.com/aimtowin/Super/releases)。
 
-计划中的待办、旧界面描述和参数可能已被后续实现取代。例如调色盘计划与实际色块数量应以当前手册及 `src/shared/color-filter-presets.ts` 为准；早期更新器的自动启动计划已由完成后手动启动的流程替代。
+计划中的待办、旧界面描述和参数可能已被后续实现取代。例如调色盘计划与实际色块数量应以当前手册及 `src/shared/color-filter-presets.ts` 为准；更新器曾使用“完成后手动启动”，当前 2.3.17 已恢复为成功后显示完成提示、自动启动应用并关闭更新窗口。失败时仍保留手动恢复，不无限重试。

@@ -1,4 +1,6 @@
-# 当前运行实例的文档截图
+# v2.2.8 历史运行实例的文档截图
+
+> Historical capture record only. Current instructions and screenshots use [v2.3.17](../live-2.3.17/README.md). Obsolete image files are recoverable from pre-cleanup Git commit `e359a291`; filenames in the table below describe the historical capture set, not current-tree availability.
 
 这组原始 PNG 来自用户已经打开的 Super Lib Windows 实例。通过 Windows 窗口截图采集，未对图片内容进行合成或修改。
 

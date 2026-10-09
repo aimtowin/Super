@@ -1,8 +1,10 @@
 # Desktop Console 脚本开发指南
 
-本文面向在 Super Desktop 的“自动化脚本”Console 中编写实际脚本的开发者。脚本是一次性、受控的 JavaScript/TypeScript 批处理；它通过注入的 `super` 领域 API 调用 Automation Command Gateway，不是 Node 程序，也不是通用命令行。
+本文面向在 Super Desktop 的“自动化脚本”Console 中编写实际脚本的开发者。脚本是一次性、受控的 JavaScript/TypeScript 批处理；它通过注入的 `superApi` 领域 API 调用 Automation Command Gateway，不是 Node 程序，也不是通用命令行。
 
-API 版本：`AUTOMATION_API_VERSION = 1`。本文以当前 Console 实际注入的 `src/scripting/super-guest-api.ts`、Registry 和 E2E 行为为准。逐项签名见 [脚本 API 参考](api-reference.md)；编辑器类型提示见 [`docs/internal/skills/super-automation/automation-api.d.ts`](../../internal/skills/super-automation/automation-api.d.ts)。类型声明由 Registry 生成/校验，但个别 Registry 命令尚未投影到 Console，见“实现差异”。
+> 核对源码版本：2.3.17（2026-10-09）。成品运行发现缺少 `typescript`，见[当前限制](../../reference/documentation-review-2.3.17.md#发现的当前成品问题)。API 签名核对不等于成品脚本执行已通过。
+
+API 版本：`AUTOMATION_API_VERSION = 1`。本文以当前 Console 实际注入的 `src/scripting/super-guest-api.ts`、Registry 和 E2E 行为为准。逐项签名见 [脚本 API 参考](api-reference.md)。公共 guest 投影见 [`src/scripting/super-guest-api.ts`](../../../src/scripting/super-guest-api.ts)，Registry 命令目录比 Console 公开面更宽，不能直接当作脚本 API，见“实现差异”。
 
 ## 先跑起来
 
@@ -11,54 +13,54 @@ API 版本：`AUTOMATION_API_VERSION = 1`。本文以当前 Console 实际注入
 Console 运行的是脚本正文，最简单的入口是顶层 `return`：
 
 ```ts
-const page = await super.assets.search({ query: 'tag:抽象', limit: 50 });
+const page = await superApi.assets.search({ query: 'tag:抽象', limit: 50 });
 return { count: page.items.length, total: page.total };
 ```
 
 脚本执行一次就是一个 Automation Execution。每次运行都是新的沙箱：上一次运行定义的函数、变量和 Promise 不会保留。需要辅助函数时，把函数和调用放在同一次运行中。
 
-支持 `.super.js` 和 `.super.ts`。TypeScript 在受控运行时内转译为 ES2022；这是脚本正文，不是 ES module。不要写 `import`、`export`、动态 `import()`、`eval`、`Function` 或 `globalThis`。保存脚本只是保存源文本，不会把它变成插件，也不会获得额外权限。
+支持 `.superApi.js` 和 `.superApi.ts`。TypeScript 在受控运行时内转译为 ES2022；这是脚本正文，不是 ES module。不要写 `import`、`export`、动态 `import()`、`eval`、`Function` 或 `globalThis`。保存脚本只是保存源文本，不会把它变成插件，也不会获得额外权限。
 
 ## 可用全局与库绑定
 
 脚本只应依赖以下环境：
 
-- `super`：唯一的 Super 领域对象。其命名空间和方法见 API 参考。
+- `superApi`：唯一的 Super 领域对象。其命名空间和方法见 API 参考。
 - 标准 ES2022 语言能力：变量、条件、循环、函数、对象、数组、`Promise`、JSON、日期和数学等；具体可用性仍受隔离运行时限制。
 - `console.log(value)`、`console.info(value)`、`console.warn(value)`、`console.error(value)`：写入本次运行的脚本输出，输出受总量限制。
 
-没有 `require`、Node 内置模块、任意文件系统、网络、Shell、SQLite、环境变量、原始 IPC 或任意 UI/DOM。脚本不能读取脚本文件自身，也不能通过 `super` 取得资源库或链接文件夹的绝对路径。`assets.copyFilePaths()` 是受控例外：由 Main 把选定路径写入系统剪贴板，脚本只收到数量。
+没有 `require`、Node 内置模块、任意文件系统、网络、Shell、SQLite、环境变量、原始 IPC 或任意 UI/DOM。脚本不能读取脚本文件自身，也不能通过 `superApi` 取得资源库或链接文件夹的绝对路径。`assets.copyFilePaths()` 是受控例外：由 Main 把选定路径写入系统剪贴板，脚本只收到数量。
 
-`super` 的调用会经过 Gateway 的 Registry、能力检查、输入/结果 Schema、执行日志和资源库范围检查。脚本不能传入 `executionId`、能力、授权、资源库路径或伪造计划证明；这些由宿主绑定。
+`superApi` 的调用会经过 Gateway 的 Registry、能力检查、输入/结果 Schema、执行日志和资源库范围检查。脚本不能传入 `executionId`、能力、授权、资源库路径或伪造计划证明；这些由宿主绑定。
 
 ## JS 与 TS 的写法
 
 ```js
-const page = await super.assets.search({ query: 'name:rain', limit: 20 });
+const page = await superApi.assets.search({ query: 'name:rain', limit: 20 });
 return page.items.map((asset) => asset.id);
 ```
 
 ```ts
-const page = await super.assets.search({ query: 'name:rain', limit: 20 });
+const page = await superApi.assets.search({ query: 'name:rain', limit: 20 });
 const ids: string[] = page.items.map((asset) => asset.id);
 return { ids, hasMore: page.hasMore };
 ```
 
-不要从脚本 `import` 类型。把 `automation-api.d.ts` 加到编辑器的类型根目录，或在脚本编辑器外用它做补全；运行时仍只接受注入的 `super`。
+不要从脚本 `import` 类型。运行时仅接受独立脚本正文与注入的 `superApi`；在外部编辑器使用类型声明时，也应与当前 guest 投影逐项对照，不能使用仅存在于 Registry/MCP 的方法。
 
 ## 推荐工作流：读、核对、最小写入
 
 1. 先用 `search`/`list` 查询并分页，确认目标 ID 和数量。
-2. 读取需要写入的当前状态；元数据写入保存 `entityVersion`，文件内容写入保存 `currentRevisionId`。
+2. 读取需要写入的当前状态；元数据写入保存 `entityVersion`，文件内容写入保存 `readContent()` 的 `revisionId`。
 3. 用最小批量执行写入，检查 `updatedCount`、`movedCount`、`skippedCount` 或逐项 `skipped`。
 4. 文件类操作完成后在 Console 中使用“撤销自动化操作”复核；一次 execution 的可撤回 mutation 会由 Worker 组成一个 history group，宿主只消费一个 Worker 历史回执，脚本不能自行重放文件操作。
 5. 对关键结果重新查询，或读取 `library.changeSequence()` 验证资源库已发生预期变化。
 
 ```ts
-const page = await super.assets.search({ query: 'name:reference', limit: 200, offset: 0 });
+const page = await superApi.assets.search({ query: 'name:reference', limit: 200, offset: 0 });
 const result = page.items.length === 0
   ? { updatedCount: 0, skipped: [] }
-  : await super.assets.setRating(page.items.map((asset) => asset.id), 4);
+  : await superApi.assets.setRating(page.items.map((asset) => asset.id), 4);
 return { matched: page.total, ...result };
 ```
 
@@ -70,7 +72,7 @@ return { matched: page.total, ...result };
 async function allSearch(query: string | null) {
   const items = [];
   for (let offset = 0; ; ) {
-    const page = await super.assets.search({ query, limit: 200, offset });
+    const page = await superApi.assets.search({ query, limit: 200, offset });
     items.push(...page.items);
     if (!page.hasMore || page.items.length === 0) return items;
     offset += page.items.length;
@@ -82,7 +84,7 @@ Console 的脚本源最多 64 KiB；脚本输出逐行收集，单行最多 16 K
 
 ## 搜索语法
 
-`super.assets.search({ query })` 使用与工具栏相同的文本搜索语法；`query` 可为字符串或 `null`。`null` 表示当前资源库的非回收站资产。支持空格 AND、`|` OR、`-` 排除、引号短语和字段限定；字段别名包括 `name`/`filename`、`tag`/`tags`、`desc`/`description`、`source`/`url`/`link`/`source_url`、`author`、`path`/`folder`/`folder_path`、`meta`/`metadata`/`metadata_text`。搜索是包含匹配，例如 `rain` 可能命中 `rainbow`，要更严格请使用更长 token 或多字段组合。
+`superApi.assets.search({ query })` 使用与工具栏相同的文本搜索语法；`query` 可为字符串或 `null`。`null` 表示当前资源库的非回收站资产。支持空格 AND、`|` OR、`-` 排除、引号短语和字段限定；字段别名包括 `name`/`filename`、`tag`/`tags`、`desc`/`description`、`source`/`url`/`link`/`source_url`、`author`、`path`/`folder`/`folder_path`、`meta`/`metadata`/`metadata_text`。搜索是包含匹配，例如 `rain` 可能命中 `rainbow`，要更严格请使用更长 token 或多字段组合。
 
 当前 Console 还接受 Registry 的结构化搜索对象，由宿主归一化；若没有明确需要，优先用字符串查询。搜索仍只返回分页资产摘要和可选摘要，不返回磁盘路径。
 
@@ -112,7 +114,7 @@ Console 的脚本源最多 64 KiB；脚本输出逐行收集，单行最多 16 K
 
 ## 保存、打开和最近脚本
 
-“保存脚本”只接受 `.super.js` 或 `.super.ts`，源文本上限 64 KiB。文件选择由 Main 完成；Console 只收到文件名、源文本和 Main 签发的临时句柄，不收到绝对路径。打开脚本、保存脚本和从最近脚本列表打开都走同一校验。
+“保存脚本”只接受 `.superApi.js` 或 `.superApi.ts`，源文本上限 64 KiB。文件选择由 Main 完成；Console 只收到文件名、源文本和 Main 签发的临时句柄，不收到绝对路径。打开脚本、保存脚本和从最近脚本列表打开都走同一校验。
 
 句柄绑定当前窗口、当前脚本源文本和当前保存内容。编辑文本后，旧句柄不能用来冒充已保存脚本以继承授权；窗口销毁时句柄也会释放。最近列表只保存可重新打开的文件名/句柄关系，不把路径交给脚本。
 
@@ -136,6 +138,6 @@ Console 的脚本源最多 64 KiB；脚本输出逐行收集，单行最多 16 K
 
 插件运行时拥有另一套长期生命周期 API（如 `setup`、事件、Hook、Provider、插件 Job、输入捕获和插件存储）。这些来自 `plugin-guest-realm.ts`，不属于 Desktop Console 脚本公共 API；插件也不能用常驻脚本替代。
 
-当前 Registry/类型声明还描述了 `execution.status`、`media.jobs.list`、`ai.jobs.status`、`ai.enqueue` 等命令，但 Desktop Console 的实际 `super` guest 投影当前未注入 `jobs` 或执行状态命名空间；不要在 Console 脚本中依赖 `super.jobs` 或 `super.execution`。类型声明的宽类型也不代表 Console 已提供稳定字段。
+当前 Registry/类型声明还描述了 `execution.status`、`media.jobs.list`、`ai.jobs.status`、`ai.enqueue` 等命令，但 Desktop Console 的实际 `superApi` guest 投影当前未注入 `jobs` 或执行状态命名空间；不要在 Console 脚本中依赖 `superApi.jobs` 或 `superApi.execution`。类型声明的宽类型也不代表 Console 已提供稳定字段。
 
-未承诺的能力包括通用 CLI、`super run`/`super repl`、任意 filesystem、SQLite、Shell、网络、MCP JSON-RPC 特有通知/资源引用、Desktop DOM/像素控制和永久删除。MCP 的 `super_desktop_*` 是附着 Desktop 的工具，不会出现在 Console 的 `super` 对象中。
+未承诺的能力包括通用 CLI、`super run`/`super repl`、任意 filesystem、SQLite、Shell、网络、MCP JSON-RPC 特有通知/资源引用、Desktop DOM/像素控制和永久删除。MCP 的 `super_desktop_*` 是附着 Desktop 的工具，不会出现在 Console 的 `superApi` 对象中。

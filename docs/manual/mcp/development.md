@@ -87,4 +87,4 @@ Permission Broker 只读取 credential 权限档，不保存 transport session g
 
 Electron E2E 必须后台运行并隔离 `SUPER_E2E_USER_DATA_PATH`。完成大型 MCP 改动后，主 agent 还要使用真实 Super Desktop 做独立 UI/设置验收；自动化通过不能代替人眼验收。
 
-Windows 当前没有 runner，macOS 通过不能写成 Windows 通过。审查至少覆盖 Node `path`、`fs` 原子替换、loopback 绑定、端口错误、Electron 生命周期、Windows 用户目录和 packaged 资源路径。
+当前已有 Windows x64 定向验证记录；具体覆盖与未执行项见[2.3.17 验收](../../releases/v2.3.17-validation.md)，不能把一次专项验证写成所有 MCP 客户端或全部平台通过。审查至少覆盖 Node `path`、`fs` 原子替换、loopback 绑定、端口错误、Electron 生命周期、Windows 用户目录和 packaged 资源路径。

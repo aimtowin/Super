@@ -1,6 +1,6 @@
 # 自动化功能
 
-> 适用版本：Super Lib v2.2.8；安装包可用性以发行附件为准。
+> 核对版本：Super Lib v2.3.17（2026-10-09）；安装包可用性以发行附件为准。
 
 Super 提供两种自动化方式：用脚本批量整理资产，或让外部 AI 工具通过 MCP 连接 Super。普通浏览、导入和查看不需要使用这些功能。
 
@@ -15,7 +15,7 @@ Super 提供两种自动化方式：用脚本批量整理资产，或让外部 A
 
 脚本只通过 Super 提供的操作来修改资源库，不会替你执行电脑上的任意程序。运行前仍应确认脚本来自可信来源，并备份重要资源库。
 
-![当前自动化脚本面板；编辑器为空，未运行脚本](../assets/ui/live-2.2.8/automation-scripts.png)
+![当前自动化脚本面板；编辑器为空，未运行脚本](../assets/ui/live-2.3.17/15-automation-script.png)
 
 ## 连接外部 AI 工具（MCP）
 
@@ -33,10 +33,14 @@ MCP 是一种让外部 AI 工具读取和整理 Super 资产的连接方式。�
 
 Agent 连接后会从 MCP 的服务器说明和 `tools/list` 自动获知基本用法，再调用 `super_library_list_open` 或 `super_library_list_recent` 获取 `libraryId`。如果 Agent 询问要操作哪个资源库，让它先列出资源库并使用返回的 ID。所有资源库相关操作都必须明确带上这个 `libraryId`；删除等关键操作还需要 Agent 的二次确认。
 
-![当前 MCP 设置；服务原已开启，未新增客户端](../assets/ui/live-2.2.8/mcp-settings.png)
+![当前 MCP 设置；服务未启用、未新增客户端](../assets/ui/live-2.3.17/settings-mcp.png)
 
 只给可信的本地 AI 工具开启连接。涉及删除、移动等有影响的操作时，Super 仍会要求确认。
 
 ## 更多资料
 
 脚本和 MCP 的完整命令、开发方法和接入示例见[扩展作者手册](../manual/README.md)。
+
+## 当前成品脚本限制
+
+2026-10-09 在隔离的 v2.3.17 安装包中运行只读脚本，发生 `RUNTIME_PROCESS_EXITED`，UtilityProcess 无法解析 `typescript`。入口存在，但成品执行不能标为验证成功。见[审查记录](../reference/documentation-review-2.3.17.md)和[真实错误配图](features.md#自动化脚本-console)。本次文档任务没有修改或重新发布安装包。

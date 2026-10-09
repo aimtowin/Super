@@ -14,9 +14,12 @@
 
 Super Lib is a free local asset manager for creative work. Browse images, videos, audio, and models in one workspace, organize them with folders, tags, color filters, and collections, and optionally add AI analysis and a custom appearance.
 
+> **[Illustrated feature catalogue — real 2.3.17 screenshots (Chinese)](docs/user-guide/features.md)**
+> Each user-facing feature includes an entry point, instructions and limitations. Captured from the released Windows x64 app using an isolated demo library. English task guides remain available below.
+
 [Download for Windows](https://github.com/aimtowin/Super/releases/latest/download/SuperSetup.exe) · [Releases and other downloads](https://github.com/aimtowin/Super/releases/latest) · [Quick start](docs/user-guide/quick-start.en.md) · [Report a bug](https://github.com/aimtowin/Super/issues)
 
-![Super Lib workspace with asset browsing, folder navigation, and a custom background](docs/assets/ui/super-workspace-2.2.8.png)
+![Super Lib 2.3.17 with an isolated demo library, canvas, navigation and Inspector](docs/assets/ui/live-2.3.17/04-workspace.png)
 
 ## Start with a local library
 
@@ -34,7 +37,8 @@ Super Lib itself is free. Optional third-party AI services may charge according 
 - **Local first**: managed imports copy assets into a library, while linked folders reference an external directory in place. Library data stays local and can be synchronized between devices through WebDAV when needed.
 - **Browsing and preview**: thumbnails, video previews, metadata, the viewer, and background derivative work are designed not to block browsing.
 - **Floating references**: keep the current image or PDF in a movable, resizable, always-on-top window while the main window minimizes. See [Floating preview](docs/user-guide/basics.en.md#floating-image-preview).
-- **Hover hints in two locations**: existing hints for buttons, sidebar entries, and asset names also appear in a separate lower-right bubble. See [Corner hint bubble](docs/user-guide/basics.en.md#hover-hints).
+- **One hover-hint location**: control and asset-name hints appear in the lower-right bubble without duplicate near-pointer tooltips. See [Corner hint bubble](docs/user-guide/basics.en.md#hover-hints).
+- **Readable filters and custom icons**: include/exclude modes with condition summaries, plus Emoji icons for folders, linked folders, collections and smart collections.
 - **Automation and extensibility**: plugins, controlled automation scripts, and local MCP connections are supported. Writes are bounded by permissions, execution plans, and risk confirmation.
 - **AI analysis and search**: generate descriptions and tags for supported media, then use natural language to find analyzed assets and create temporary smart collections. AI is optional and requires your own provider configuration.
 - **Appearance**: light and dark themes, custom backgrounds, theme colors, and four application text-size levels.
@@ -42,7 +46,7 @@ Super Lib itself is free. Optional third-party AI services may charge according 
 
 ## Install and use
 
-The current `v2.3.2` release provides a Windows x64 installer. Download `SuperSetup.exe` for a first installation. Full update ZIPs and delta packages are update-delivery artifacts. Availability on other platforms depends on the files actually attached to a release.
+The current `v2.3.17` release provides a Windows x64 installer. Download `SuperSetup.exe` for a first installation. Full update ZIPs and delta packages are update-delivery artifacts. Availability on other platforms depends on the files actually attached to a release.
 
 Libraries live at the location you choose. Importing copies assets into the library; linking references files at their existing location, which must remain accessible. See the [quick start](docs/user-guide/quick-start.en.md).
 
@@ -81,6 +85,7 @@ On Windows, `npm run make:inno` creates `out/make/inno/SuperSetup.exe`. Reposito
 
 | Document | Content |
 | --- | --- |
+| [Illustrated feature catalogue (Chinese)](docs/user-guide/features.md) | Real screenshots, entry points, instructions and limits for each user feature |
 | [Quick start](docs/user-guide/quick-start.en.md) | Installation, local library creation, optional setup, and first import |
 | [Appearance](docs/user-guide/appearance.en.md) | Color modes, backgrounds, text size, and screenshots |
 | [User guide](docs/user-guide/README.en.md) | Install, import, browse, search, tags, collections, sync, AI, plugins, and troubleshooting |

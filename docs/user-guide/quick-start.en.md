@@ -1,6 +1,6 @@
 # Quick start
 
-> Applies to Super Lib v2.2.8; package availability follows release attachments.
+> Reviewed for Super Lib v2.3.17 (2026-10-09); package availability follows release attachments.
 
 [简体中文](quick-start.md) · [User guide](README.en.md) · [Latest release](https://github.com/aimtowin/Super/releases/latest)
 
@@ -22,7 +22,7 @@ Once the library is created, you can start browsing and organizing.
 
 With a library already open, use **Main menu → Library → New library**. Enter a name, then follow the prompt to select a local location.
 
-![Create-library dialog in the running application; Chinese UI](../assets/ui/live-2.2.8/create-library.png)
+![Create-library dialog in the running application; Chinese UI](../assets/ui/live-2.3.17/03-create-library.png)
 
 ## 3. Optionally set up AI and appearance
 
@@ -47,11 +47,11 @@ Import through the menu or by dragging files into the window. Use the link actio
 
 **Main menu → File** also provides separate actions for importing files, importing folders, and importing linked folders.
 
-![Import and link actions in the File menu; Chinese UI](../assets/ui/live-2.2.8/import-menu.png)
+![Import and link actions in the File menu; Chinese UI](../assets/ui/live-2.3.17/20-import-menu.png)
 
 ## 5. Explore
 
-![Super Lib workspace](../assets/ui/super-workspace-2.2.8.png)
+![Super Lib workspace](../assets/ui/live-2.3.17/04-workspace.png)
 
 Navigate folders and collections on the left, browse assets in the center, and inspect details on the right. Double-click an asset to open the viewer; right-click for available actions.
 

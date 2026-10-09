@@ -1,6 +1,6 @@
 # 快速上手
 
-> 适用版本：Super Lib v2.2.8；安装包可用性以发行附件为准。
+> 核对版本：Super Lib v2.3.17（2026-10-09）；安装包可用性以发行附件为准。
 
 [English](quick-start.en.md) · [使用手册](README.md) · [下载最新版](https://github.com/aimtowin/Super/releases/latest)
 
@@ -20,7 +20,7 @@ Super Lib 完全免费。先创建一个本地资产库，就可以开始管理�
 
 已有资源库打开时，也可以从「主菜单 → 资源库 → 新建资源库」进入。填写名称后，按提示选择本机保存位置。
 
-![正在运行的 Super Lib 中的创建资源库窗口](../assets/ui/live-2.2.8/create-library.png)
+![正在运行的 Super Lib 中的创建资源库窗口](../assets/ui/live-2.3.17/03-create-library.png)
 
 - 建议使用固态硬盘，尤其是准备管理大量素材时。
 - 为素材、缩略图和其他预览缓存预留空间。
@@ -51,11 +51,11 @@ AI 服务由你自行选择，第三方可能收费。启用分析时，应用�
 
 「主菜单 → 文件」中也提供「导入文件」「导入文件夹」和「导入链接文件夹」三个入口。
 
-![文件菜单中的导入与链接入口](../assets/ui/live-2.2.8/import-menu.png)
+![文件菜单中的导入与链接入口](../assets/ui/live-2.3.17/20-import-menu.png)
 
 ## 5. 开始探索
 
-![Super Lib 主界面](../assets/ui/super-workspace-2.2.8.png)
+![Super Lib 主界面](../assets/ui/live-2.3.17/04-workspace.png)
 
 左侧切换文件夹和合集，中间浏览素材，右侧查看资源信息。双击素材打开查看器，右键查看可用操作。
 

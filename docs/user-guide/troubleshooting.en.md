@@ -1,6 +1,6 @@
 # Troubleshooting
 
-> Applies to Super Lib v2.2.8; package availability follows release attachments.
+> Reviewed for Super Lib v2.3.17 (2026-10-09); package availability follows release attachments.
 
 ## macOS Gatekeeper / Windows SmartScreen
 
@@ -31,6 +31,8 @@ Open **Settings → Plugins** and check the plugin status and trust prompt. A li
 ## Automation script or MCP will not work
 
 For a script, open a library first and choose **More tools → Automation scripts**. For MCP, open **Settings → MCP**, ensure the service is enabled and started, and paste Super’s latest configuration into the client. The default address is `http://127.0.0.1:47342/mcp`. If you revoked a Token, add the client again and copy a new configuration. Connect only a local AI tool you trust.
+
+The v2.3.17 packaged Console failed in this isolated run with `RUNTIME_PROCESS_EXITED` because its utility process cannot resolve `typescript`. Renaming folders or configuring an API key will not resolve this recorded packaging issue. It was not fixed in the documentation task; see `automation.en.md` and the review record.
 
 ## A library will not open
 

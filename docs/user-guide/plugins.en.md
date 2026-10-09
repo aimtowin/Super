@@ -1,6 +1,6 @@
 # Plugin features
 
-> Applies to Super Lib v2.2.8; package availability follows release attachments.
+> Reviewed for Super Lib v2.3.17 (2026-10-09); package availability follows release attachments.
 
 Plugins add tools, menus, or workflows to Super. They are not ordinary library assets and can be enabled or disabled at any time.
 
@@ -16,7 +16,7 @@ Plugins add tools, menus, or workflows to Super. They are not ordinary library a
 
 The plugin appears in the plugin list after installation. Follow the plugin author’s own instructions if it needs additional setup.
 
-![Current plugin settings; no plugins installed](../assets/ui/live-2.2.8/plugin-settings.png)
+![Current plugin settings; no plugins installed](../assets/ui/live-2.3.17/settings-plugins.png)
 
 ## Enable and disable
 

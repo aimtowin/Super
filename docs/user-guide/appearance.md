@@ -1,6 +1,6 @@
 # 外观设置
 
-> 适用版本：Super Lib v2.2.8；安装包可用性以发行附件为准。
+> 核对版本：Super Lib v2.3.17（2026-10-09）；安装包可用性以发行附件为准。
 
 [English](appearance.en.md) · [使用手册](README.md)
 
@@ -10,15 +10,15 @@
 
 右上角三个圆形按钮分别选择浅色、深色、跟随系统。下方的 Super、VS Code、柔和卡片用于选择主题样式；「主题色设置」用于进一步调整颜色。
 
-![跟随系统时的深色外观设置](../assets/ui/live-2.2.8/appearance-dark.png)
+![同一隔离实例的暗色外观设置](../assets/ui/live-2.3.17/31-dark-theme.png)
 
-![同一实例切换至浅色外观](../assets/ui/live-2.2.8/appearance-light.png)
+![同一实例切换至浅色外观](../assets/ui/live-2.3.17/settings-appearance.png)
 
 ## 应用背景
 
 展开「应用背景」，查看背景预览并按界面选项更换图片、调整不透明度。背景较复杂时，可以降低其可见程度，让文件名和工具栏更容易阅读。
 
-![展开应用背景设置](../assets/ui/live-2.2.8/background-settings.png)
+![展开应用背景设置](../assets/ui/live-2.3.17/32-background.png)
 
 ## 字体大小与层级效果
 
@@ -26,4 +26,6 @@
 - 「层级投影」控制面板间的阴影强度。
 - 向下滚动可找到右键菜单亚克力设置，用于调整菜单的透明和模糊效果。
 
-截图中字体为第 4 档，这是截图实例的用户设置，不代表安装后的默认值。
+![字体与层级设置下半页](../assets/ui/live-2.3.17/settings-appearance-details.png)
+
+截图只使用独立演示配置，不读取真实用户外观设置。

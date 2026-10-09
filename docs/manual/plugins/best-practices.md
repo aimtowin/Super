@@ -1,5 +1,7 @@
 # 插件开发最佳实践
 
+> 核对版本：2.3.17（2026-10-09）。插件中可使用 `context.super.*`，或先 `const superApi = context.super` 再调用 `superApi.*`；不可声明名为 `super` 的变量。
+
 本文是 [插件开发指南](development.md) 的操作补充：不重复字段表，只写容易在真实插件里踩到的边界。契约以当前仓库的 Manifest schema 和 Host 实现为准。
 
 完整走通过「无限制运行时 + 原生二进制 + 后台 Job + 内容写回 + GitHub 平台包」这条路径的参考实现：
@@ -14,14 +16,14 @@
 
 | 需要 | 选择 |
 | --- | --- |
-| 只用 `super.*` 读写领域对象、设置、通知 | `runtime.mode: "restricted"` |
+| 只用 `superApi.*` 读写领域对象、设置、通知 | `runtime.mode: "restricted"` |
 | 子进程、原生 `.node` / `.bin`、自己的模型文件、任意 `fs`/`net` | `runtime.mode: "unrestricted"` |
 | 命令/Job 在整个应用会话里注册一次，可服务多个库 | `runtime.instanceScope: "global"` |
 | 每个打开的库各有一份隔离状态 | `runtime.instanceScope: "library"` |
 
 `unrestricted` 仍必须走 Gateway 改资产。权限清单不能拦住插件直接调 Node，但 `assets.readContent` / `stageContent` / `replaceContentBatch` 仍然受权限和确认计划约束。不要用 `fs` 绕过 Gateway 直接覆盖资源库 `Assets/` 或链接源目录。
 
-Image Upscaler 使用 `unrestricted` + `global`：Upscayl 需要子进程和本地模型，命令与 Job handler 在会话内只注册一次，跨库时用 `super.forLibrary(libraryId)`。
+Image Upscaler 使用 `unrestricted` + `global`：Upscayl 需要子进程和本地模型，命令与 Job handler 在会话内只注册一次，跨库时用 `superApi.forLibrary(libraryId)`。
 
 ## 2. 入口只使用 setup / dispose
 
@@ -29,7 +31,8 @@ Image Upscaler 使用 `unrestricted` + `global`：Upscayl 需要子进程和本�
 
 ```js
 exports.setup = async function setup(context) {
-  const { super, subscriptions, signal } = context;
+  const { super: superApi, subscriptions, signal } = context;
+  // super 是 JS 保留词，必须取别名；调用时写 superApi.*。
   subscriptions.add(() => { /* 释放自己创建的资源 */ });
   signal.addEventListener('abort', () => {
     // 停掉外部进程、下载和循环
@@ -41,7 +44,7 @@ exports.dispose = async function dispose(reason) {
 };
 ```
 
-`global` 实例没有「当前库」隐含值。命令 handler 从冻结的 `context.invocation.libraryId` 取值，再 `super.forLibrary(libraryId)`。不要把安装范围 `user`/`library` 当成目标库。
+`global` 实例没有「当前库」隐含值。命令 handler 从冻结的 `context.invocation.libraryId` 取值，再 `superApi.forLibrary(libraryId)`。不要把安装范围 `user`/`library` 当成目标库。
 
 ## 3. 命令、菜单与 Invocation
 
@@ -53,7 +56,7 @@ Image Upscaler 的资产菜单用子菜单挂 1x/2x/4x，并用 `selection.exten
 
 ## 4. Job、进度与取消
 
-Manifest 先声明 Job，`recovery` 只能是 `idempotent` 或 `checkpoint`。handler 在实例级 `super.jobs.registerHandler` 注册；`enqueue` / `reportProgress` 走目标库的 `forLibrary(...)`。
+Manifest 先声明 Job，`recovery` 只能是 `idempotent` 或 `checkpoint`。handler 在实例级 `superApi.jobs.registerHandler` 注册；`enqueue` / `reportProgress` 走目标库的 `forLibrary(...)`。
 
 进度协议：
 
@@ -80,7 +83,7 @@ Manifest 先声明 Job，`recovery` 只能是 `idempotent` 或 `checkpoint`。ha
 
 Image Upscaler 先把整批图推理并 stage 完，再调用一次 `replaceContentBatch`，让 Host 只弹出一次统一替换确认。任一项失败则整批不提交。
 
-大选择集不要塞进 Job payload。可以把请求元数据（资产 ID、参数）写到 `super.data.getDirectory()` 下的文件，Job payload 只带文件名。路径必须是数据目录内的相对名，禁止 `..`。
+大选择集不要塞进 Job payload。可以把请求元数据（资产 ID、参数）写到 `superApi.data.getDirectory()` 下的文件，Job payload 只带文件名。路径必须是数据目录内的相对名，禁止 `..`。
 
 ## 6. 设置用 Host 原生字段
 
@@ -90,7 +93,7 @@ Image Upscaler 先把整批图推理并 stage 完，再调用一次 `replaceCont
 
 ## 7. 原生二进制、模型与数据目录
 
-`super.data.getDirectory({ scope: "user" | "library" })` 才是插件可写的数据根：
+`superApi.data.getDirectory({ scope: "user" | "library" })` 才是插件可写的数据根：
 
 ```text
 {userData}/plugin-files/<pluginId>/

@@ -1,5 +1,7 @@
 # Super 插件开发与发布指南
 
+> 核对版本：2.3.17（2026-10-09）。插件中可使用 `context.super.*`，或先 `const superApi = context.super` 再调用 `superApi.*`；不可声明名为 `super` 的变量。
+
 本文面向准备实际开发、联调和发布 Super 插件的人类开发者。文档以当前仓库的
 `plugin-manifest.ts`、`plugin-sdk.ts`、Plugin Manager API 和测试 fixture 为准；当前平台仍处于开发态，
 未在本文中承诺尚未实现的能力。
@@ -9,7 +11,7 @@
 | 文档 | 用途 |
 | --- | --- |
 | 本文 | Manifest、生命周期、Contribution、Job、设置、发布前测试 |
-| [插件 API 参考](api-reference.md) | `super.*` 方法、权限和错误码 |
+| [插件 API 参考](api-reference.md) | `superApi.*` 方法、权限和错误码 |
 | [插件分发与更新](distribution-and-updates.md) | 安装通道、平台 token、GitHub Release 文件名 |
 | [插件开发最佳实践](best-practices.md) | 成品包、ZIP 路径、Job 进度、内容分块、原生二进制 |
 | Image Upscaler（由项目团队单独提供） | 无限制插件 + 平台 Release 的参考实现 |
@@ -61,7 +63,7 @@ my-plugin/
   "author": "Example",
   "license": "MIT",
   "engines": {
-    "super": ">=0.1.0 <1.0.0",
+    "super": ">=2.3.17 <3.0.0",
     "pluginApi": 1
   },
   "runtime": {
@@ -119,13 +121,13 @@ Manifest 是 strict schema：未知字段、重复权限、重复 Contribution I
 ### restricted
 
 `restricted` 运行在可终止的 QuickJS 隔离环境中：没有 Node built-ins、`process`、环境变量、任意 import、
-原生文件系统、数据库或宿主 DOM。插件只能通过声明权限后可用的 `super.*` API 工作。适合一般菜单、领域操作、
+原生文件系统、数据库或宿主 DOM。插件只能通过声明权限后可用的 `superApi.*` API 工作。适合一般菜单、领域操作、
 Provider 和 Job。
 
 ### unrestricted
 
 `unrestricted` 运行在每个实例独立的 Node.js UtilityProcess 中，拥有 Node、文件系统、网络、子进程和依赖的完整能力。
-它仍应优先通过 `super.*` 操作 Super 领域对象，但权限清单不能拦截插件绕过 Gateway 直接调用 Node 的行为；权限同时
+它仍应优先通过 `superApi.*` 操作 Super 领域对象，但权限清单不能拦截插件绕过 Gateway 直接调用 Node 的行为；权限同时
 是 Super API 的能力控制和对用户的风险披露，不是沙箱承诺。需要原生模块时可声明：
 
 ```jsonc
@@ -370,8 +372,8 @@ Job 先在 Manifest 声明：
 重试来重新入队，且中断 Job 可以由当前相同插件包的新实例接管。`interrupted` 是 Host 状态，插件的完成回调不能伪造这个状态。
 大文件、模型和缓存不要塞进 storage。
 
-`super.storage` 是插件命名空间 KV，小配置使用 `scope: "user" | "library"`；按权限 `storage.read`/`storage.write` 控制。
-`super.data.getDirectory({ scope })` 返回插件数据根：用户级为 `{userData}/plugin-files/<pluginId>/`，库级为
+`superApi.storage` 是插件命名空间 KV，小配置使用 `scope: "user" | "library"`；按权限 `storage.read`/`storage.write` 控制。
+`superApi.data.getDirectory({ scope })` 返回插件数据根：用户级为 `{userData}/plugin-files/<pluginId>/`，库级为
 `<库根>/.super/plugin-files/<pluginId>/`。库未打开时不能取得库级目录。受限模式没有 Node fs；unrestricted 才能在该目录下用 fs，
 也不要把返回路径当作可写入库 Assets 的通道。
 
@@ -417,14 +419,14 @@ Host 的「后台任务 → 插件任务」会把 `completed/total` 与百分比
 运行中的 Job 还会出现在主界面画布上方的非阻塞活动条中，工具栏「后台任务」入口会显示活动标记；用户无需先打开任务对话框才能发现插件正在工作。完成、失败或取消后的最近结果会短暂保留，并可从活动条进入完整任务面板。
 
 `forLibrary()` 返回领域 API 和 Job 的 enqueue/report/cancel/pause/resume/retry，但不返回 events、hooks、providers、storage、data、
-commands 或 handler 注册；handler 必须在实例级 `super.jobs` 注册。library 实例不能借此越过自己的库边界。
+commands 或 handler 注册；handler 必须在实例级 `superApi.jobs` 注册。library 实例不能借此越过自己的库边界。
 
 命令可通过 `contributes.commands[].mcp.export: true` 或顶层 `mcp.expose: ["command-id"]` 导出。插件激活后会成为 MCP 候选工具，但 MCP 连接仍须请求本地写入配置；插件命令目前按可能产生副作用处理，只导出有界、可校验的命令，不暴露 eval、秘密或任意 Node 接口。
 插件 MCP 调用还必须提供至少一个非空的 `assetIds`、`folderIds` 或 `collectionIds` 数组；空数组会在 JSON Schema 和 Host 运行时两层拒绝。
 
 ## 11. Hook、Provider 与输入
 
-Hook 在 Manifest 中声明 `id`、`event`、`blocking`。当前实现首发事件是 `asset.trash`；运行时 `super.hooks.onWill` 返回：
+Hook 在 Manifest 中声明 `id`、`event`、`blocking`。当前实现首发事件是 `asset.trash`；运行时 `superApi.hooks.onWill` 返回：
 
 ```js
 { action: 'allow' }
@@ -433,7 +435,7 @@ Hook 在 Manifest 中声明 `id`、`event`、`blocking`。当前实现首发事�
 ```
 
 阻断必须同时声明 `blocking: true` 和 `hook.blocking` 权限；Hook 在 Execution Plan 预检阶段运行，不在 SQLite 事务/文件锁内等待，
-超时默认 fail-open。事件订阅使用 `super.events.on('library.changed' | 'asset.changed' | '*', handler)`；事件至少一次投递，
+超时默认 fail-open。事件订阅使用 `superApi.events.on('library.changed' | 'asset.changed' | '*', handler)`；事件至少一次投递，
 请按 `eventId` 去重。
 
 Provider 支持 `preview`、`thumbnail`、`metadata`、`import`、`export`、`ai`、`derived-field`、`search`。Manifest 必须声明适配扩展名

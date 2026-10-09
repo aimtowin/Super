@@ -1,6 +1,6 @@
 # WebDAV Cloud Sync
 
-> Applies to Super Lib v2.2.8; package availability follows release attachments.
+> Reviewed for Super Lib v2.3.17 (2026-10-09); package availability follows release attachments.
 
 Super Lib can sync a library across machines over WebDAV. Configure servers globally, bind each library individually, and Super syncs both ways automatically: local changes upload, remote changes pull.
 
@@ -22,7 +22,7 @@ Open **General settings** → **Sync** to add a sync server:
 - **Allow self-signed certificate**: enable only for a server whose identity you trust. This setting relaxes TLS certificate verification; it does not encrypt HTTP traffic.
 - After saving you can test the connection; failures show an actionable reason (invalid address, DNS, TLS, authentication, …).
 
-![Current global WebDAV settings; no credentials entered](../assets/ui/live-2.2.8/sync-settings.png)
+![Current global WebDAV settings; no credentials entered](../assets/ui/live-2.3.17/settings-sync.png)
 
 ## Bind a library (Library settings)
 
@@ -35,7 +35,7 @@ Open **Library settings** → **Sync**:
 - **Poll interval (seconds)**: how often remote changes are checked, 5 seconds by default. **For large libraries, consider a longer interval** to avoid frequent checks weighing on the network and disk.
 - **Save**: persists the binding; turning auto-sync on triggers a sync immediately.
 
-![Current library sync settings; not bound or enabled](../assets/ui/live-2.2.8/library-sync.png)
+![Current library sync settings; not bound or enabled](../assets/ui/live-2.3.17/library-sync.png)
 
 ## Sync behavior
 
@@ -53,4 +53,4 @@ Open **Library settings** → **Sync**:
 
 The server must provide WebDAV operations including PROPFIND, MKCOL, GET, PUT, and DELETE. Connection testing also checks capabilities such as MOVE. A plain HTTP download address is not a WebDAV server.
 
-![Current open-synced-library dialog; configure a server first](../assets/ui/live-2.2.8/open-sync-library.png)
+![Menu entry for opening a synced library; configure a server first](../assets/ui/live-2.3.17/21-library-menu.png)
