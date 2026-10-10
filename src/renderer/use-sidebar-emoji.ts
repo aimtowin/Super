@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore } from "react";
-import { emojiStorageKey, readEmojiPreferences, saveEmojiPreference } from "./sidebar-emoji-preferences";
+import { getSidebarAppearanceSnapshot, readSidebarAppearances, saveSidebarAppearance, type SidebarAppearance } from "./sidebar-appearance-preferences";
 
 const changeEvent = "super-sidebar-emoji-change";
 function subscribe(onChange: () => void) {
@@ -14,14 +14,17 @@ function subscribe(onChange: () => void) {
 export function useSidebarEmoji(libraryId: string | undefined) {
   const raw = useSyncExternalStore(subscribe, () => {
     try {
-      return libraryId ? localStorage.getItem(emojiStorageKey(libraryId)) : null;
-    } catch { return null; }
-  }, () => null);
-  const icons = useMemo(() => readEmojiPreferences(raw), [raw]);
-  const save = (key: string, emoji: string | null) => {
+      return getSidebarAppearanceSnapshot(libraryId, localStorage);
+    } catch { return "[null,null]"; }
+  }, () => "[null,null]");
+  const appearances = useMemo(() => {
+    const [current, legacy] = JSON.parse(raw) as [string | null, string | null];
+    return readSidebarAppearances(current, legacy);
+  }, [raw]);
+  const save = (key: string, appearance: SidebarAppearance | null) => {
     if (!libraryId) throw new Error("No library");
-    saveEmojiPreference(libraryId, key, emoji, localStorage);
+    saveSidebarAppearance(libraryId, key, appearance, localStorage);
     window.dispatchEvent(new Event(changeEvent));
   };
-  return { icons, save };
+  return { appearances, save };
 }

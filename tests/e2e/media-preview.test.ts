@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { execFileSync } from "node:child_process";
 import {
   existsSync,
@@ -226,6 +227,7 @@ test("generates a decoded thumbnail and keeps asset viewer context coherent", as
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();
@@ -539,6 +541,7 @@ test("video preview reports a specific generation failure and persists its diagn
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     const logsPath = await application.evaluate(({ app }) =>
       app.getPath("logs"),
     );
@@ -721,6 +724,7 @@ test("repairs a historical video preview after a full process restart", async ()
   try {
     application = await launch(missingFfmpegPath, sourcePath);
     let window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();

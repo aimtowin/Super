@@ -105,6 +105,13 @@ afterEach(() => {
 });
 
 describe('文件夹分支：可见性矩阵（与历史内联 JSX 条件一致）', () => {
+  it('linked default removal advertises source preservation and stays available offline', () => {
+    const { ctx } = makeCtx({ locationKind: 'linked', status: 'offline', linkedFolderResolved: true,
+      linkedFolder: LINKED_FOLDER });
+    const item = findItem(registry.resolveMenu(ctx), 'folder.move-to-trash');
+    expect(item.label).toBe('解除库内引用（保留原文件）');
+    expect(item.disabled).toBe(false);
+  });
   it('managed：open / create / rename / copy-paste-clone / trash 可见（移动到…已退役）', () => {
     const { ctx } = makeCtx();
     expect(resolveIds(ctx)).toEqual([

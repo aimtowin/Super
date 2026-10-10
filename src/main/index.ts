@@ -2842,6 +2842,12 @@ async function commandFor(
       return { type: "ignore.list", libraryId: request.libraryId };
     case "ignore.gitignore.get.request":
       return { type: "ignore.gitignore.get", libraryId: request.libraryId };
+    case "folder.inspect.request":
+      return {type: "folder.inspect", libraryId: request.libraryId, folderId: request.folderId};
+    case "asset.embedded-generation.request":
+      return {type: "asset.embedded-generation", libraryId: request.libraryId, assetId: request.assetId};
+    case "ignore.preview.request":
+      return {type: "ignore.preview", libraryId: request.libraryId, content: request.content};
     case "ignore.gitignore.set.request":
       return {
         type: "ignore.gitignore.set",
@@ -2944,6 +2950,7 @@ async function commandFor(
         type: "collection.update",
         libraryId: request.libraryId,
         collectionId: request.collectionId,
+        parentId: request.parentId,
         name: request.name,
         description: request.description,
         coverAssetId: request.coverAssetId,
@@ -3204,12 +3211,15 @@ async function commandFor(
     case "asset.text.save.request":
       return {
         type: "asset.text.save",
+        convertToUtf8: request.convertToUtf8,
         libraryId: request.libraryId,
         assetId: request.assetId,
         content: request.content,
         expectedRevisionId: request.expectedRevisionId,
         createRevision: request.createRevision,
       };
+    case "asset.image.transform.request":
+      return { type: "asset.image.transform", libraryId: request.libraryId, assetId: request.assetId, expectedRevisionId: request.expectedRevisionId, quarterTurns: request.quarterTurns, flipHorizontal: request.flipHorizontal, flipVertical: request.flipVertical };
     case "asset.delete-permanent.request":
       return {
         type: "asset.delete-permanent",
@@ -3578,6 +3588,7 @@ async function commandFor(
         directoryName: request.directoryName,
       };
     }
+    case "sync.cancel.request": return {type:"sync.cancel",libraryId:request.libraryId};
     case "sync.run.request": {
       const server = resolveSyncServerCredentials(request.serverId);
       if (!server) throw new Error("同步服务器不存在，请先在通用设置中配置。");

@@ -1,5 +1,6 @@
 /** Explicit regression inventory: no broad E2E glob (NAS/benchmarks are opt-in). */
 export const DEFAULT_E2E_FILES = Object.freeze([
+  'tests/e2e/quick-start.test.ts',
   'tests/e2e/library-lifecycle.test.ts',
   'tests/e2e/critical-confirmation.test.ts',
   'tests/e2e/asset-ingestion.test.ts',
@@ -35,6 +36,9 @@ export const DEFAULT_E2E_FILES = Object.freeze([
   'tests/e2e/import-conflict-flows.test.ts',
   'tests/e2e/tray-watcher-recovery.test.ts',
   'tests/e2e/sidebar-emoji.test.ts',
+  'tests/e2e/local-media-formats.test.ts',
+  'tests/e2e/sidebar-hierarchy.test.ts',
+  'tests/e2e/remaining-local-upgrades.test.ts',
   'tests/e2e/metadata-version-semantics.test.ts',
 ]);
 

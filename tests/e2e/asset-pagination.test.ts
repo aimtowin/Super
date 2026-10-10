@@ -371,6 +371,10 @@ test("ordinary browsing continuously appends every asset without page controls",
           ]);
           expect(viewerBox).not.toBeNull();
           expect(workspaceBox).not.toBeNull();
+          const workspaceTabs = await window.locator(".workspace-tabs").boundingBox();
+          expect(workspaceTabs).not.toBeNull();
+          workspaceBox!.y += workspaceTabs!.height;
+          workspaceBox!.height -= workspaceTabs!.height;
           await expect(workspaceCanvas).toBeHidden();
           expect(
             Math.abs(viewerBox!.x - workspaceBox!.x),

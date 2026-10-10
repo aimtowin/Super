@@ -22,7 +22,7 @@ export type FolderOntoFolderDropResolution =
     }
   | {
       readonly kind: 'reject';
-      readonly reason: 'same-parent' | 'into-self' | 'into-descendant' | 'empty';
+      readonly reason: 'same-parent' | 'into-self' | 'into-descendant' | 'empty' | 'unknown-folder';
     };
 
 export function resolveDraggedFolderIds(
@@ -82,8 +82,10 @@ export function isFolderDescendantOf(
     folders.map((folder) => [folder.folderId, folder.parentFolderId]),
   );
   let current: string | null = candidateId;
-  while (current) {
+  const visited = new Set<string>();
+  while (current && !visited.has(current)) {
     if (current === ancestorId) return true;
+    visited.add(current);
     current = parentById.get(current) ?? null;
   }
   return false;
@@ -97,6 +99,8 @@ export function resolveFolderOntoFolderDrop(input: {
   readonly targetFolderId: string | null;
   readonly draggedFolderIds: readonly string[];
   readonly folders: readonly FolderDragFact[];
+  /** Sidebar only: dropping children onto their direct parent promotes them one level. */
+  readonly promoteOnParentDrop?: boolean;
 }): FolderOntoFolderDropResolution {
   const unique = [...new Set(input.draggedFolderIds.filter(Boolean))];
   if (unique.length === 0) {
@@ -106,6 +110,9 @@ export function resolveFolderOntoFolderDrop(input: {
   const folderById = new Map(
     input.folders.map((folder) => [folder.folderId, folder]),
   );
+  if (unique.some(id => !folderById.has(id)) || (input.targetFolderId !== null && !folderById.has(input.targetFolderId))) {
+    return { kind: 'reject', reason: 'unknown-folder' };
+  }
 
   for (const folderId of unique) {
     if (input.targetFolderId === folderId) {
@@ -125,6 +132,13 @@ export function resolveFolderOntoFolderDrop(input: {
     return folder.parentFolderId === input.targetFolderId;
   });
   if (allSameParent) {
+    if (input.promoteOnParentDrop && input.targetFolderId !== null) {
+      return {
+        kind: 'move',
+        folderIds: unique,
+        targetParentFolderId: folderById.get(input.targetFolderId)!.parentFolderId,
+      };
+    }
     return { kind: 'reject', reason: 'same-parent' };
   }
 

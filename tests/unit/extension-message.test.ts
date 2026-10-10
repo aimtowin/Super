@@ -729,6 +729,7 @@ describe('createExtensionServer', () => {
       await mkdir(stagingRoot, { recursive: true });
       try {
         server = await startServer({
+          port: TEST_PORT,
           uploadStagingRoot: stagingRoot,
           onSaveUpload: () => { throw new Error('callback failure'); },
           onError: () => { throw new Error('diagnostic failure'); },
@@ -747,6 +748,7 @@ describe('createExtensionServer', () => {
       let upload!: SaveUploadRequest;
       try {
         server = await startServer({
+          port: TEST_PORT,
           uploadStagingRoot: stagingRoot,
           onSaveUpload: (received) => { upload = received; return accepted ? { accepted: true } : { accepted: false, status: 503, reason: 'no library' }; },
         });

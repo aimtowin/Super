@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -35,6 +36,7 @@ test("Folders heading resets only the creation parent while preview and focus st
       };
     }, { temporaryRoot, sourcePath });
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.emulateMedia({ colorScheme: "light" });
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill("新建目标回归库");

@@ -259,16 +259,20 @@ export function videoDurationMs(): number {
 
 function videoEncoderArgs(extension: string, index: number): string[] {
   const { width, height } = videoGeometry();
-  const hue = (index * 13) % 360;
+  void index;
   const common = [
     '-hide_banner',
     '-loglevel',
     'error',
     '-y',
     '-f',
-    'lavfi',
+    'rawvideo',
+    '-pixel_format', 'rgb24',
+    '-video_size', `${width}x${height}`,
+    '-framerate', '12',
     '-i',
-    `testsrc2=size=${width}x${height}:rate=12:duration=${VIDEO_DURATION_SECONDS},hue=h=${hue}:s=1.2`,
+    'pipe:0',
+    '-t', String(VIDEO_DURATION_SECONDS),
     '-an',
   ];
   if (extension === 'webm') {
@@ -303,7 +307,10 @@ function videoEncoderArgs(extension: string, index: number): string[] {
 export function createUniqueVideoFile(outputPath: string, index: number, extension = 'mp4'): void {
   mkdirSync(path.dirname(outputPath), { recursive: true });
   const ffmpeg = resolveFfmpegPath();
-  execFileSync(ffmpeg, [...videoEncoderArgs(extension, index), outputPath], { timeout: 30_000 });
+  const {width, height} = videoGeometry();
+  const frames = Buffer.alloc(width * height * 3 * Math.ceil(VIDEO_DURATION_SECONDS * 12));
+  for (let i = 0; i < frames.length; i++) frames[i] = channel(index + Math.floor(i / 3), i % 3);
+  execFileSync(ffmpeg, [...videoEncoderArgs(extension, index), outputPath], {input: frames, timeout: 30_000, windowsHide: true});
 }
 
 export async function imageChannelVariance(bytes: Buffer): Promise<number> {

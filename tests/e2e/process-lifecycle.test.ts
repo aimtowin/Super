@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
@@ -94,6 +95,7 @@ test('closing the last macOS window keeps the application process alive', async 
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.close();
     await expect.poll(() => application.windows()).toHaveLength(0);
     expect(application.process().exitCode).toBeNull();
@@ -123,6 +125,7 @@ test('Windows custom close hides the window and keeps the tray process alive', a
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     // Dispatch the renderer handler directly. A fresh profile can show a
     // startup dialog whose backdrop covers the caption button's hit target;
     // the real Windows caption button remains available when no modal is open.

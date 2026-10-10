@@ -9,9 +9,10 @@
  * 冲突副本（`name (conflict-YYYYMMDD-HHMM).ext`），并随结果返回供 UI 通知。
  */
 
+import type { SyncMetadata } from './sync-metadata';
 import path from 'node:path';
 
-import type { RemoteStorageDriver, RemoteStorageError } from './remote-storage';
+import { DriverUnsupportedError, RemoteStorageError, type RemoteStorageDriver } from './remote-storage';
 import type { SyncManifest, SyncManifestEntry } from './manifest';
 import { SYNC_ASSETS_DIR, SYNC_TRASH_DIR } from '../../shared/sync-paths';
 import type { SyncAction } from './sync-plan';
@@ -53,6 +54,10 @@ export interface SyncRunnerContext {
   readLocalAsset(assetId: string): Promise<Buffer>;
   /** 把远端内容写入本地资产（新资产或更新）。 */
   writeLocalAsset(assetId: string, relativePath: string, body: Buffer): Promise<void>;
+  relocateLocalAsset?(assetId: string, relativePath: string): Promise<void>;
+  supportsMove?: boolean;
+  onActionComplete?(): void;
+  isCancelled?(): boolean;
   /** 远端墓碑传播：本地资产进回收站。 */
   recycleLocalAsset(assetId: string): Promise<void>;
   /**
@@ -65,7 +70,7 @@ export interface SyncRunnerContext {
     relativePath: string,
     body: Buffer,
     conflictName: string,
-  ): Promise<{ syncId: string; contentHash: string; size: number }>;
+  ): Promise<{ syncId: string; contentHash: string; size: number; metadata?: SyncMetadata }>;
 }
 
 export interface SyncRunResult {
@@ -115,21 +120,76 @@ export async function runSyncActions(
     recycledLocal: 0,
     tombstones: 0,
   };
-  const { driver } = context;
+  const checkCancelled = () => { if (context.isCancelled?.()) throw new RemoteStorageError('CANCELLED','Sync cancelled'); };
+  const driver: RemoteStorageDriver = new Proxy(context.driver, {
+    get(target,key) {
+      const value = Reflect.get(target,key);
+      return typeof value === 'function' ? (...args: unknown[]) => {checkCancelled();return value.apply(target,args);} : value;
+    },
+  });
   const now = context.now();
   const { libraryDirectory } = context;
   const assetPath = (entryPath: string) => assetsPathOf(libraryDirectory, entryPath);
+  const assertFree = async (remotePath: string) => {
+    if (await driver.exists(remotePath)) throw new RemoteStorageError('CONFLICT', '同步目标路径已被占用；保留双方文件，请先处理同名冲突。');
+  };
 
   for (const action of actions) {
+    checkCancelled();
     switch (action.type) {
       case 'upload': {
         const body = await context.readLocalAsset(action.assetId);
         const remotePath = assetPath(action.entry.path);
         await ensureRemoteDir(driver, remotePath);
-        const written = await withRetry(() => driver.write(remotePath, body, { ifMatch: action.entry.etag }));
+        const relocating = action.previousPath !== undefined && action.previousPath !== action.entry.path;
+        const replacingKnownPath = manifest.entries[action.assetId]?.path === action.entry.path;
+        if (!replacingKnownPath) await assertFree(remotePath);
+        const written = await withRetry(() => driver.write(remotePath, body,
+          replacingKnownPath ? { ifMatch: action.entry.etag } : { overwrite: false }));
+        if (relocating) {
+          await withRetry(() => driver.delete(assetPath(action.previousPath!), { ifMatch: action.entry.etag }));
+        }
         const entry: SyncManifestEntry = { ...action.entry, etag: written.etag, deviceId: context.deviceId, modifiedAt: now };
         manifest.entries[action.assetId] = entry;
         result.uploaded += 1;
+        break;
+      }
+      case 'move-remote': {
+        const from = assetPath(action.previousPath);
+        const to = assetPath(action.entry.path);
+        await assertFree(to);
+        await ensureRemoteDir(driver, to);
+        let copiedEtag: string | undefined;
+        try {
+          if (context.supportsMove === false) throw new DriverUnsupportedError('MOVE unavailable');
+          await withRetry(() => driver.move(from, to, { ifMatch: action.entry.etag }));
+        } catch (error) {
+          if (!(error instanceof DriverUnsupportedError)) throw error;
+          const read = await withRetry(() => driver.read(from));
+          if (action.entry.etag && read.etag !== action.entry.etag) {
+            throw new RemoteStorageError('PRECONDITION_FAILED', '远端内容已变化；未执行改名。');
+          }
+          const written = await withRetry(() => driver.write(to, read.body, { overwrite: false }));
+          copiedEtag = written.etag;
+          await withRetry(() => driver.delete(from, { ifMatch: read.etag }));
+        }
+        // MOVE may change an ETag. Do not carry the old path's token forward.
+        manifest.entries[action.assetId] = { ...action.entry, etag: copiedEtag,
+          deviceId: context.deviceId, modifiedAt: now };
+        break;
+      }
+      case 'relocate-local': {
+        if (context.relocateLocalAsset) await context.relocateLocalAsset(action.assetId, action.entry.path);
+        else {
+          // Compatibility with ports without the dedicated rename capability.
+          const body = await context.readLocalAsset(action.assetId);
+          checkCancelled(); await context.writeLocalAsset(action.assetId, action.entry.path, body);
+        }
+        manifest.entries[action.assetId] = { ...action.entry };
+        break;
+      }
+      case 'clear-tombstone': {
+        await withRetry(() => driver.delete(`${libraryDirectory}/${SYNC_TRASH_DIR}/${action.assetId}.json`));
         break;
       }
       case 'download': {
@@ -142,16 +202,29 @@ export async function runSyncActions(
         break;
       }
       case 'conflict': {
-        const conflictName = conflictCopyFileName(action.remote.path, now);
+        const proposedName = conflictCopyFileName(action.remote.path, now);
+        let conflictName = proposedName;
+        for (let suffix = 2; await driver.exists(assetPath(conflictName)); suffix++) {
+          const extension = path.posix.extname(proposedName);
+          conflictName = `${proposedName.slice(0, proposedName.length - extension.length)}-${suffix}${extension}`;
+        }
         if (action.winner === 'local') {
           // 正式版 = 本地内容上传；败者（远端内容）双端存冲突副本。
           const localBody = await context.readLocalAsset(action.assetId);
           const remoteBody = await withRetry(() => driver.read(assetPath(action.remote.path))).then((read) => read.body);
-          const remotePath = assetPath(action.remote.path);
+          const remotePath = assetPath(action.local.path);
+          const relocating = action.local.path !== action.remote.path;
+          if (relocating) await assertFree(remotePath);
+          // Preserve the losing bytes on both sides before replacing the winner.
+          await ensureRemoteDir(driver, assetPath(conflictName));
+          await withRetry(() => driver.write(assetPath(conflictName), remoteBody, { overwrite: false }));
+          const copyMeta = await context.saveLocalConflictCopy(action.assetId, action.remote.path, remoteBody, conflictName);
           await ensureRemoteDir(driver, remotePath);
-          const written = await withRetry(() => driver.write(remotePath, localBody, { ifMatch: action.remote.etag }));
+          const written = await withRetry(() => driver.write(remotePath, localBody,
+            relocating ? { overwrite: false } : { ifMatch: action.remote.etag }));
           manifest.entries[action.assetId] = {
             ...action.remote,
+            path: action.local.path,
             contentHash: action.local.contentHash,
             size: action.local.size,
             version: action.remote.version + 1,
@@ -159,9 +232,6 @@ export async function runSyncActions(
             modifiedAt: now,
             etag: written.etag,
           };
-          await ensureRemoteDir(driver, assetPath(conflictName));
-          await withRetry(() => driver.write(assetPath(conflictName), remoteBody));
-          const copyMeta = await context.saveLocalConflictCopy(action.assetId, action.remote.path, remoteBody, conflictName);
           manifest.entries[copyMeta.syncId] = {
             path: conflictName,
             contentHash: copyMeta.contentHash,
@@ -170,17 +240,21 @@ export async function runSyncActions(
             deviceId: context.deviceId,
             modifiedAt: now,
             metadataVersion: 1,
+            ...(copyMeta.metadata ? {metadata:copyMeta.metadata} : {}),
           };
+          if (relocating) {
+            await withRetry(() => driver.delete(assetPath(action.remote.path), { ifMatch: action.remote.etag }));
+          }
           result.uploaded += 2;
         } else {
           // 正式版 = 远端内容落本地；败者（本地内容）双端存冲突副本。
           const remoteBody = await withRetry(() => driver.read(assetPath(action.remote.path))).then((read) => read.body);
           const localBody = await context.readLocalAsset(action.assetId);
+          await ensureRemoteDir(driver, assetPath(conflictName));
+          await withRetry(() => driver.write(assetPath(conflictName), localBody, { overwrite: false }));
+          const copyMeta = await context.saveLocalConflictCopy(action.assetId, action.remote.path, localBody, conflictName);
           await context.writeLocalAsset(action.assetId, action.remote.path, remoteBody);
           manifest.entries[action.assetId] = { ...action.remote };
-          await ensureRemoteDir(driver, assetPath(conflictName));
-          await withRetry(() => driver.write(assetPath(conflictName), localBody));
-          const copyMeta = await context.saveLocalConflictCopy(action.assetId, action.remote.path, localBody, conflictName);
           manifest.entries[copyMeta.syncId] = {
             path: conflictName,
             contentHash: copyMeta.contentHash,
@@ -189,6 +263,7 @@ export async function runSyncActions(
             deviceId: context.deviceId,
             modifiedAt: now,
             metadataVersion: 1,
+            ...(copyMeta.metadata ? {metadata:copyMeta.metadata} : {}),
           };
           result.downloaded += 1;
           result.uploaded += 1;
@@ -199,7 +274,7 @@ export async function runSyncActions(
       case 'delete-remote': {
         const entry = manifest.entries[action.assetId];
         if (entry) {
-          await withRetry(() => driver.delete(assetPath(entry.path)));
+          await withRetry(() => driver.delete(assetPath(entry.path), { ifMatch: entry.etag }));
           result.deletedRemote += 1;
         }
         break;
@@ -218,12 +293,13 @@ export async function runSyncActions(
         break;
       }
       case 'delete-local': {
-        await context.recycleLocalAsset(action.assetId);
+        checkCancelled(); await context.recycleLocalAsset(action.assetId);
         delete manifest.entries[action.assetId];
         result.recycledLocal += 1;
         break;
       }
     }
+    context.onActionComplete?.();
   }
   return result;
 }

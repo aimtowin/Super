@@ -24,6 +24,8 @@ import {
 } from '../../src/worker/library-service';
 import { importNoConflict } from './import-no-conflict';
 
+import { seedLegacyMissingAssets } from './legacy-missing-fixture';
+
 const temporaryRoots: string[] = [];
 
 // LibraryService holds SQLite connections and recursive fs watchers; on
@@ -217,6 +219,7 @@ describe('downgrade helpers still work with v9', () => {
     const dbPath = path.join(created.libraryPath, '.super', 'library.db');
     const database = new TestDatabase(dbPath);
     removeWriteCoordinationSchema(database);
+    database.exec('PRAGMA foreign_keys = OFF');
     database.exec(`
       DROP TABLE IF EXISTS asset_search;
       DROP TABLE IF EXISTS asset_search_index;
@@ -382,7 +385,7 @@ describe('trashAssets (soft delete)', () => {
     const r = importNoConflict(service, created.libraryId, path.join(root, 'gone.jpg'));
     const assetId = r.assets[0]!.assetId;
     rmSync(path.join(created.libraryPath, 'Assets', 'gone.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const { trashedCount } = service.trashAssets({ libraryId: created.libraryId, assetIds: [assetId] });
     expect(trashedCount).toBe(1);
@@ -1816,7 +1819,7 @@ describe('relinkAsset (single missing asset)', () => {
     const assetId = r.assets[0]!.assetId;
 
     rmSync(path.join(created.libraryPath, 'Assets', 'orig-relink.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const before = service.listAssets({ libraryId: created.libraryId, recursive: true });
     expect(before[0]!.availability).toBe('missing');
@@ -1848,7 +1851,7 @@ describe('relinkAsset (single missing asset)', () => {
     const managedPath = path.join(created.libraryPath, 'Assets', 'managed-persistence.jpg');
 
     rmSync(managedPath);
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const replacementPath = path.join(root, 'replacement.jpg');
     writeFileSync(replacementPath, 'replacement-bytes');
@@ -1864,7 +1867,7 @@ describe('relinkAsset (single missing asset)', () => {
     expect(readFileSync(managedPath, 'utf8')).toBe('replacement-bytes');
     expect(readFileSync(replacementPath, 'utf8')).toBe('replacement-bytes');
 
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
     expect(service.listAssets({ libraryId: created.libraryId, recursive: true })[0]!.availability).toBe('available');
 
     service.closeAll();
@@ -1888,7 +1891,7 @@ describe('relinkAsset (single missing asset)', () => {
     service.setAssetMetadata({ libraryId: created.libraryId, assetId, expectedVersion: 0, description: 'Test Description', rating: 4, favorite: true });
 
     rmSync(path.join(created.libraryPath, 'Assets', 'with-meta.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     writeFileSync(path.join(root, 'relinked-meta.jpg'), 'data');
     const { asset } = service.relinkAsset({ libraryId: created.libraryId, assetId, newAbsolutePath: path.join(root, 'relinked-meta.jpg') });
@@ -1927,7 +1930,7 @@ describe('relinkAsset (single missing asset)', () => {
     const assetId = r.assets[0]!.assetId;
 
     rmSync(path.join(created.libraryPath, 'Assets', 'escape.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     writeFileSync(path.join(created.libraryPath, 'Assets', 'not-allowed.jpg'), 'x');
     expectServiceError(
@@ -1947,7 +1950,7 @@ describe('relinkAsset (single missing asset)', () => {
     const assetId = r.assets[0]!.assetId;
 
     rmSync(path.join(created.libraryPath, 'Assets', 'ghost.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     expectServiceError(
       () => service.relinkAsset({ libraryId: created.libraryId, assetId, newAbsolutePath: path.join(root, 'does-not-exist.jpg') }),
@@ -1988,7 +1991,7 @@ describe('relinkAsset (single missing asset)', () => {
       .find((asset) => asset.locationKind === 'linked')!.assetId;
 
     rmSync(linkedRoot, { recursive: true });
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
     const replacement = path.join(root, 'outside-linked-root.jpg');
     writeFileSync(replacement, 'replacement');
 
@@ -2021,7 +2024,7 @@ describe('relinkBatchPreview', () => {
 
     rmSync(path.join(created.libraryPath, 'Assets', 'batch1.jpg'));
     rmSync(path.join(created.libraryPath, 'Assets', 'sub', 'batch2.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const newRoot = path.join(root, 'new-root');
     mkdirSync(newRoot, { recursive: true });
@@ -2051,7 +2054,7 @@ describe('relinkBatchPreview', () => {
     void importNoConflict(service, created.libraryId, path.join(root, 'only.jpg'));
 
     rmSync(path.join(created.libraryPath, 'Assets', 'only.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const emptyRoot = path.join(root, 'empty-root');
     mkdirSync(emptyRoot, { recursive: true });
@@ -2072,7 +2075,7 @@ describe('relinkBatchPreview', () => {
     const imported = importNoConflict(service, created.libraryId, source, folder.folderId);
 
     rmSync(path.join(created.libraryPath, 'Assets', 'original', 'same-name.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const recoveryRoot = path.join(root, 'recovery');
     mkdirSync(path.join(recoveryRoot, 'renamed-folder'), { recursive: true });
@@ -2110,7 +2113,7 @@ describe('relinkBatchPreview', () => {
 
     rmSync(path.join(created.libraryPath, 'Assets', 'first', 'fingerprint.jpg'));
     rmSync(path.join(created.libraryPath, 'Assets', 'second', 'fingerprint.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const recoveryRoot = path.join(root, 'fingerprint-recovery');
     mkdirSync(path.join(recoveryRoot, 'renamed-a'), { recursive: true });
@@ -2165,7 +2168,7 @@ describe('relinkBatchPreview', () => {
     const second = importNoConflict(service, created.libraryId, source, secondFolder.folderId);
     rmSync(path.join(created.libraryPath, 'Assets', 'first', 'shared.jpg'));
     rmSync(path.join(created.libraryPath, 'Assets', 'second', 'shared.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const replacementRoot = path.join(root, 'ambiguous-root');
     mkdirSync(replacementRoot, { recursive: true });
@@ -2208,7 +2211,7 @@ describe('relinkBatchApply', () => {
 
     rmSync(path.join(created.libraryPath, 'Assets', 'match.jpg'));
     rmSync(path.join(created.libraryPath, 'Assets', 'nomatch.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const newRoot = path.join(root, 'new-root-batch');
     mkdirSync(newRoot, { recursive: true });
@@ -2246,7 +2249,7 @@ describe('relinkBatchApply', () => {
     const nestedManagedPath = path.join(created.libraryPath, 'Assets', 'nested', 'nested-file.jpg');
     rmSync(rootManagedPath);
     rmSync(path.dirname(nestedManagedPath), { recursive: true });
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const replacementRoot = path.join(root, 'batch-replacements');
     mkdirSync(path.join(replacementRoot, 'nested'), { recursive: true });
@@ -2265,7 +2268,7 @@ describe('relinkBatchApply', () => {
     expect(service.resolveAssetPath(created.libraryId, rootImport.assets[0]!.assetId)).toBe(rootManagedPath);
     expect(service.resolveAssetPath(created.libraryId, nestedImport.assets[0]!.assetId)).toBe(nestedManagedPath);
 
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
     expect(service.listAssets({ libraryId: created.libraryId, recursive: true }))
       .toSatisfy((assets: Array<{ availability: string }>) => assets.every((asset) => asset.availability === 'available'));
 
@@ -2291,7 +2294,7 @@ describe('relinkBatchApply', () => {
 
     rmSync(path.join(created.libraryPath, 'Assets', 'sub', 'a.jpg'));
     rmSync(path.join(created.libraryPath, 'Assets', 'sub', 'b.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const replacementRoot = path.join(root, 'replacements');
     mkdirSync(path.join(replacementRoot, 'sub'), { recursive: true });
@@ -2350,7 +2353,7 @@ describe('relinkBatchApply', () => {
     });
 
     rmSync(path.join(created.libraryPath, 'Assets', 'keepmeta.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const newRoot = path.join(root, 'root-keep');
     mkdirSync(newRoot, { recursive: true });
@@ -2399,7 +2402,7 @@ describe('relinkBatchApply', () => {
     service.addCollectionAssets({ libraryId: created.libraryId, collectionId: col.collectionId, assetIds: [assetId] });
 
     rmSync(path.join(created.libraryPath, 'Assets', 'clearmeta.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const newRoot = path.join(root, 'root-clear');
     mkdirSync(newRoot, { recursive: true });
@@ -2435,7 +2438,7 @@ describe('relinkBatchApply', () => {
 
     rmSync(path.join(created.libraryPath, 'Assets', 'fo1.jpg'));
     rmSync(path.join(created.libraryPath, 'Assets', 'fo2.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
 
     const newRoot = path.join(root, 'fo-root');
     mkdirSync(newRoot, { recursive: true });
@@ -2469,7 +2472,7 @@ describe('relinkBatchApply', () => {
       .find((asset) => asset.locationKind === 'linked')!.assetId;
 
     rmSync(path.join(oldFolder, 'moved.jpg'));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
     expect(service.listAssets({ libraryId: created.libraryId, recursive: true })
       .find((asset) => asset.assetId === assetId)!.availability)
       .toBe('missing');
@@ -2485,7 +2488,7 @@ describe('relinkBatchApply', () => {
     expect(result.restoredCount).toBe(1);
     expect(result.assets[0]!.relativeFilePath).toBe('new/moved.jpg');
     expect(service.resolveAssetPath(created.libraryId, assetId)).toBe(realpathSync(path.join(newFolder, 'moved.jpg')));
-    service.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
     expect(service.listAssets({ libraryId: created.libraryId, recursive: true })
       .find((asset) => asset.assetId === assetId)!.availability)
       .toBe('available');

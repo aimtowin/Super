@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -51,6 +52,7 @@ test("persists organization and metadata across restart and surfaces optimistic-
   let application = await launch();
   try {
     let window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();
@@ -356,7 +358,7 @@ test("persists organization and metadata across restart and surfaces optimistic-
     await restoredDescriptionInput.fill("界面中的陈旧修改");
     await restoredDescriptionInput.blur();
     await expect(window.getByText("版本冲突", { exact: true })).toBeVisible();
-    await expect(window.locator(".inline-error")).toContainText(
+    await expect(window.getByRole("alert")).toContainText(
       "元数据已被其他操作修改",
     );
 
@@ -446,6 +448,7 @@ test("switches Inspector assets without connection flashes or mixed metadata", a
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();
@@ -670,6 +673,7 @@ test("assigns Inspector tag suggestions directly and hides tags after their fina
   let application = await launch();
   try {
     let window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();

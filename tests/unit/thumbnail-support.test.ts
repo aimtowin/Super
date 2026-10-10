@@ -7,6 +7,10 @@ import {
 import { shouldShowThumbnailFailureBadge } from "../../src/renderer/thumbnail-failure-badge";
 
 describe("assetSupportsThumbnail", () => {
+  it.each(['ttf', 'otf', 'woff', 'woff2', 'ttc'])("does not promise a raster thumbnail for %s fonts", extension => {
+    expect(assetSupportsThumbnail({mediaType: 'document', displayName: `Sample.${extension}`})).toBe(false);
+    expect(assetSupportsThumbnail({mediaType: 'document', displayName: 'Sample.pdf'})).toBe(true);
+  });
   it("allows raster thumbs for image, video, and audio", () => {
     expect(
       assetSupportsThumbnail({ mediaType: "image", displayName: "a.jpg" }),

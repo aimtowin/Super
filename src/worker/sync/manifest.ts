@@ -6,7 +6,9 @@
  * modifiedAt 只作辅助信号。合并遵循条目级"取新者"策略。
  */
 
+import { syncMetadataSchema, type SyncMetadata } from './sync-metadata';
 import { SYNC_FORMAT_VERSION } from '../../shared/sync-paths';
+import { portableRelativePathSchema } from '../../shared/asset-types';
 
 export interface SyncManifestEntry {
   /** 资产在库内的 portable 相对路径（assets/ 之下）。 */
@@ -23,6 +25,7 @@ export interface SyncManifestEntry {
   etag?: string;
   /** 元数据条目版本（标签/评分/描述），独立于文件内容。 */
   metadataVersion: number;
+  metadata?: SyncMetadata;
 }
 
 export interface SyncManifest {
@@ -50,6 +53,7 @@ export function createEmptyManifest(input: {
 }
 
 export function parseManifest(raw: string): SyncManifest {
+  if (Buffer.byteLength(raw, 'utf8') > 64 * 1024 * 1024) throw new Error('Sync manifest exceeds its budget');
   const parsed = JSON.parse(raw) as SyncManifest;
   if (!parsed || typeof parsed !== 'object' || parsed.formatVersion !== SYNC_FORMAT_VERSION) {
     throw new Error(`Unsupported sync manifest format: ${String((parsed as { formatVersion?: unknown } | null)?.formatVersion)}`);
@@ -57,11 +61,38 @@ export function parseManifest(raw: string): SyncManifest {
   if (typeof parsed.libraryId !== 'string' || typeof parsed.entries !== 'object' || parsed.entries === null) {
     throw new Error('Malformed sync manifest.');
   }
+  if (Array.isArray(parsed.entries)) throw new Error('Malformed sync manifest entries.');
+  if (Object.keys(parsed.entries).length > 200_000) throw new Error("Too many sync entries");
+  for (const [id, entry] of Object.entries(parsed.entries)) {
+    if (entry?.metadata !== undefined) entry.metadata = syncMetadataSchema.parse(entry.metadata);
+    if (!id || id.includes('/') || id.includes('\\') || id.includes('\0') || ['.', '..', '__proto__', 'constructor', 'prototype'].includes(id)
+      || !entry || typeof entry !== 'object'
+      || !portableRelativePathSchema.safeParse(entry.path).success
+      || Array.from(entry.path).some((character) => character.charCodeAt(0) < 32)
+      || typeof entry.contentHash !== 'string' || !entry.contentHash
+      || !Number.isSafeInteger(entry.size) || entry.size < 0
+      || !Number.isSafeInteger(entry.version) || entry.version < 1
+      || typeof entry.modifiedAt !== 'string'
+      || !Number.isSafeInteger(entry.metadataVersion) || entry.metadataVersion < 0) {
+      throw new Error('Malformed or unsafe sync manifest entry.');
+    }
+  }
   return parsed;
 }
 
 export function serializeManifest(manifest: SyncManifest): string {
-  return JSON.stringify(manifest);
+  const header = JSON.stringify({...manifest,entries:undefined}).slice(0,-1);
+  const parts = [header + ',"entries":{'];
+  let bytes = Buffer.byteLength(parts[0]!);
+  let first = true;
+  for (const [id,entry] of Object.entries(manifest.entries)) {
+    const part = (first ? '' : ',') + JSON.stringify(id) + ':' + JSON.stringify(entry);
+    bytes += Buffer.byteLength(part);
+    if (bytes > 64 * 1024 * 1024 - 2) throw new Error('Sync manifest exceeds its budget');
+    parts.push(part); first = false;
+  }
+  parts.push('}}');
+  return parts.join('');
 }
 
 /** 条目新旧裁决：version → modifiedAt → hash（一致视为同版本）。 */

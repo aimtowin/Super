@@ -72,6 +72,7 @@ import { useQuickStart } from "./use-quick-start";
 import {
   NavigationSidebar,
 } from "./NavigationSidebar";
+import { resolveCollectionDrop } from "./collection-drag-drop";
 import { LibrarySwitcher, buildRecentLibraryMenuEntries, type RecentLibraryMenuEntry } from "./LibrarySwitcher";
 import { MainMenu } from "./MainMenu";
 import {
@@ -389,6 +390,10 @@ import {
 } from "./plugin-context-state";
 import { createPluginMenuContributionContext } from "./plugin-contribution-context";
 import { InspectorPanel } from "./InspectorPanel";
+import { addSearchHistory, loadSearchHistory } from "./search-history";
+import { BatchFoldersDialog } from "./BatchFoldersDialog";
+import { WorkspacePreviewContext, type WorkspacePreviewSession } from "./workspace-preview-session";
+import { closeWorkspace, MAX_WORKSPACES, useWorkspaces, useWorkspaceValue } from "./use-workspaces";
 import {
   assetCaptionAlignClass,
   CARD_SIZE_MAX,
@@ -516,6 +521,7 @@ type QueryFilterSnapshot = {
   availabilityFilter: "any" | "available" | "missing";
   excludeAvailabilityFilter: boolean;
   analysisStatusFilter: "any" | "analyzed" | "unanalyzed";
+  generationStatusFilter?: "any" | "marked" | "unmarked";
   widthRange: QueryNumericRangeState;
   heightRange: QueryNumericRangeState;
   aspectRatioRange: QueryNumericRangeState;
@@ -625,6 +631,10 @@ function AppInner() {
   }, [api]);
   // Library / folder / assets (existing)
   const [library, setLibrary] = useState<RendererLibrarySummary | null>(null);
+  const [batchFolderTarget, setBatchFolderTarget] = useState<{libraryId: string; parent: string | null; linked: boolean} | null>(null);
+  if (batchFolderTarget && batchFolderTarget.libraryId !== library?.libraryId) setBatchFolderTarget(null);
+  const workspaces = useWorkspaces();
+  const setWorkspaceRegistry = workspaces.setRegistry;
   const [recentLibraries, setRecentLibraries] = useState<
     RecentLibraryMenuEntry[]
   >([]);
@@ -657,12 +667,12 @@ function AppInner() {
     libraryId: string;
     ids: Map<string, string>;
   }>({ libraryId: "", ids: new Map() });
-  const [assetScope, setAssetScope] = useState<AssetScope>("all");
+  const [assetScope, setAssetScope] = useWorkspaceValue<AssetScope>(workspaces, "assetScope", "all");
   // The highlighted sidebar folder is normally the browse scope. A deliberate
   // toolbar double-click may instead reset only the create target to root while
   // keeping the current folder's canvas and preview entirely intact.
   const [sidebarFolderScope, setSidebarFolderScope] =
-    useState<AssetScope>("all");
+    useWorkspaceValue<AssetScope>(workspaces, "sidebarFolderScope", "all");
   // REQ-FOLDER-001/002/003/010: direct child folder cards shown above assets
   // when the current browse parent is a managed folder or the managed root.
   const [folderBrowseEntries, setFolderBrowseEntries] = useState<FolderBrowseEntry[]>([]);
@@ -674,18 +684,18 @@ function AppInner() {
   const [trashedFolders, setTrashedFolders] = useState<TrashedFolderSummary[]>(
     [],
   );
-  const [trashBrowseTombstoneId, setTrashBrowseTombstoneId] = useState<
+  const [trashBrowseTombstoneId, setTrashBrowseTombstoneId] = useWorkspaceValue<
     string | null
-  >(null);
+  >(workspaces, "trashBrowseTombstoneId", null);
   const [masonryGridWidth, setMasonryGridWidth] = useState(0);
   const assetGridRef = useRef<HTMLDivElement | null>(null);
   const [fatalDialogTitle, setFatalDialogTitle] = useState<string | null>(null);
-  const [selectedFolderIds, setSelectedFolderIds] = useState<string[]>([]);
+  const [selectedFolderIds, setSelectedFolderIds] = useWorkspaceValue<string[]>(workspaces, "selectedFolderIds", []);
   const managedImportTargetFolderIdRef = useRef<string | undefined>(undefined);
   const [allAssetCount, setAllAssetCount] = useState(0);
   const [rootAssetCount, setRootAssetCount] = useState(0);
-  const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
-  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
+  const [selectedAssetId, setSelectedAssetId] = useWorkspaceValue<string | undefined>(workspaces, "selectedAssetId", undefined);
+  const [selectedAssetIds, setSelectedAssetIds] = useWorkspaceValue<string[]>(workspaces, "selectedAssetIds", []);
   // Session persistence must wait until the startup restore has applied the
   // saved scope and selection; otherwise the initial empty React state can
   // overwrite the last browsed asset in localStorage.
@@ -843,28 +853,30 @@ function AppInner() {
     },
     onResizeEnd: () => panelResizeReleaseRef.current(),
   });
-  const navHistoryRef = useRef(createWorkspaceNavHistory());
+  const [workspaceNavHistory] = useWorkspaceValue(workspaces, "history", () => createWorkspaceNavHistory());
+  const navHistoryRef = useRef(workspaceNavHistory);
+  navHistoryRef.current = workspaceNavHistory;
   const suppressNavHistoryRef = useRef(false);
-  const [navHistoryUi, setNavHistoryUi] = useState({
+  const [navHistoryUi, setNavHistoryUi] = useWorkspaceValue(workspaces, "navHistoryUi", {
     canBack: false,
     canForward: false,
   });
 
   // Tags
   const [tags, setTags] = useState<TagSummary[]>([]);
-  const [activeTagId, setActiveTagId] = useState<string | null>(null);
+  const [activeTagId, setActiveTagId] = useWorkspaceValue<string | null>(workspaces, "activeTagId", null);
 
   // Collections
   const [collections, setCollections] = useState<CollectionSummary[]>([]);
-  const [activeCollectionId, setActiveCollectionId] = useState<string | null>(
+  const [activeCollectionId, setActiveCollectionId] = useWorkspaceValue<string | null>(workspaces, "activeCollectionId",
     null,
   );
-  const [collectionRecursive, setCollectionRecursive] = useState(true);
+  const [collectionRecursive, setCollectionRecursive] = useWorkspaceValue(workspaces, "collectionRecursive", true);
   const collectionRecursiveRef = useRef(collectionRecursive);
   /** Virtual linked directory currently opened inside a collection (read-only grouping). */
-  const [collectionSourceFolderId, setCollectionSourceFolderId] = useState<string | null>(null);
+  const [collectionSourceFolderId, setCollectionSourceFolderId] = useWorkspaceValue<string | null>(workspaces, "collectionSourceFolderId", null);
   // REQ-FOLDER-009: folder browse/search recurse only when explicitly enabled.
-  const [folderRecursive, setFolderRecursive] = useState(false);
+  const [folderRecursive, setFolderRecursive] = useWorkspaceValue(workspaces, "folderRecursive", false);
   const folderRecursiveRef = useRef(folderRecursive);
   const [folderRecursivePrefs, setFolderRecursivePrefs] = useState(() =>
     loadFolderRecursivePreferences(),
@@ -887,80 +899,100 @@ function AppInner() {
   const [smartCollections, setSmartCollections] = useState<
     SmartCollectionSummary[]
   >([]);
-  const [activeSmartCollectionId, setActiveSmartCollectionId] = useState<
+  const [activeSmartCollectionId, setActiveSmartCollectionId] = useWorkspaceValue<
     string | null
-  >(null);
+  >(workspaces, "activeSmartCollectionId", null);
   const [aiSmartSearchOpen, setAiSmartSearchOpen] = useState(false);
   const [aiSmartSearchPlanning, setAiSmartSearchPlanning] = useState(false);
   const [aiSmartSearchPlan, setAiSmartSearchPlan] = useState<AiSearchPlan | null>(null);
   const [aiSmartTemporaryCollection, setAiSmartTemporaryCollection] =
     useState<SmartCollectionSummary | null>(null);
-  const [searchValue, setSearchValue] = useState("");
+  const [searchValue, setSearchValue] = useWorkspaceValue(workspaces, "searchValue", "");
+  const [generationStatusFilter, setGenerationStatusFilter] = useWorkspaceValue<"any" | "marked" | "unmarked">(workspaces,"generationStatusFilter","any");
+  const searchHistoryGeneration = useRef(0);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  useEffect(() => {
+    searchHistoryGeneration.current++;
+    queueMicrotask(() => { try { setSearchHistory(library ? loadSearchHistory(localStorage, library.libraryId) : []); } catch { setSearchHistory([]); } });
+  }, [library]);
+  useEffect(() => {
+    if (!library || !searchValue.trim()) return;
+    const generation = searchHistoryGeneration.current;
+    const timer = setTimeout(() => {
+      if (generation !== searchHistoryGeneration.current) return;
+      setSearchHistory(current => {
+        const next = addSearchHistory(current, searchValue);
+        try { localStorage.setItem("super.search-history.v1." + library.libraryId, JSON.stringify(next)); } catch { /* quota/private browsing */ }
+        return next;
+      });
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [library, searchValue]);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [formatFilter, setFormatFilter] = useState("");
-  const [excludeFormatFilter, setExcludeFormatFilter] = useState(false);
-  const [colorFilter, setColorFilter] = useState("");
-  const [excludeColorFilter, setExcludeColorFilter] = useState(false);
-  const [tagFilter, setTagFilter] = useState("");
-  const [excludeTagFilter, setExcludeTagFilter] = useState(false);
+  const [formatFilter, setFormatFilter] = useWorkspaceValue(workspaces, "formatFilter", "");
+  const [excludeFormatFilter, setExcludeFormatFilter] = useWorkspaceValue(workspaces, "excludeFormatFilter", false);
+  const [colorFilter, setColorFilter] = useWorkspaceValue(workspaces, "colorFilter", "");
+  const [excludeColorFilter, setExcludeColorFilter] = useWorkspaceValue(workspaces, "excludeColorFilter", false);
+  const [tagFilter, setTagFilter] = useWorkspaceValue(workspaces, "tagFilter", "");
+  const [excludeTagFilter, setExcludeTagFilter] = useWorkspaceValue(workspaces, "excludeTagFilter", false);
   // Super-eaxs: tag-management AND search ("包含 N 个标签") splits the tag
   // names into separate clauses (clauses are ANDed; values within one clause
   // are ORed). Any explicit filter-bar edit resets this to "any".
-  const [tagFilterMatch, setTagFilterMatch] = useState<"any" | "all">("any");
-  const [ratingFilter, setRatingFilter] = useState("");
-  const [excludeRatingFilter, setExcludeRatingFilter] = useState(false);
-  const [favoriteFilter, setFavoriteFilter] = useState<"any" | "yes" | "no">(
+  const [tagFilterMatch, setTagFilterMatch] = useWorkspaceValue<"any" | "all">(workspaces, "tagFilterMatch", "any");
+  const [ratingFilter, setRatingFilter] = useWorkspaceValue(workspaces, "ratingFilter", "");
+  const [excludeRatingFilter, setExcludeRatingFilter] = useWorkspaceValue(workspaces, "excludeRatingFilter", false);
+  const [favoriteFilter, setFavoriteFilter] = useWorkspaceValue<"any" | "yes" | "no">(workspaces, "favoriteFilter",
     "any",
   );
-  const [sourceUrlFilter, setSourceUrlFilter] = useState<"any" | "yes" | "no">(
+  const [sourceUrlFilter, setSourceUrlFilter] = useWorkspaceValue<"any" | "yes" | "no">(workspaces, "sourceUrlFilter",
     "any",
   );
-  const [availabilityFilter, setAvailabilityFilter] = useState<
+  const [availabilityFilter, setAvailabilityFilter] = useWorkspaceValue<
     "any" | "available" | "missing"
-  >("any");
+  >(workspaces, "availabilityFilter", "any");
   const [excludeAvailabilityFilter, setExcludeAvailabilityFilter] =
-    useState(false);
-  const [analysisStatusFilter, setAnalysisStatusFilter] = useState<
+    useWorkspaceValue(workspaces, "excludeAvailabilityFilter", false);
+  const [analysisStatusFilter, setAnalysisStatusFilter] = useWorkspaceValue<
     "any" | "analyzed" | "unanalyzed"
-  >("any");
-  const [widthRange, setWidthRange] = useState({
+  >(workspaces, "analysisStatusFilter", "any");
+  const [widthRange, setWidthRange] = useWorkspaceValue(workspaces, "widthRange", {
     min: "",
     max: "",
     exclude: false,
   });
-  const [heightRange, setHeightRange] = useState({
+  const [heightRange, setHeightRange] = useWorkspaceValue(workspaces, "heightRange", {
     min: "",
     max: "",
     exclude: false,
   });
-  const [aspectRatioRange, setAspectRatioRange] = useState({
+  const [aspectRatioRange, setAspectRatioRange] = useWorkspaceValue(workspaces, "aspectRatioRange", {
     min: "",
     max: "",
     exclude: false,
   });
   /** Shape/aspect preset OR ranges (Super-gp4). */
-  const [aspectRatioRanges, setAspectRatioRanges] = useState<
+  const [aspectRatioRanges, setAspectRatioRanges] = useWorkspaceValue<
     Array<{ min: string; max: string }>
-  >([]);
+  >(workspaces, "aspectRatioRanges", []);
   // REQ-FILTER-010: resolution buckets filter on the longer edge (long_edge).
-  const [longEdgeRange, setLongEdgeRange] = useState({
+  const [longEdgeRange, setLongEdgeRange] = useWorkspaceValue(workspaces, "longEdgeRange", {
     min: "",
     max: "",
     exclude: false,
   });
-  const [durationRange, setDurationRange] = useState({
+  const [durationRange, setDurationRange] = useWorkspaceValue(workspaces, "durationRange", {
     min: "",
     max: "",
     exclude: false,
   });
-  const [sortField, setSortField] = useState<SortDefinition["field"]>(
+  const [sortField, setSortField] = useWorkspaceValue<SortDefinition["field"]>(workspaces, "sortField",
     () => loadBrowseSortPreferences().field,
   );
-  const [sortOrder, setSortOrder] = useState<SortDefinition["order"]>(
+  const [sortOrder, setSortOrder] = useWorkspaceValue<SortDefinition["order"]>(workspaces, "sortOrder",
     () => loadBrowseSortPreferences().order,
   );
   /** Super-hm28: null = normal sort; otherwise client shuffle seed. */
-  const [shuffleSeed, setShuffleSeed] = useState<number | null>(null);
+  const [shuffleSeed, setShuffleSeed] = useWorkspaceValue<number | null>(workspaces, "shuffleSeed", null);
   const [, setSearchOffset] = useState(0);
   const [searchTotal, setSearchTotal] = useState<number | null>(null);
   const [searchSnippets, setSearchSnippets] = useState<Map<string, string>>(
@@ -1033,14 +1065,14 @@ function AppInner() {
     useState<OrganizationRenameTarget | null>(null);
 
   // Trash / Delete / Relink state
-  const [showTrash, setShowTrash] = useState(false);
+  const [showTrash, setShowTrash] = useWorkspaceValue(workspaces, "showTrash", false);
   useEffect(() => {
     if (!showTrash) {
       queueMicrotask(() => setTrashBrowseTombstoneId(null));
     }
-  }, [showTrash]);
-  const [showTagManagement, setShowTagManagement] = useState(false);
-  const [activePluginSidebarViewId, setActivePluginSidebarViewId] = useState<string | null>(null);
+  }, [showTrash, setTrashBrowseTombstoneId]);
+  const [showTagManagement, setShowTagManagement] = useWorkspaceValue(workspaces, "showTagManagement", false);
+  const [activePluginSidebarViewId, setActivePluginSidebarViewId] = useWorkspaceValue<string | null>(workspaces, "activePluginSidebarViewId", null);
   const [trashedAssets, setTrashedAssets] = useState<AssetSummary[]>([]);
   const [trashedAssetCount, setTrashedAssetCount] = useState(0);
 
@@ -1472,6 +1504,10 @@ function AppInner() {
     assetMetadata,
     setAssetMetadata,
     editDescription,
+    editRating,
+    editFavorite,
+    editSourceUrl,
+    editAuthor,
     setVersionConflict,
     setEditDescription,
     setEditRating,
@@ -1541,7 +1577,12 @@ function AppInner() {
   const [openLibraryChooserOpen, setOpenLibraryChooserOpen] = useState(false);
 
   // Thumbnail / Preview state
-  const [previewAsset, setPreviewAsset] = useState<AssetSummary | null>(null);
+  const [previewAsset, setPreviewAsset] = useWorkspaceValue<AssetSummary | null>(workspaces, "previewAsset", null);
+  const [workspacePreviewSessions] = useWorkspaceValue(workspaces, "previewSessions", () => new Map<string, WorkspacePreviewSession>());
+  if (previewAsset && !workspacePreviewSessions.has(previewAsset.assetId)) {
+    if (workspacePreviewSessions.size >= 10) workspacePreviewSessions.delete(workspacePreviewSessions.keys().next().value!);
+    workspacePreviewSessions.set(previewAsset.assetId, {});
+  }
   // Keep the browse surface visually hidden while the viewer close path
   // restores its scroll anchor. Revealing the grid before the two-frame
   // restoration causes a one-frame flash and can make Chromium paint at the
@@ -2257,6 +2298,7 @@ function AppInner() {
       availabilityFilter,
       excludeAvailabilityFilter,
       analysisStatusFilter,
+      generationStatusFilter,
       widthRange,
       heightRange,
       aspectRatioRange,
@@ -2291,6 +2333,7 @@ function AppInner() {
     availabilityFilter,
     excludeAvailabilityFilter,
     analysisStatusFilter,
+    generationStatusFilter,
     widthRange,
     heightRange,
     aspectRatioRange,
@@ -2975,7 +3018,7 @@ function AppInner() {
     setSelectedAssetId(asset.assetId);
     selectionAnchorRef.current = asset.assetId;
     setPreviewAsset(asset);
-  }, [selectionAnchorRef, wakeViewerChrome]);
+  }, [selectionAnchorRef, wakeViewerChrome, setSelectedAssetIds, setSelectedAssetId, setPreviewAsset]);
 
   const persistAssetColorSpace = useCallback(async (assetId: string, colorSpace: string | null) => {
     if (!api || !library) return;
@@ -2997,7 +3040,7 @@ function AppInner() {
     selectionAnchorRef.current = asset.assetId;
     previewFocusReturnRef.current = asset.assetId;
     setPreviewAsset(asset);
-  }, [selectionAnchorRef]);
+  }, [selectionAnchorRef, setSelectedAssetIds, setSelectedAssetId, setPreviewAsset]);
 
   const closeAssetPreview = useCallback(async (restoreBrowsePosition = true) => {
     // A scope transition can arrive after React has already cleared
@@ -3007,6 +3050,12 @@ function AppInner() {
     if (!restoreBrowsePosition && previewRestoreFrameRef.current !== null) {
       window.cancelAnimationFrame(previewRestoreFrameRef.current);
       previewRestoreFrameRef.current = null;
+    }
+    if (!restoreBrowsePosition) {
+      previewCloseGenerationRef.current += 1;
+      closingPreviewRef.current = null;
+      previewRestoringRef.current = false;
+      setPreviewRestoring(false);
     }
     const closingAsset = previewAsset;
     if (!closingAsset) return;
@@ -3136,7 +3185,7 @@ function AppInner() {
         closingPreviewRef.current = null;
       }
     }
-  }, [api, library, previewAsset]);
+  }, [api, library, previewAsset, setPreviewAsset]);
 
   // Collection tree helper
   const collectionTree = useMemo(() => {
@@ -4079,6 +4128,7 @@ function AppInner() {
   }
 
   function clearDiscoveryFiltersOnly() {
+    setGenerationStatusFilter("any");
     setFormatFilter("");
     setExcludeFormatFilter(false);
     setColorFilter("");
@@ -4135,6 +4185,9 @@ function AppInner() {
       case "analysis_status":
         setAnalysisStatusFilter("any");
         return;
+      case "generation_status":
+        setGenerationStatusFilter("any");
+        return;
       case "aspect_ratio":
         setAspectRatioRange({ min: "", max: "", exclude: false });
         setAspectRatioRanges([]);
@@ -4159,8 +4212,14 @@ function AppInner() {
     options?: { refreshSidebar?: boolean },
   ) {
     if (!library) return;
+    const owner = metadataSessionRef.current;
+    if (!metadataController.isCurrent(owner) || owner.libraryId !== library.libraryId) return;
+    // Reserve the navigation intent before awaiting preview teardown. A
+    // creation response must not navigate over a newer user action.
+    const generation = ++contentLoadGenerationRef.current;
     // REQ-VIEW-004: leave the browse affiliate viewer when the browse scope changes.
     await closeAssetPreview(false);
+    if (!metadataController.isCurrent(owner) || generation !== contentLoadGenerationRef.current) return;
     closeContextMenu();
     workspaceCanvasRef.current?.scrollTo({ top: 0, left: 0 });
     setShowTrash(false);
@@ -4767,6 +4826,11 @@ function AppInner() {
 
   async function createCollection() {
     if (!api || !library) return;
+    const owner = metadataSessionRef.current;
+    if (!metadataController.isCurrent(owner) || owner.libraryId !== library.libraryId) return;
+    const generation = contentLoadGenerationRef.current;
+    const isCurrent = () => metadataController.isCurrent(owner)
+      && generation === contentLoadGenerationRef.current;
     const name = collectionInputValue.trim();
     if (!name) {
       setShowCollectionInput(false);
@@ -4782,24 +4846,30 @@ function AppInner() {
         name,
       });
       if (!result.ok) throw new LibraryOperationError(result.error);
-      setShowCollectionInput(false);
-      setCollectionInputValue("");
-      setNewCollectionParentId(null);
+      if (!metadataController.isCurrent(owner)) return;
+      if (isCurrent()) {
+        setShowCollectionInput(false);
+        setCollectionInputValue("");
+        setNewCollectionParentId(null);
+      }
       const collectionResult = await api.listCollections({
         libraryId: library.libraryId,
       });
       if (!collectionResult.ok) {
         throw new LibraryOperationError(collectionResult.error);
       }
+      if (!metadataController.isCurrent(owner)) return;
       setCollections(collectionResult.value);
       // Creation should land in the new collection immediately, matching
       // folder and smart-collection creation instead of leaving the user in
       // the previous browse scope.
-      await chooseCollection(result.value.collectionId);
+      if (isCurrent()) await chooseCollection(result.value.collectionId);
     } catch (caught) {
-      setError(toOrganizationMessage(caught, "collection", "create", locale));
+      if (isCurrent()) setError(toOrganizationMessage(caught, "collection", "create", locale));
     } finally {
-      setUiState("ready");
+      // Background hydration can supersede the navigation generation without
+      // owning this loading flag. Always release it for the same library.
+      if (metadataController.isCurrent(owner)) setUiState("ready");
     }
   }
 
@@ -4916,7 +4986,7 @@ function AppInner() {
     }
   }
 
-  async function reorderCollectionSibling(sourceId: string, targetId: string) {
+  async function reorderCollectionSibling(sourceId: string, targetId: string | null) {
     if (!api || !library || sourceId === targetId) return;
     const source = collections.find(
       (collection) => collection.collectionId === sourceId,
@@ -4925,10 +4995,26 @@ function AppInner() {
       (collection) => collection.collectionId === targetId,
     );
     setDraggedCollectionId(null);
-    if (!source || !target || source.parentId !== target.parentId) {
-      setError(t("toast.collectionReorderSameLevelOnly"));
+    const resolution = resolveCollectionDrop(collections, sourceId, targetId);
+    if (resolution.kind === "reject") {
       return;
     }
+    if (resolution.kind === "move") {
+      setUiState("loading");
+      try {
+        const position = (collectionTree.get(resolution.parentId) ?? []).reduce((max, item) => Math.max(max, item.position), -1) + 1;
+        const updated = await api.updateCollection({ libraryId: library.libraryId, collectionId: sourceId, parentId: resolution.parentId, position });
+        if (!updated.ok) throw new LibraryOperationError(updated.error);
+        const result = await api.listCollections({ libraryId: library.libraryId });
+        if (!result.ok) throw new LibraryOperationError(result.error);
+        setCollections(result.value);
+        setNotice(t("toast.collectionOrderUpdated"), updated.value.historyEntryId);
+      } catch (caught) {
+        setError(toMessage(caught, t("toast.collectionReorderFailed"), locale));
+      } finally { setUiState("ready"); }
+      return;
+    }
+    if (!source || !target) return;
     const siblings = [...(collectionTree.get(source.parentId) ?? [])];
     const sourceIndex = siblings.findIndex(
       (collection) => collection.collectionId === sourceId,
@@ -5195,6 +5281,7 @@ function AppInner() {
       availabilityFilter,
       excludeAvailabilityFilter,
       analysisStatusFilter,
+      generationStatusFilter,
       widthRange,
       heightRange,
       aspectRatioRange,
@@ -5289,6 +5376,7 @@ function AppInner() {
         values: [filtersState.analysisStatusFilter],
         exclude: false,
       });
+    if (filtersState.generationStatusFilter && filtersState.generationStatusFilter !== "any") filters.push({field:"generation_status", values:[filtersState.generationStatusFilter], exclude:false});
     const technicalRanges: Array<{
       field: "width" | "height" | "aspect_ratio" | "duration_ms" | "long_edge";
       input: { min: string; max: string; exclude: boolean };
@@ -5634,7 +5722,7 @@ function AppInner() {
     clearAssetSelection();
     await reloadCurrentContent();
   }
-  useEffect(() => {
+  useLayoutEffect(() => {
     reloadCurrentContentRef.current = reloadCurrentContent;
   });
 
@@ -6225,7 +6313,7 @@ function AppInner() {
       favoriteFilter !== "any" ||
       sourceUrlFilter !== "any" ||
       availabilityFilter !== "any" ||
-      analysisStatusFilter !== "any" ||
+      analysisStatusFilter !== "any" || generationStatusFilter !== "any" ||
       widthRange.min ||
       widthRange.max ||
       heightRange.min ||
@@ -6289,6 +6377,7 @@ function AppInner() {
     availabilityFilter,
     excludeAvailabilityFilter,
     analysisStatusFilter,
+    generationStatusFilter,
     widthRange,
     heightRange,
     aspectRatioRange,
@@ -9849,6 +9938,57 @@ function AppInner() {
     return () => document.removeEventListener("keydown", onUndoRedoKeyDown);
   }, [busy, editableTextFocused, operationHistory, undoLastFileOp, redoLastOperation]);
 
+  const lastWorkspaceLibrary = useRef<string | null>(null);
+  useEffect(() => {
+    const id = library?.libraryId ?? null;
+    if (lastWorkspaceLibrary.current === id) return;
+    lastWorkspaceLibrary.current = id;
+    setWorkspaceRegistry(state => ({activeId: state.activeId, items: [state.items.find(item => item.id === state.activeId)!]}));
+  }, [library?.libraryId, setWorkspaceRegistry]);
+  const restoredWorkspace = useRef(workspaces.registry.activeId);
+  const [workspaceHydrated, setWorkspaceHydrated] = useState<string | null>(null);
+  const pendingWorkspaceScroll = useRef<{id: string; left: number; top: number} | null>(null);
+  useLayoutEffect(() => {
+    if (restoredWorkspace.current === workspaces.registry.activeId) return;
+    restoredWorkspace.current = workspaces.registry.activeId;
+    searchRequestGenerationRef.current++; contentLoadGenerationRef.current++; previewCloseGenerationRef.current++;
+    if (previewRestoreFrameRef.current !== null) cancelAnimationFrame(previewRestoreFrameRef.current);
+    setPreviewRestoring(false); previewRestoringRef.current = false;
+    previewScrollSnapshotRef.current = null;
+    const active = workspaces.registry.items.find(item => item.id === workspaces.registry.activeId)!;
+    pendingWorkspaceScroll.current = {id: active.id, ...active.scroll};
+    collectionRecursiveRef.current = collectionRecursive; folderRecursiveRef.current = folderRecursive;
+    closeContextMenu();
+    setWorkspaceHydrated(null);
+    void reloadCurrentContentRef.current({ awaitHydration: true }).then(() => setWorkspaceHydrated(active.id));
+    // Other dependencies change during ordinary navigation; this is a tab-only transition.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaces.registry.activeId]);
+  useLayoutEffect(() => {
+    if (contentLoading || workspaceHydrated !== workspaces.registry.activeId || !pendingWorkspaceScroll.current) return;
+    const bookmark = pendingWorkspaceScroll.current;
+    const frame = requestAnimationFrame(() => {
+      if (bookmark.id !== restoredWorkspace.current) return;
+      workspaceCanvasRef.current?.scrollTo({left: bookmark.left, top: bookmark.top});
+      pendingWorkspaceScroll.current = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [contentLoading, workspaceHydrated, browseLayout, assets, workspaces.registry.activeId]);
+
+  async function changeWorkspace(id?: string, removeId?: string) {
+    if (busy || !library || (previewModalRef.current && !await previewModalRef.current.flushBeforeSwitch())) return;
+    const canvas = workspaceCanvasRef.current;
+    workspaces.setRegistry(state => {
+      const items = state.items.map(item => item.id === state.activeId ? {...item, scroll: {left: canvas?.scrollLeft ?? 0, top: canvas?.scrollTop ?? 0}} : item);
+      const current = {...state, items};
+      if (removeId) return closeWorkspace(current, removeId);
+      if (id) return items.some(item => item.id === id) ? {...current, activeId: id} : current;
+      if (items.length >= MAX_WORKSPACES) return current;
+      const next = {id: crypto.randomUUID(), name: String(items.length + 1), values: {}, scroll: {left: 0, top: 0}};
+      return {activeId: next.id, items: [...items, next]};
+    });
+  }
+
   return (
     <>
     <HoverTipHost />
@@ -9968,8 +10108,12 @@ function AppInner() {
                 placeholder={t("toolbar.searchPlaceholder")}
                 ref={searchInputRef}
                 type="search"
+                list="super-search-history"
                 value={searchValue}
               />
+              <datalist id="super-search-history">{searchHistory.map(query => <option key={query} value={query} />)}</datalist>
+              {searchHistory.length > 0 && <button className="search-syntax-help" type="button" aria-label={t("localUpgrade.clearHistory")}
+                onClick={() => { searchHistoryGeneration.current++; setSearchHistory([]); try { localStorage.removeItem("super.search-history.v1." + library!.libraryId); } catch { /* optional */ } }}>×</button>}
               <button
                 aria-label={t("toolbar.searchSyntax")}
                 className="search-syntax-help"
@@ -10010,6 +10154,7 @@ function AppInner() {
         ) : null}
       </header>
       <NavigationSidebar
+        onBatchCreateFolders={() => library && setBatchFolderTarget({libraryId: library.libraryId, parent: selectedSidebarFolderId ?? null, linked: !!selectedSidebarFolderId && linkedFolders.some(folder => folder.folderId === selectedSidebarFolderId)})}
         footer={
           <div className="navigation-footer-content">
             <LibrarySwitcher
@@ -10120,7 +10265,7 @@ function AppInner() {
         onAssetsDroppedOnFolder={(folderId, assetIds, mode) =>
           handleAssetsDroppedOnFolder(folderId, assetIds, mode)
         }
-        onFoldersDroppedOnFolder={handleFoldersDroppedOnFolder}
+        onFoldersDroppedOnFolder={(targetId, ids) => handleFoldersDroppedOnFolder(targetId, ids, true)}
         selectedFolderIds={selectedFolderIds}
         onAssetsDroppedOnTrash={(assetIds) =>
           handleAssetsDroppedOnTrash(assetIds)
@@ -10192,6 +10337,16 @@ function AppInner() {
         }
       />
       <section className="workspace">
+        {library && <div className="workspace-tabs" role="tablist" aria-label={t("localUpgrade.workspace")}>
+          {workspaces.registry.items.map(item => <div className="workspace-tab" key={item.id}>
+            <button type="button" role="tab" aria-selected={item.id === workspaces.registry.activeId} disabled={busy}
+              onClick={() => void changeWorkspace(item.id)}>{t("localUpgrade.workspace")} {item.name}</button>
+            <button type="button" disabled={busy || workspaces.registry.items.length === 1}
+              aria-label={t("localUpgrade.closeWorkspace")} onClick={() => void changeWorkspace(undefined,item.id)}>×</button>
+          </div>)}
+          <button type="button" disabled={busy || workspaces.registry.items.length >= MAX_WORKSPACES}
+            aria-label={t("localUpgrade.newWorkspace")} onClick={() => void changeWorkspace()}>＋</button>
+        </div>}
         <div
           className={`workspace-bar${previewAsset ? " is-viewing" : previewRestoring ? " is-restoring" : ""}`}
         >
@@ -10286,6 +10441,13 @@ function AppInner() {
             </span>
           </div>
           <div className="workspace-tools">
+            {library && !showTrash && <select aria-label={t("localUpgrade.generationFilter")} title={t("localUpgrade.generationHint")}
+              className="workspace-generation-filter text-field" value={generationStatusFilter}
+              onChange={event => setGenerationStatusFilter(event.target.value as typeof generationStatusFilter)}>
+              <option value="any">{t("localUpgrade.generationAny")}</option>
+              <option value="marked">{t("localUpgrade.generationMarked")}</option>
+              <option value="unmarked">{t("localUpgrade.generationUnmarked")}</option>
+            </select>}
             {library && showTrash ? (
               <>
                 <button
@@ -10417,6 +10579,7 @@ function AppInner() {
         >
           <DimensionFilterBar
             analysisStatusFilter={analysisStatusFilter}
+            generationStatusFilter={generationStatusFilter}
             availabilityFilter={availabilityFilter}
             aspectRatioRange={aspectRatioRange}
             aspectRatioRanges={aspectRatioRanges}
@@ -11104,6 +11267,16 @@ function AppInner() {
                         : { type: "button" as const })}
                       onMouseDown={(e) => {
                         cardMouseDownRef.current = e.button;
+                        // A deliberate new selection supersedes delayed focus
+                        // restoration from the previous viewer. Never steal it.
+                        if (e.button === 0 && previewRestoreFrameRef.current !== null) {
+                          cancelAnimationFrame(previewRestoreFrameRef.current);
+                          previewRestoreFrameRef.current = null;
+                          previewCloseGenerationRef.current += 1;
+                          closingPreviewRef.current = null;
+                          previewRestoringRef.current = false;
+                          setPreviewRestoring(false);
+                        }
                       }}
                       onMouseEnter={() => {
                         setHoveredAssetId(asset.assetId);
@@ -11713,12 +11886,13 @@ function AppInner() {
         )}
         </div>
         {previewAsset && library && api && (
+          <WorkspacePreviewContext.Provider value={workspacePreviewSessions.get(previewAsset.assetId)!}>
           <AssetPreviewModal
             ref={previewModalRef}
             api={api}
             asset={previewAsset}
             chromeIdle={viewerChromeIdle}
-            key={previewAsset.assetId}
+            key={workspaces.registry.activeId + ":" + previewAsset.assetId}
             libraryId={library.libraryId}
             onChromeActivity={onViewerChromeActivity}
             onSetColorSpace={(assetId, colorSpace) => {
@@ -11739,9 +11913,11 @@ function AppInner() {
             pluginApi={(window as RendererWindow).super?.plugins}
             pluginContributionRefreshKey={pluginContributionRefreshKey}
           />
+          </WorkspacePreviewContext.Provider>
         )}
       </section>
       <InspectorPanel
+        selectedFolderId={selectedFolderId}
         aiContent={
           aiContent?.assetId === selectedAsset?.assetId ? aiContent : null
         }
@@ -11771,8 +11947,8 @@ function AppInner() {
         handleAuthorSave={handleAuthorSave}
         library={library}
         loadMetadata={loadMetadata}
-        onAssignTagToAsset={(tagId) => void handleInspectorAssignTag(tagId)}
-        onCreateAndAssignTag={(tagName) => void handleInspectorCreateAndAssignTag(tagName)}
+        onAssignTagToAsset={handleInspectorAssignTag}
+        onCreateAndAssignTag={handleInspectorCreateAndAssignTag}
         onOpenSourceUrl={handleOpenSourceUrl}
         onAnalyze={(assetId) => { void handleInspectorAnalyze(assetId); }}
         onResolveReanalysis={(assetId, accept) => { void resolveAiReanalysis(assetId, accept); }}
@@ -12114,6 +12290,7 @@ function AppInner() {
         }}
       />
       <LibrarySettingsDialog
+        api={api}
         key={`${library?.libraryId ?? "none"}:${librarySettingsOpen ? "open" : "closed"}:${gitignoreContent}`}
         library={library}
         open={librarySettingsOpen}
@@ -12184,6 +12361,9 @@ function AppInner() {
         }}
         syncProgress={syncProgress}
       />
+      {batchFolderTarget && api && library && <BatchFoldersDialog api={api} libraryId={library.libraryId} key={library.libraryId}
+        parentFolderId={batchFolderTarget.parent} linked={batchFolderTarget.linked}
+        onClose={() => setBatchFolderTarget(null)} onDone={() => reloadCurrentContentRef.current()} />}
       <OpenSyncLibraryDialog
         callbacks={{
           async syncListServers() {

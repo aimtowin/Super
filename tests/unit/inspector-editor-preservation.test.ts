@@ -23,11 +23,17 @@ afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) awai
 async function mount() {
   let finishSave!: (value: LibraryApiResult<AssetMetadataResult>) => void;
   let holdAi = false;
+  let stored = metadata();
+  let holdRead = false;
+  let finishRead!: (value: LibraryApiResult<AssetMetadataResult>) => void;
   let finishAi!: (value: Awaited<ReturnType<SuperLibraryApi["getAiContent"]>>) => void;
   const saveInputs: Array<Parameters<SuperLibraryApi["setAssetMetadata"]>[0]> = [];
   const summaryUpdaters: Array<SetStateAction<AssetSummary[]>> = [];
   const bridge: Pick<SuperLibraryApi, "getAssetMetadata" | "setAssetMetadata" | "getAiContent"> = {
-    async getAssetMetadata() { return { ok: true as const, value: metadata() }; },
+    async getAssetMetadata() {
+      if (holdRead) return new Promise<LibraryApiResult<AssetMetadataResult>>((resolve) => { finishRead = resolve; });
+      return { ok: true as const, value: stored };
+    },
     setAssetMetadata(input: Parameters<SuperLibraryApi["setAssetMetadata"]>[0]) {
       saveInputs.push(input);
       return new Promise<LibraryApiResult<AssetMetadataResult>>((resolve) => { finishSave = resolve; });
@@ -57,7 +63,7 @@ async function mount() {
     const result = useInspectorAssetMetadata({
       api: bridge as SuperLibraryApi, library, metadataController: controller, metadataSession: owner,
       selectedAssetId: "a", selectedAssetIds: selection.current, selectedAssetIdRef: primary, selectedAssetIdsRef: selection,
-      assetMetadata, editDescription: description, setAssetMetadata, setVersionConflict: ignore, setEditDescription, setEditAuthor,
+      assetMetadata, editDescription: description, editRating: rating, editFavorite: false, editSourceUrl: sourceUrl, editAuthor: author, setAssetMetadata, setVersionConflict: ignore, setEditDescription, setEditAuthor,
       setEditSourceUrl, setEditRating, setEditFavorite: ignore, setDescriptionIsAi: ignore,
       aiContentRef: aiRef, setAiContent, setAssets: (update) => { summaryUpdaters.push(update); },
       setTrashedAssets: (update) => { summaryUpdaters.push(update); }, setNotice: ignore, setError: ignore,
@@ -75,7 +81,10 @@ async function mount() {
   await act(async () => root.render(createElement(LocaleProvider, { initialPreference: "zh-CN", children: createElement(Host) })));
   cleanups.push(async () => { await act(async () => root.unmount()); controller.disposeSession(owner); host.remove(); });
   const renderHost = () => root.render(createElement(LocaleProvider, { initialPreference: "zh-CN", children: createElement(Host) }));
-  return { saveInputs, summaryUpdaters, get snapshot() { return snapshot; }, finishSave(fields: Partial<AssetMetadataResult>) {
+  return { saveInputs, summaryUpdaters, get snapshot() { return snapshot; }, markConflict() {
+    stored = metadata({ description: "remote-description", author: "remote-author", sourcePageUrl: "https://example.test/remote", entityVersion: 2 });
+    controller.markConflict(owner, "a", 2);
+  }, holdRead() { holdRead = true; }, finishRead() { finishRead({ ok: true, value: stored }); }, finishSave(fields: Partial<AssetMetadataResult>) {
     finishSave({ ok: true, value: metadata({ entityVersion: 2, ...fields }) });
   }, invalidate() { controller.invalidate(owner, ["a"]); }, holdAi() { holdAi = true; }, finishAi() {
     finishAi({ ok: true, value: { assetId: "a", description: "generated", tags: [], rating: null, modelVersion: "fixture", reanalysis: null } });
@@ -87,6 +96,28 @@ async function mount() {
 }
 
 describe("real single Inspector hook: pending editor drafts survive unrelated durable saves (A5 review)", () => {
+  it("explicit conflict refresh adopts the latest metadata instead of retaining rejected drafts", async () => {
+    const f = await mount();
+    await act(async () => f.snapshot.editDraft({ description: "rejected-description", author: "rejected-author", sourceUrl: "https://example.test/rejected" }));
+    await act(async () => f.markConflict());
+    await act(async () => { await f.snapshot.loadMetadata(); });
+    expect(f.snapshot.description).toBe("remote-description");
+    expect(f.snapshot.author).toBe("remote-author");
+    expect(f.snapshot.sourceUrl).toBe("https://example.test/remote");
+  });
+
+  it("conflict refresh preserves newer input typed after the explicit refresh click", async () => {
+    const f = await mount();
+    await act(async () => f.snapshot.editDraft({ description: "rejected" }));
+    await act(async () => f.markConflict());
+    f.holdRead(); let refreshing!: Promise<void>;
+    await act(async () => { refreshing = f.snapshot.loadMetadata(); });
+    await act(async () => f.snapshot.editDraft({ description: "newer-draft", author: "newer-author" }));
+    await act(async () => { f.finishRead(); await refreshing; });
+    expect(f.snapshot.description).toBe("newer-draft");
+    expect(f.snapshot.author).toBe("newer-author");
+  });
+
   it("keeps unsaved description/author/source drafts when rating is saved", async () => {
     const f = await mount();
     expect(f.snapshot.description).toBe("stored-description");

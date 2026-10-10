@@ -15,6 +15,7 @@
 
 import { FBX_CONVERT_ERROR_CODES } from './fbx-conversion';
 import { MODEL_THUMBNAIL_ERROR_CODES } from './model-thumbnail-protocol';
+import { fontMimeForExtension } from './font-media';
 
 export type ThumbnailSupportMediaType =
   | "image"
@@ -32,7 +33,8 @@ export function assetSupportsThumbnail(asset: {
   if (asset.mediaType === "text") return false;
   // Documents (PDF etc.) get a first-page thumbnail; HTML thumbnails render
   // offscreen in Main (Super-8ca259).
-  if (asset.mediaType === "document") return true;
+  // FontFace owns font previews; there is no raster font thumbnail generator.
+  if (asset.mediaType === "document") return fontMimeForExtension(asset.displayName) === null;
   return asset.mediaType !== "other";
 }
 

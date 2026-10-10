@@ -22,8 +22,11 @@ export interface LocalAssetSnapshotEntry {
 }
 
 export type SyncAction =
-  | { type: 'upload'; assetId: string; entry: SyncManifestEntry }
+  | { type: 'upload'; assetId: string; entry: SyncManifestEntry; previousPath?: string }
   | { type: 'download'; assetId: string; entry: SyncManifestEntry }
+  | { type: 'move-remote'; assetId: string; previousPath: string; entry: SyncManifestEntry }
+  | { type: 'relocate-local'; assetId: string; entry: SyncManifestEntry }
+  | { type: 'clear-tombstone'; assetId: string }
   | {
       type: 'conflict';
       assetId: string;
@@ -45,6 +48,12 @@ export interface PlanSyncInput {
   remoteManifest: SyncManifest;
   /** 远端墓碑集合（trash/ 下的 assetId）。 */
   remoteTombstones: Set<string>;
+  /** Unavailable is not deleted. Absent historical IDs are also protected. */
+  localMissing?: Set<string>;
+  /** Only durable, explicit user deletion authorizes DELETE/tombstones. */
+  localDeleted?: Set<string>;
+  /** Only an explicit restore may clear a tombstone; cache loss is not restore. */
+  localRestored?: Set<string>;
 }
 
 function conflictWinner(local: SyncManifestEntry, remote: SyncManifestEntry): 'local' | 'remote' {
@@ -68,20 +77,30 @@ export function planSyncActions(input: PlanSyncInput): SyncAction[] {
     const remoteEntry = remoteManifest.entries[assetId];
     const remoteTombstone = remoteTombstones.has(assetId);
 
+    // Upload an explicit restore before clearing its old tombstone.
+    if (localAsset && remoteTombstone && input.localRestored?.has(assetId)) {
+      actions.push({ type: 'upload', assetId, entry: {
+        ...localAsset, version: (remoteEntry?.version ?? 0) + 1,
+        metadataVersion: remoteEntry?.metadataVersion ?? 1, deviceId: '',
+      } }, { type: 'clear-tombstone', assetId });
+      continue;
+    }
     // 远端墓碑：远端用户删除 → 本地进回收站（删除动作由应用层执行）。
     if (localAsset && remoteTombstone) {
       actions.push({ type: 'delete-local', assetId });
       continue;
     }
 
-    // 本地删除：本地已无该资产但上次同步点存在。
-    if (!localAsset && localEntry) {
+    // A snapshot omission alone never authorizes destruction of a remote copy.
+    if (!localAsset && input.localDeleted?.has(assetId)) {
+      if (remoteTombstone && !remoteEntry) continue;
       if (remoteEntry && !remoteTombstone) {
         actions.push({ type: 'delete-remote', assetId });
       }
       actions.push({ type: 'tombstone-upload', assetId });
       continue;
     }
+    if (!localAsset && (localEntry || input.localMissing?.has(assetId))) continue;
 
     // 本地新资产（上次同步点不存在）。
     if (localAsset && !localEntry) {
@@ -102,7 +121,7 @@ export function planSyncActions(input: PlanSyncInput): SyncAction[] {
       } else if (remoteEntry.contentHash !== localAsset.contentHash) {
         // 新导入资产与远端已有同名不同内容：LWW 裁决。
         const localAsEntry: SyncManifestEntry = {
-          path: remoteEntry.path,
+          path: localAsset.path,
           contentHash: localAsset.contentHash,
           size: localAsset.size,
           version: remoteEntry.version + 1,
@@ -118,7 +137,9 @@ export function planSyncActions(input: PlanSyncInput): SyncAction[] {
           winner: conflictWinner(localAsEntry, remoteEntry),
         });
       }
-      // 哈希一致：无需动作。
+      else if (remoteEntry.path !== localAsset.path) {
+        actions.push({ type: 'relocate-local', assetId, entry: remoteEntry });
+      }
       continue;
     }
 
@@ -126,12 +147,32 @@ export function planSyncActions(input: PlanSyncInput): SyncAction[] {
     if (localAsset && localEntry && remoteEntry) {
       const localChanged = localAsset.contentHash !== localEntry.contentHash;
       const remoteChanged = remoteEntry.contentHash !== localEntry.contentHash;
+      const localMoved = localAsset.path !== localEntry.path;
+      const remoteMoved = remoteEntry.path !== localEntry.path;
+      // Same bytes do not imply same location. Concurrent path-only edits
+      // follow the already-committed remote path; no bytes are discarded.
+      if (localAsset.contentHash === remoteEntry.contentHash) {
+        if (localMoved && !remoteMoved) {
+          actions.push({ type: 'move-remote', assetId, previousPath: remoteEntry.path,
+            entry: { ...remoteEntry, path: localAsset.path, version: remoteEntry.version + 1 } });
+        } else if (remoteEntry.path !== localAsset.path) {
+          actions.push({ type: 'relocate-local', assetId, entry: remoteEntry });
+        }
+        continue;
+      }
       if (localChanged && !remoteChanged) {
+        const targetPath = localMoved ? localAsset.path : remoteEntry.path;
+        if (targetPath !== localAsset.path) {
+          actions.push({ type: 'relocate-local', assetId, entry: { ...remoteEntry, path: targetPath } });
+        }
         actions.push({
           type: 'upload',
           assetId,
+          previousPath: remoteEntry.path,
           entry: {
             ...localEntry,
+            path: targetPath,
+            etag: remoteEntry.etag,
             contentHash: localAsset.contentHash,
             size: localAsset.size,
             version: remoteEntry.version + 1,
@@ -139,12 +180,18 @@ export function planSyncActions(input: PlanSyncInput): SyncAction[] {
           },
         });
       } else if (!localChanged && remoteChanged) {
-        actions.push({ type: 'download', assetId, entry: remoteEntry });
+        const target = localMoved && !remoteMoved
+          ? { ...remoteEntry, path: localAsset.path, version: remoteEntry.version + 1 } : remoteEntry;
+        if (target.path !== remoteEntry.path) {
+          actions.push({ type: 'move-remote', assetId, previousPath: remoteEntry.path, entry: target });
+        }
+        actions.push({ type: 'download', assetId, entry: target });
       } else if (localChanged && remoteChanged && localAsset.contentHash !== remoteEntry.contentHash) {
         actions.push({
           type: 'conflict',
           assetId,
-          local: { ...localEntry, contentHash: localAsset.contentHash, size: localAsset.size, modifiedAt: localAsset.modifiedAt },
+          local: { ...localEntry, path: localMoved ? localAsset.path : remoteEntry.path,
+            contentHash: localAsset.contentHash, size: localAsset.size, modifiedAt: localAsset.modifiedAt },
           remote: remoteEntry,
           winner: conflictWinner(
             { ...localEntry, contentHash: localAsset.contentHash, size: localAsset.size, modifiedAt: localAsset.modifiedAt },
@@ -153,6 +200,12 @@ export function planSyncActions(input: PlanSyncInput): SyncAction[] {
         });
       }
       // 双侧哈希一致（或都未变）：无需动作。
+      continue;
+    }
+
+    if (localAsset && localEntry && !remoteEntry && !remoteTombstone) {
+      actions.push({ type: 'upload', assetId, entry: { ...localEntry, ...localAsset,
+        version: localEntry.version + 1, etag: undefined } });
       continue;
     }
 

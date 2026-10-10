@@ -11,6 +11,25 @@ afterEach(async () => {
 });
 
 describe('WebDAVDriver against mock server (Super-xffq)', () => {
+  it('honors caller cancellation without turning it into a retryable network error', async () => {
+    const server = await startMockWebDAVServer(); servers.push(server);
+    const controller = new AbortController(); controller.abort();
+    const driver = new WebDAVDriver({baseUrl:server.baseUrl,signal:controller.signal});
+    await expect(driver.read('anything')).rejects.toMatchObject({code:'CANCELLED',retryable:false});
+  });
+  it('guards no-overwrite PUT/MOVE and stale conditional MOVE/DELETE over HTTP', async () => {
+    const server = await startMockWebDAVServer(); servers.push(server);
+    const driver = new WebDAVDriver({ baseUrl: server.baseUrl });
+    const initial = await driver.write('old.txt', Buffer.from('initial'));
+    await driver.write('occupied.txt', Buffer.from('keep'));
+    await expect(driver.write('occupied.txt', Buffer.from('bad'), { overwrite: false })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(driver.move('old.txt', 'occupied.txt')).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await driver.write('old.txt', Buffer.from('newer'));
+    await expect(driver.move('old.txt', 'new.txt', { ifMatch: initial.etag })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(driver.delete('old.txt', { ifMatch: initial.etag })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect((await driver.read('old.txt')).body.toString()).toBe('newer');
+    expect((await driver.read('occupied.txt')).body.toString()).toBe('keep');
+  });
   it('writes, reads, lists, moves and deletes files with proper URL encoding', async () => {
     const server = await startMockWebDAVServer();
     servers.push(server);

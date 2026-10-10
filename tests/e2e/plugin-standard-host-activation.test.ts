@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -33,6 +34,7 @@ test('activates the fixed standard Host probe and writes library storage', async
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole('button', { name: '创建资源库' }).click();
     await window.getByRole('textbox', { name: '名称' }).fill(libraryName);
     await window.getByRole('button', { name: '创建', exact: true }).click();

@@ -963,6 +963,9 @@ export function PluginSettingsPage({
                   </span>
                   <Icon name="chevron-right" size={16} />
                 </button>
+                {installError === undefined ? null : (
+                  <p className="app-settings-error" role="alert">{installError}</p>
+                )}
               </div>
             )}
           </DialogShell>

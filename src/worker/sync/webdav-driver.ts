@@ -47,6 +47,7 @@ export interface WebDAVDriverConfig {
    * （Super-4s8b 用户决定），只依赖 TCP 层行为与用户取消。
    */
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 interface DigestChallenge {
@@ -132,6 +133,7 @@ function rawRequest(options: {
   rejectUnauthorized: boolean;
   /** 单请求墙钟超时；undefined = 无超时（数据传输路径，用户决定）。 */
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<RawResponse> {
   return new Promise((resolve, reject) => {
     const parsed = new URL(options.url);
@@ -147,6 +149,7 @@ function rawRequest(options: {
         ...(options.body ? { 'Content-Length': String(options.body.length) } : {}),
       },
       rejectUnauthorized: options.rejectUnauthorized,
+      signal:options.signal,
       ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
     }, (response) => {
       const chunks: Buffer[] = [];
@@ -170,6 +173,7 @@ function rawRequest(options: {
         }, options.timeoutMs);
     request.on('error', (error: NodeJS.ErrnoException) => {
       if (hardTimer !== undefined) clearTimeout(hardTimer);
+      if (options.signal?.aborted) {reject(new RemoteStorageError('CANCELLED','同步已取消')); return;}
       if (error instanceof RemoteStorageError) {
         reject(error);
         return;
@@ -192,7 +196,7 @@ function rawRequest(options: {
 }
 
 export class WebDAVDriver implements RemoteStorageDriver {
-  private readonly config: Required<Pick<WebDAVDriverConfig, 'baseUrl' | 'allowInsecureTls' | 'timeoutMs'>> & Pick<WebDAVDriverConfig, 'username' | 'password'>;
+  private readonly config: Required<Pick<WebDAVDriverConfig, 'baseUrl' | 'allowInsecureTls' | 'timeoutMs'>> & Pick<WebDAVDriverConfig, 'username' | 'password' | 'signal'>;
   private readonly basicAuthorization?: string;
   private cachedCapabilities?: DriverCapabilities;
 
@@ -204,6 +208,7 @@ export class WebDAVDriver implements RemoteStorageDriver {
     }
     this.config = {
       baseUrl: config.baseUrl,
+      signal:config.signal,
       username: config.username,
       password: config.password,
       allowInsecureTls: config.allowInsecureTls ?? false,
@@ -235,6 +240,7 @@ export class WebDAVDriver implements RemoteStorageDriver {
       body: options.body,
       rejectUnauthorized: !this.config.allowInsecureTls,
       timeoutMs: options.timeoutMs,
+      signal:this.config.signal,
     });
 
     // Digest 挑战：401 + WWW-Authenticate: Digest → 计算并重试一次。
@@ -342,14 +348,15 @@ export class WebDAVDriver implements RemoteStorageDriver {
     const response = await this.request('PUT', portablePath, {
       body,
       ifMatch: options.ifMatch,
-      headers: { 'Content-Type': 'application/octet-stream' },
+      headers: { 'Content-Type': 'application/octet-stream',
+        ...(options.overwrite === false ? { 'If-None-Match': '*' } : {}) },
     });
     this.assertStatus(response, 'PUT', [200, 201, 204]);
     return { etag: response.headers.etag, status: response.status };
   }
 
-  async delete(portablePath: string): Promise<void> {
-    const response = await this.request('DELETE', portablePath);
+  async delete(portablePath: string, options: { ifMatch?: string } = {}): Promise<void> {
+    const response = await this.request('DELETE', portablePath, { ifMatch: options.ifMatch });
     this.assertStatus(response, 'DELETE', [200, 204, 404]);
   }
 
@@ -366,9 +373,10 @@ export class WebDAVDriver implements RemoteStorageDriver {
     }
   }
 
-  async move(from: string, to: string): Promise<void> {
+  async move(from: string, to: string, options: { ifMatch?: string } = {}): Promise<void> {
     const destination = joinWebDAVUrl(this.config.baseUrl, to);
-    const response = await this.request('MOVE', from, { destination, headers: { Overwrite: 'F' } });
+    const response = await this.request('MOVE', from, { destination,
+      ifMatch: options.ifMatch, headers: { Overwrite: 'F' } });
     if (response.status === 405 || response.status === 501) {
       throw new DriverUnsupportedError('WebDAV 服务器不支持 MOVE。');
     }

@@ -306,7 +306,6 @@ describe('asset file rename (REQ-MENU-002)', () => {
     expectCode(
       () => service.renameAssetFile({ libraryId: library.libraryId, assetId: missing.assetId, newBaseName: 'new' }),
       'ASSET_NOT_FOUND',
-      'SOURCE_NOT_FOUND',
     );
 
     service.trashAssets({ libraryId: library.libraryId, assetIds: [trashed.assetId] });
@@ -340,13 +339,12 @@ describe('asset file rename (REQ-MENU-002)', () => {
     const gone = assets.find((asset) => asset.relativeFilePath === 'gone.png')!;
     const held = assets.find((asset) => asset.relativeFilePath === 'held.png')!;
 
-    // File removed while the root stays online -> asset reconciles to missing.
+    // File removed while the root stays online -> confirmed missing index is purged.
     rmSync(path.join(missingRoot, 'gone.png'));
     service.refreshManagedAssets(library.libraryId);
     expectCode(
       () => service.renameAssetFile({ libraryId: library.libraryId, assetId: gone.assetId, newBaseName: 'new' }),
       'ASSET_NOT_FOUND',
-      'SOURCE_NOT_FOUND',
     );
 
     // Whole linked root gone -> folder offline -> rename refused.

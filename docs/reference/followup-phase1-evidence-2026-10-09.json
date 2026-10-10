@@ -1,0 +1,355 @@
+{
+  "date": "2026-10-09",
+  "baseline": "6dc9ab07eed3b6a0e58c3481397c9823d2bd7bc2",
+  "applicationVersion": "2.3.17",
+  "schemaVersion": 50,
+  "released": false,
+  "total": {
+    "passed": 692,
+    "failed": 0,
+    "skipped": 2,
+    "files": 42
+  },
+  "groups": [
+    {
+      "name": "audit",
+      "config": "vitest.serpent-audit.config.ts",
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "suites": [
+        {
+          "file": "tests/audit/serpent-followup.test.ts",
+          "passed": 10,
+          "failed": 0,
+          "skipped": []
+        }
+      ]
+    },
+    {
+      "name": "regression",
+      "config": "vitest.config.ts",
+      "passed": 362,
+      "failed": 0,
+      "skipped": 0,
+      "suites": [
+        {
+          "file": "tests/worker/followup-safety.test.ts",
+          "passed": 26,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/followup-sync-plan.test.ts",
+          "passed": 17,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/image-sequence.test.ts",
+          "passed": 16,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/migration-discipline.test.ts",
+          "passed": 8,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/schema-compatibility.test.ts",
+          "passed": 57,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/schema-downgrade-chain.test.ts",
+          "passed": 60,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/sync-engine.test.ts",
+          "passed": 9,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/sync-library-integration.test.ts",
+          "passed": 6,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/sync-open-remote.test.ts",
+          "passed": 1,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/sync-plan.test.ts",
+          "passed": 8,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/sync-runner.test.ts",
+          "passed": 8,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/sync-two-device.test.ts",
+          "passed": 2,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/webdav-driver.test.ts",
+          "passed": 10,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/unit/artifact-response.test.ts",
+          "passed": 6,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/unit/followup-presentation.test.ts",
+          "passed": 26,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/unit/protocol.test.ts",
+          "passed": 102,
+          "failed": 0,
+          "skipped": []
+        }
+      ]
+    },
+    {
+      "name": "adjacent",
+      "config": "vitest.config.ts",
+      "passed": 155,
+      "failed": 0,
+      "skipped": 1,
+      "suites": [
+        {
+          "file": "tests/worker/billfish-import.test.ts",
+          "passed": 5,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/import-confirmation.test.ts",
+          "passed": 8,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/import-no-conflict.test.ts",
+          "passed": 1,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/import-planning.test.ts",
+          "passed": 52,
+          "failed": 0,
+          "skipped": [
+            "Windows path hardening (Super-8b5b.7 review) rejects NTFS-forbidden characters in import relative paths"
+          ]
+        },
+        {
+          "file": "tests/worker/import-source-stability.test.ts",
+          "passed": 20,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/linked-folder-index.test.ts",
+          "passed": 1,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/linked-folders.test.ts",
+          "passed": 24,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/pending-import-lifecycle.test.ts",
+          "passed": 9,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/unit/3d-viewer-pbr-mapping.test.ts",
+          "passed": 5,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/unit/color-filter-presets.test.ts",
+          "passed": 5,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/unit/image-sequence-import-dialog.test.ts",
+          "passed": 3,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/unit/image-sequence-import.test.ts",
+          "passed": 4,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/unit/import-confirmation-dialog.test.ts",
+          "passed": 1,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/unit/pbr-texture-channel.test.ts",
+          "passed": 9,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/unit/raw-image-metadata.test.ts",
+          "passed": 2,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/unit/text-media.test.ts",
+          "passed": 6,
+          "failed": 0,
+          "skipped": []
+        }
+      ]
+    },
+    {
+      "name": "compat",
+      "config": "vitest.config.ts",
+      "passed": 165,
+      "failed": 0,
+      "skipped": 1,
+      "suites": [
+        {
+          "file": "tests/worker/database-recovery.test.ts",
+          "passed": 10,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/folder-delete.test.ts",
+          "passed": 18,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/library-availability.test.ts",
+          "passed": 12,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/library-schema-readonly.test.ts",
+          "passed": 5,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/library-service.test.ts",
+          "passed": 26,
+          "failed": 0,
+          "skipped": [
+            "LibraryService lifecycle does not leave a partial library when the parent is not writable"
+          ]
+        },
+        {
+          "file": "tests/worker/palette-artifact.test.ts",
+          "passed": 11,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/schema-failure.test.ts",
+          "passed": 7,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/worker/schema-lenient-read.test.ts",
+          "passed": 27,
+          "failed": 0,
+          "skipped": []
+        },
+        {
+          "file": "tests/unit/sidebar-commands.test.ts",
+          "passed": 49,
+          "failed": 0,
+          "skipped": []
+        }
+      ]
+    }
+  ],
+  "sourceSha256": {
+    "src/preload/index.ts": "1c37ddac9c4bad5f1839892cca4c1fd243199d49c834ed94d2927c8cb9fa9e39",
+    "src/renderer/AssetPreviewModal.tsx": "a4f9891b8813f354781980aba8e5b5262e251d44362b7a1896d82d05fb3e0b25",
+    "src/renderer/LibrarySettingsDialog.tsx": "a521f83b5600669110084ceb40e416416a7253e082afa700552c4ccf79d82d9d",
+    "src/renderer/TextViewerControls.tsx": "34afa59a6203d73547cc764247c50aad9eac09af858ad6f6b7614c09a1569653",
+    "src/renderer/commands/sidebar-commands.ts": "ad4cfaaed61283f70f74d3aa8b14d31a5b74788ad8e1513fddd87117873921a6",
+    "src/renderer/i18n/catalogs/en.ts": "86c20285f5b0d8316a4d1c148d6a0e82e1def0d5775a513b0874b35132daa141",
+    "src/renderer/i18n/catalogs/zh-CN.ts": "d0b5c09bc35ad2cd176c92bae938e066b8393891eaede6aaebf6b05d98432433",
+    "src/renderer/pbr-texture-channel.ts": "fa7a02828886fd592490e5b5ae9882dd5325a95c139be55b3a40d3b62faf86e7",
+    "src/shared/color-filter-presets.ts": "c7cc42b307461496239255b424a768a25342c94872fd24c75dfa35f8f2148768",
+    "src/shared/library-api.ts": "d62b13635aa150da7415021524e62166b12efec442b957c177fd4a3c9cc2f825",
+    "src/shared/protocol/responses.ts": "20126fdebb007f504dd7f853f3c3da83126effa7e9215f5afebb9e9fb1ed4712",
+    "src/shared/text-encoding.ts": "1db0c1ff86a8d94d31176cbefca62f7e2e094a063dc6184dfd04c747f93bb029",
+    "src/worker/library-service.ts": "e2f1ccc677fc091b3dc546449b56c2b5a35d3ad536fdea3644d092e0e65057d3",
+    "src/worker/raw-image-metadata.ts": "39c31b11649fbd01a95bc324cee84ec7c48ab40d63b20294ce8b851ccfb16a46",
+    "src/worker/sync/library-port.ts": "e2da94527075ce8d88ea0ca55bd49d5bb8b6da75a6911de3856d398411e20ff0",
+    "src/worker/sync/manifest.ts": "e06938852903fc8fb91d78a4f8f7a1a20cbe2122c1395d399191c1ec725d758f",
+    "src/worker/sync/remote-storage.ts": "c70866123a4796aa3275e471d0ad3d2a5b4bdc09401ce47a0b654b6d94f0cc11",
+    "src/worker/sync/sync-engine.ts": "5445fe416ba3711ac93cd6becddb083992b428fede6f932512683623a5732725",
+    "src/worker/sync/sync-plan.ts": "9c7e1e5a24885b7b24387e6297f62bddc72fb02ec986a2b8527351f303d2e288",
+    "src/worker/sync/sync-runner.ts": "74a639837df6e0a824e138ad5c52b1746a5f01df24c11a3c1706220db654d071",
+    "src/worker/sync/webdav-driver.ts": "d595b17cad3b25cd17b36a0f44d7c68943762b77db7a3046e1cb795534f0004b",
+    "tests/audit/serpent-followup.test.ts": "e2debe8cb3fdd6c30dc534791c2156709c2e329b5050deeaf2f954264300b9eb",
+    "tests/unit/followup-presentation.test.ts": "94c83f8fbf1cfd8b4950d576b9a9fad700bf026f22b98fb4d87da1e3edf04195",
+    "tests/unit/sidebar-commands.test.ts": "cbe4a1478e7c9fcf93680c99ced647c7c6e66f92cb7ce1adc70b3b103c925785",
+    "tests/worker/folder-delete.test.ts": "04bd377b78a47bbcac337e46f4b8a8e44b7b616152e1161e2b58b87ed10601d9",
+    "tests/worker/followup-safety.test.ts": "e7dda757f34b0da645fb71f6c9fe1a833a680978916c8251f485737c98d059cd",
+    "tests/worker/followup-sync-plan.test.ts": "8de01a471751b4134584230b537f0d002716bc4c5eeb682b9e15a9486baffbd5",
+    "tests/worker/image-sequence.test.ts": "935039671ef10af4095a884e522d3635364b62116e74494dbc89d8b4b5eb2318",
+    "tests/worker/sync-engine.test.ts": "fec2a17050ceef43ee328d05e7975f2b269d25a95aaf78a46c30bfd12bf84d09",
+    "tests/worker/sync-plan.test.ts": "4483d7001addcbb93dc9a2b210ad242ea3ed462ab59d684b7b5a5a61e04a9c16",
+    "tests/worker/sync-runner.test.ts": "0efc791c1fb7ee0d2b3e32ebf8a7dd287377cf9354efd2006d18a7951296e559",
+    "tests/worker/webdav-driver.test.ts": "db84ddb5414aaf13ac2a8a8306dcbd6a0f8cb7cb25ebb08ec855c213548702b1",
+    "tests/worker/webdav-fixture-server.ts": "72ea1e9d03178f5007cdfa98376bf61c13b2cbb13e6820777c1e3fa2b228546f"
+  },
+  "checks": {
+    "typecheck": "PASS: tsc --noEmit and extension tsc",
+    "changedSourceAndTestEslint": "PASS",
+    "gitDiffCheck": "PASS",
+    "documentationToolTests": { "passed": 5, "failed": 0 },
+    "documentationReferences": { "files": 145, "references": 583, "broken": 0 }
+  },
+  "limits": [
+    "Targeted automated regression, not the complete test suite",
+    "No real library, installed application, ECS or real WebDAV service modified",
+    "No GUI screenshots or macOS verification in this phase",
+    "Historical red audit evidence retained separately"
+  ]
+}

@@ -1841,7 +1841,7 @@ describe('EXR/TGA (oiiotool)', () => {
     expect(metadataRow).toMatchObject({
       width: 5184,
       height: 3464,
-      generator_version: 'exifr@7.1.3;raw-image-metadata-v1',
+      generator_version: 'exifr@7.1.3;raw-image-metadata-v2',
     });
     const metadataPath = path.join(
       created.libraryPath,

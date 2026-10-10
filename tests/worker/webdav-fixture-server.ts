@@ -146,6 +146,9 @@ ${responses}
         for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         const body = Buffer.concat(chunks);
         const existing = storage.get(path);
+        if (req.headers['if-none-match'] === '*' && existing) {
+          res.writeHead(412); res.end('Destination exists'); return;
+        }
         if (supportsEtag && req.headers['if-match'] && existing && req.headers['if-match'] !== existing.etag) {
           res.writeHead(412);
           res.end('Precondition failed');
@@ -176,6 +179,10 @@ ${responses}
       }
 
       if (method === 'DELETE') {
+        const existing = storage.get(path);
+        if (supportsEtag && req.headers['if-match'] && existing?.etag !== req.headers['if-match']) {
+          res.writeHead(412); res.end('Precondition failed'); return;
+        }
         const hadFile = storage.delete(path);
         if (collections.delete(path)) {
           res.writeHead(204);
@@ -208,6 +215,10 @@ ${responses}
         const destination = new URL(String(req.headers.destination ?? ''), 'http://localhost').pathname;
         const to = decodeURIComponent(destination.replace(/^\/+/, ''));
         const stored = storage.get(path);
+        if ((req.headers.overwrite === 'F' && (storage.has(to) || collections.has(to)))
+          || (supportsEtag && req.headers['if-match'] && req.headers['if-match'] !== stored?.etag)) {
+          res.writeHead(412); res.end('Precondition failed'); return;
+        }
         if (stored) {
           storage.set(to, stored);
           storage.delete(path);

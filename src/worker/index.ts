@@ -202,11 +202,13 @@ const libraryService = new LibraryService({
 const processLifetime = setInterval(() => {}, 60 * 60_000);
 
 /** Super-xffq：按设备身份构建同步引擎（deviceId 由 Main 持久化生成）。 */
+const activeSyncControllers = new Map<string, AbortController>();
 function buildSyncEngine(
   deviceId: string,
   onProgress?: SyncEngineOptions['onProgress'],
+  controller?: AbortController,
 ): SyncEngine {
-  return new SyncEngine(createLibrarySyncPort(libraryService), { deviceId, onProgress });
+  return new SyncEngine(createLibrarySyncPort(libraryService), { deviceId, onProgress,signal:controller?.signal,isCancelled:() => controller?.signal.aborted === true });
 }
 
 function requestPluginMediaProvider(input: Omit<PluginMediaProviderRequest, 'type' | 'requestId'>): Promise<PluginMediaProviderResult> {
@@ -1521,12 +1523,14 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
       });
       return { ok: true, type: 'sync.previewed', report };
     }
+    case 'sync.cancel': { activeSyncControllers.get(request.command.libraryId)?.abort(); return {ok:true,type:'sync.cancelled'}; }
     case 'sync.run': {
       const libraryId = request.command.libraryId;
       const normalized = normalizeWebDAVBaseUrl(request.command.baseUrl);
       if (!normalized.ok) {
         throw new RemoteStorageError('INVALID_URL', normalized.error);
       }
+      const controller = new AbortController();
       const engine = buildSyncEngine(request.command.deviceId, (done, total, bytesDone, bytesTotal) => {
         if (parentPort) {
           parentPort.postMessage({
@@ -1539,8 +1543,9 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
             bytesTotal,
           });
         }
-      });
+      }, controller);
       const sessionId = libraryService.beginSyncSession(libraryId);
+      activeSyncControllers.set(libraryId,controller);
       try {
         const outcome = await engine.syncOnce(libraryId, {
           id: 'request',
@@ -1582,7 +1587,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
           });
         }
         throw error;
-      }
+      } finally { if (activeSyncControllers.get(libraryId) === controller) activeSyncControllers.delete(libraryId); }
     }
     case 'sync.poll-remote': {
       // 自动同步轮询（Super-bfsb 后续）：轻量检测远端 manifest 变化，
@@ -2283,6 +2288,12 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
         type: 'ignore.list',
         paths: libraryService.listIgnoredPaths(request.command.libraryId),
       };
+    case 'asset.embedded-generation':
+      return {ok: true, type: 'asset.embedded-generation', value: libraryService.getEmbeddedGeneration(request.command)};
+    case 'folder.inspect':
+      return {ok: true, type: 'folder.inspected', value: libraryService.inspectFolder(request.command)};
+    case 'ignore.preview':
+      return {ok: true, type: 'ignore.preview', value: libraryService.previewIgnoreRules(request.command)};
     case 'ignore.gitignore.get':
       return {
         ok: true,
@@ -2781,6 +2792,10 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
     case 'asset.text.save': {
       const result = libraryService.saveTextAsset(request.command);
       return { ok: true, type: 'asset.text.saved', ...result };
+    }
+    case 'asset.image.transform': {
+      const result = await libraryService.transformImageAsset(request.command);
+      return { ok: true, type: 'asset.content.replaced', ...result };
     }
     case 'asset.delete-permanent': {
       const { deletedCount, skippedCount, skippedReasons } = libraryService.deleteAssetsPermanent(request.command);

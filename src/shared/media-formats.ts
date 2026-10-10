@@ -7,7 +7,7 @@
  */
 
 export const SHARP_IMAGE_EXTENSIONS = [
-  '.png', '.jpg', '.jpeg', '.gif', '.tif', '.tiff', '.webp', '.svg',
+  '.png', '.jpg', '.jpeg', '.jfif', '.avif', '.gif', '.tif', '.tiff', '.webp', '.svg',
 ] as const;
 
 /** Formats decoded by the bundled OIIO runtime rather than by Chromium/sharp. */
@@ -27,7 +27,7 @@ export const IMAGE_EXTENSIONS = [
 ] as const;
 
 export const VIDEO_EXTENSIONS = [
-  '.mp4', '.mov', '.avi', '.wmv', '.webm', '.mkv', '.m4v',
+  '.mp4', '.mov', '.avi', '.wmv', '.webm', '.mkv', '.m4v', '.flv',
 ] as const;
 
 /**
@@ -50,8 +50,10 @@ export const SOLIDWORKS_EXTENSIONS = [
 ] as const;
 
 /** Document formats with a native preview/viewer path. */
+import { FONT_EXTENSIONS } from './font-media';
+
 export const DOCUMENT_EXTENSIONS = [
-  '.pdf', '.html', '.htm',
+  '.pdf', '.html', '.htm', ...FONT_EXTENSIONS,
 ] as const;
 
 export type ImageDecoder = 'sharp' | 'oiio';
@@ -132,7 +134,9 @@ export function directImageMimeForExtension(
   switch (normalizedExtension(extensionOrFilename)) {
     case '.png': return 'image/png';
     case '.jpg':
+    case '.jfif':
     case '.jpeg': return 'image/jpeg';
+    case '.avif': return 'image/avif';
     case '.gif': return 'image/gif';
     case '.webp': return 'image/webp';
     // SVG stays vector in the viewer; the grid still uses its generated
@@ -146,7 +150,9 @@ export function imageMimeForExtension(extensionOrFilename: string): string | nul
   switch (normalizedExtension(extensionOrFilename)) {
     case '.png': return 'image/png';
     case '.jpg':
+    case '.jfif':
     case '.jpeg': return 'image/jpeg';
+    case '.avif': return 'image/avif';
     case '.gif': return 'image/gif';
     case '.tif':
     case '.tiff': return 'image/tiff';
@@ -179,6 +185,7 @@ export function videoMimeForExtension(extensionOrFilename: string): string | nul
     case '.webm': return 'video/webm';
     case '.mkv': return 'video/x-matroska';
     case '.m4v': return 'video/x-m4v';
+    case '.flv': return 'video/x-flv';
     default: return null;
   }
 }

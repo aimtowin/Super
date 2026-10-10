@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -73,6 +74,7 @@ async function setupLibrary(assetCount: number) {
   });
 
   const window = await application.firstWindow();
+    await dismissQuickStart(window);
   return { temporaryRoot, application, window };
 }
 

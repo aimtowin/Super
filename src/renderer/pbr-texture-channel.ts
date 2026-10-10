@@ -97,3 +97,11 @@ export function pbrTextureDisplayFilter(
       return "none";
   }
 }
+
+/** Filename hints are opt-in, never a colour transform for ordinary previews. */
+export function resolveImagePreviewChannel(
+  fileName: string,
+  explicitMaterialPreview = false,
+): PbrTextureChannelPresentation | null {
+  return explicitMaterialPreview ? detectPbrTextureChannel(fileName) : null;
+}

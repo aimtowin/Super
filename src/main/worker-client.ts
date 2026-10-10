@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { WorkerRequestBudget } from './worker-request-budget';
 
 import { utilityProcess, type UtilityProcess } from 'electron';
 
@@ -185,6 +186,7 @@ export class LibraryWorkerClient {
   #pending = new Map<string, PendingRequest>();
   #expiredRequestIds = new Map<string, { commandType: string; sentAt: number; child: UtilityProcess }>();
   // Caller deadlines do not prove the origin process has stopped reading.
+  #requestBudget = new WorkerRequestBudget<UtilityProcess>();
   #resources = new Map<string, { child: UtilityProcess; onTerminal: TerminalCallback }>();
   #retiredChildren = new WeakSet<UtilityProcess>();
   // Super-2cc492（真实 NAS 生产库事故，2026-08-23）：开库后的第一批元数据
@@ -344,6 +346,11 @@ export class LibraryWorkerClient {
     }
 
     const requestId = randomUUID();
+    try { this.#requestBudget.reserve(requestId, child, command, /(?:^|[.-])(?:cancel|pause|close|shutdown)(?:$|[.-])/u.test(command.type)); }
+    catch (error) {
+      if (options.onTerminal) this.#notifyTerminal(options.onTerminal, 'not-dispatched');
+      return Promise.reject(error);
+    }
     if (
       command.type === 'library.open'
       || command.type === 'library.open-eagle'
@@ -849,6 +856,7 @@ export class LibraryWorkerClient {
     for (const [requestId, resource] of this.#resources) {
       if (resource.child === origin) this.#finishResource(requestId, origin, 'worker-exit');
     }
+    this.#requestBudget.releaseOwner(origin);
     if (!isCurrent) return;
     if (expected) {
       this.logger.info('worker.exit', 'Library Worker exited during shutdown.', { code });
@@ -860,8 +868,9 @@ export class LibraryWorkerClient {
   };
 
   #finishResource(requestId: string, child: UtilityProcess, reason: WorkerRequestTerminalReason): boolean {
+    const budgetHeld = this.#requestBudget.release(requestId, child);
     const resource = this.#resources.get(requestId);
-    if (!resource || resource.child !== child) return false;
+    if (!resource || resource.child !== child) return budgetHeld;
     this.#resources.delete(requestId);
     this.#notifyTerminal(resource.onTerminal, reason, requestId);
     return true;

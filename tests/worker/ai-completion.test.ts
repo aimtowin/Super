@@ -811,6 +811,7 @@ describe('enqueueAiAnalysisJobs', () => {
       jobIds: [],
       alreadyPendingJobIds: [],
       skippedAssetIds: [assetId],
+      skippedAssets: [{assetId, assetName: 'img.png', reason: 'already_analyzed'}],
     });
     expect(service.getAiJobStatus(libraryId).jobs).toHaveLength(0);
 

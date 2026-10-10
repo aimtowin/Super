@@ -24,6 +24,7 @@ import {
   type SyncManifest,
 } from './manifest';
 import { planSyncActions, type LocalAssetSnapshotEntry } from './sync-plan';
+import { emptySyncMetadata, mergeSyncMetadata, metadataFingerprint, type SyncMetadata } from './sync-metadata';
 import { runSyncActions, withRetry, type SyncRunnerContext } from './sync-runner';
 
 export interface SyncRootConfig {
@@ -37,6 +38,8 @@ export interface SyncRootConfig {
 }
 
 export interface SyncLibraryPort {
+  readSyncMetadata?(libraryId: string, syncId: string): Promise<SyncMetadata | null>;
+  applySyncMetadata?(libraryId: string, syncId: string, expectedFingerprint: string, metadata: SyncMetadata): Promise<void>;
   syncSnapshot(libraryId: string): Promise<{
     library: { libraryId: string; displayName: string };
     assets: Array<{
@@ -47,6 +50,9 @@ export interface SyncLibraryPort {
       size: number;
       modifiedAt: string;
     }>;
+    missingSyncIds?: string[];
+    deletedSyncIds?: string[];
+    restoredSyncIds?: string[];
   }>;
   applySyncContentUpdate(
     libraryId: string,
@@ -55,6 +61,8 @@ export interface SyncLibraryPort {
     body: Buffer,
   ): Promise<{ assetId: string; created: boolean }>;
   applySyncRecycle(libraryId: string, syncId: string): Promise<void>;
+  applySyncRelocate?(libraryId: string, syncId: string, relativePath: string): Promise<void>;
+  acknowledgeSyncRestores?(libraryId: string, syncIds: string[]): Promise<void>;
   applySyncConflictCopy(
     libraryId: string,
     relativePath: string,
@@ -77,6 +85,8 @@ export interface SyncPreviewReport {
   conflicts: number;
   remoteDeletes: number;
   localRecycles: number;
+  remoteMoves: number;
+  localMoves: number;
 }
 
 export interface SyncOutcome {
@@ -95,6 +105,7 @@ export interface SyncEngineOptions {
    */
   onProgress?(done: number, total: number, bytesDone: number, bytesTotal: number): void;
   isCancelled?(): boolean;
+  signal?: AbortSignal;
 }
 
 export class SyncEngine {
@@ -109,6 +120,7 @@ export class SyncEngine {
     }
     return new WebDAVDriver({
       baseUrl: normalized.value,
+      signal:this.options.signal,
       username: root.username,
       password: root.password,
       allowInsecureTls: root.allowInsecureTls ?? false,
@@ -129,19 +141,23 @@ export class SyncEngine {
       localManifest,
       remoteManifest,
       remoteTombstones: tombstones,
+      localMissing: new Set(snapshot.missingSyncIds ?? []),
+      localDeleted: new Set(snapshot.deletedSyncIds ?? []),
+      localRestored: new Set(snapshot.restoredSyncIds ?? []),
     });
     return this.summarize(snapshot, localManifest, remoteManifest, capabilities, directoryName, actions);
   }
 
   /** 完整同步：plan → 执行 → 写回 manifest。 */
-  async syncOnce(libraryId: string, root: SyncRootConfig): Promise<SyncOutcome> {    const driver = this.buildDriver(root);
+  async syncOnce(libraryId: string, root: SyncRootConfig): Promise<SyncOutcome> {
+    const driver = this.buildDriver(root);
     const capabilities = await driver.probe();
     if (!capabilities.supportsContentTransfer) {
       throw new RemoteStorageError('WRITE_UNSUPPORTED', '服务器不支持上传文件，无法用于同步。');
     }
     const snapshot = await this.library.syncSnapshot(libraryId);
     const directoryName = sanitizeSyncDirectoryName(root.directoryName ?? snapshot.library.displayName, snapshot.library.libraryId);
-    const { remoteManifest, tombstones } = await this.loadRemoteState(driver, directoryName, snapshot.library.libraryId);
+    const { remoteManifest, tombstones, manifestEtag, manifestExists } = await this.loadRemoteState(driver, directoryName, snapshot.library.libraryId);
     const localManifest = await this.loadLocalManifest(libraryId, snapshot.library, directoryName);
     const localAssets = this.snapshotToMap(snapshot);
     const actions = planSyncActions({
@@ -149,11 +165,33 @@ export class SyncEngine {
       localManifest,
       remoteManifest,
       remoteTombstones: tombstones,
+      localMissing: new Set(snapshot.missingSyncIds ?? []),
+      localDeleted: new Set(snapshot.deletedSyncIds ?? []),
+      localRestored: new Set(snapshot.restoredSyncIds ?? []),
     });
+
+    const metadataPlans = new Map<string, {value: SyncMetadata; expected: string}>();
+    if (this.library.readSyncMetadata && this.library.applySyncMetadata) {
+      const missing = new Set(snapshot.missingSyncIds), deleted = new Set(snapshot.deletedSyncIds);
+      const ids = new Set([...localAssets.keys(),...Object.keys(remoteManifest.entries)]);
+      for (const id of ids) {
+        if (this.options.isCancelled?.()) throw new RemoteStorageError('CANCELLED','Sync cancelled');
+        if (tombstones.has(id) || deleted.has(id) || missing.has(id)) continue;
+        const stored = await this.library.readSyncMetadata(libraryId,id);
+        // A reconciled-away index is neither a download request nor a metadata target.
+        if (!stored && !localAssets.has(id) && localManifest.entries[id]) continue;
+        const local = stored ?? emptySyncMetadata();
+        const value = mergeSyncMetadata(localManifest.entries[id]?.metadata,local,remoteManifest.entries[id]?.metadata);
+        metadataPlans.set(id,{value,expected:metadataFingerprint(local)});
+        if (metadataPlans.size % 32 === 0) await new Promise<void>(resolve => setImmediate(resolve));
+      }
+    }
 
     const now = this.options.now?.() ?? new Date().toISOString();
     const context: SyncRunnerContext = {
       driver,
+      isCancelled:this.options.isCancelled,
+      supportsMove: capabilities.supportsMove,
       libraryDirectory: directoryName,
       deviceId: this.options.deviceId,
       now: () => now,
@@ -161,6 +199,8 @@ export class SyncEngine {
       writeLocalAsset: async (syncId, relativePath, body) => {
         await this.library.applySyncContentUpdate(libraryId, syncId, relativePath, body);
       },
+      relocateLocalAsset: this.library.applySyncRelocate
+        ? (syncId, relativePath) => this.library.applySyncRelocate!(libraryId, syncId, relativePath) : undefined,
       recycleLocalAsset: async (syncId) => this.library.applySyncRecycle(libraryId, syncId),
       saveLocalConflictCopy: (syncId, relativePath, body, conflictName) =>
         this.library.applySyncConflictCopy(libraryId, relativePath, body, conflictName),
@@ -186,43 +226,87 @@ export class SyncEngine {
     };
     const wrappedContext: SyncRunnerContext = {
       ...context,
+      onActionComplete: () => {
+        done += 1;
+        this.options.onProgress?.(done, total, bytesDone, bytesTotal);
+      },
       readLocalAsset: async (syncId) => {
         const body = await context.readLocalAsset(syncId);
-        done += 1;
         reportBytes(body);
         return body;
       },
       writeLocalAsset: async (syncId, path, body) => {
         await context.writeLocalAsset(syncId, path, body);
-        done += 1;
         reportBytes(body);
       },
       recycleLocalAsset: async (syncId) => {
         await context.recycleLocalAsset(syncId);
-        done += 1;
         this.options.onProgress?.(done, total, bytesDone, bytesTotal);
       },
       saveLocalConflictCopy: async (syncId, path, body, conflictName) => {
+        const action = actions.find(action => action.type === 'conflict' && action.assetId === syncId);
+        const metadata = action?.type === 'conflict' && action.winner === 'local'
+          ? remoteManifest.entries[syncId]?.metadata
+          : await this.library.readSyncMetadata?.(libraryId, syncId) ?? undefined;
         const meta = await context.saveLocalConflictCopy(syncId, path, body, conflictName);
-        done += 1;
+        if (metadata && this.library.readSyncMetadata && this.library.applySyncMetadata) {
+          const before = await this.library.readSyncMetadata(libraryId, meta.syncId) ?? emptySyncMetadata();
+          await this.library.applySyncMetadata(libraryId, meta.syncId, metadataFingerprint(before), metadata);
+        }
         reportBytes(body);
-        return meta;
+        return {...meta, ...(metadata ? {metadata} : {})};
       },
     };
 
-    const result = await runSyncActions(actions, localManifest, wrappedContext);
+    const report = this.summarize(snapshot, localManifest, remoteManifest, capabilities, directoryName, actions);
+    // Keep current remote entries for skipped/missing local assets. Writing the
+    // old cache here would silently roll back another device's content/path.
+    const workingManifest = { ...localManifest, entries: structuredClone(remoteManifest.entries) };
+    const result = await runSyncActions(actions, workingManifest, wrappedContext);
+
+    for (const [id, plan] of metadataPlans) {
+      if (this.options.isCancelled?.()) throw new RemoteStorageError('CANCELLED','Sync cancelled');
+      const entry = result.manifest.entries[id]; if (!entry) continue;
+      entry.metadata = plan.value;
+      const oldVersion = Math.max(localManifest.entries[id]?.metadataVersion ?? 0, remoteManifest.entries[id]?.metadataVersion ?? 0);
+      entry.metadataVersion = oldVersion + (metadataFingerprint(remoteManifest.entries[id]?.metadata) === metadataFingerprint(plan.value) ? 0 : 1);
+    }
+    for (const [id, plan] of metadataPlans) {
+      if (!result.manifest.entries[id]) continue;
+      const current = await this.library.readSyncMetadata!(libraryId,id);
+      if (metadataFingerprint(current ?? emptySyncMetadata()) !== plan.expected)
+        throw new RemoteStorageError('CONFLICT','Local metadata changed during transfer; both states were retained');
+    }
+    // Compare the captured manifest before publishing. ETag-capable drivers also
+    // enforce CAS in PUT; no-ETag drivers get a conservative fresh read.
+    if (this.options.isCancelled?.()) throw new RemoteStorageError('CANCELLED','Sync cancelled');
+    const manifestPath = `${directoryName === '' ? '' : `${directoryName}/`}${SYNC_MANIFEST_FILE}`;
+    const currentExists = await driver.exists(manifestPath);
+    if (currentExists !== manifestExists) throw new RemoteStorageError('CONFLICT','Remote manifest changed; retry sync');
+    if (manifestExists) {
+      const fresh = await driver.read(manifestPath);
+      if ((manifestEtag && fresh.etag !== manifestEtag) || serializeManifest(parseManifest(fresh.body.toString('utf8'))) !== serializeManifest(remoteManifest))
+        throw new RemoteStorageError('CONFLICT','Remote manifest changed; both metadata states were retained');
+    }
 
     // 写回远端 manifest（带版本戳）与本地缓存。
     await withRetry(() => driver.mkdir(directoryName === '' ? '.' : directoryName));
-    const manifestPath = `${directoryName === '' ? '' : `${directoryName}/`}${SYNC_MANIFEST_FILE}`;
-    await withRetry(() => driver.write(manifestPath, Buffer.from(serializeManifest(result.manifest), 'utf-8')));
+    const serialized = serializeManifest(result.manifest);
+    if (Buffer.byteLength(serialized) > 64 * 1024 * 1024) throw new RemoteStorageError('BUDGET_EXCEEDED','Sync manifest too large');
+    await withRetry(() => driver.write(manifestPath, Buffer.from(serialized, 'utf-8'), manifestExists ? {ifMatch:manifestEtag} : {overwrite:false}));
+    for (const [id, plan] of metadataPlans) {
+      if (this.options.isCancelled?.()) throw new RemoteStorageError('CANCELLED','Sync cancelled');
+      if (result.manifest.entries[id]) await this.library.applySyncMetadata!(libraryId,id,plan.expected,plan.value);
+    }
     const metaDir = `${directoryName === '' ? '' : `${directoryName}/`}.super-sync`;
     await withRetry(() => driver.mkdir(metaDir));
     await withRetry(() => driver.write(`${metaDir}/format-version`, Buffer.from(String(SYNC_FORMAT_VERSION))));
     await this.library.writeSyncManifestCache(libraryId, serializeManifest(result.manifest));
+    await this.library.acknowledgeSyncRestores?.(libraryId,
+      (snapshot.restoredSyncIds ?? []).filter((id) => localAssets.has(id)));
 
     return {
-      report: this.summarize(snapshot, localManifest, remoteManifest, capabilities, directoryName, actions),
+      report,
       manifest: result.manifest,
       conflicts: result.conflicts.map((conflict) => ({ syncId: conflict.assetId, conflictCopyPath: conflict.conflictCopyPath })),
     };
@@ -271,6 +355,7 @@ export class SyncEngine {
         || remote.path !== local.path
         || remote.size !== local.size
         || remote.metadataVersion !== local.metadataVersion
+        || metadataFingerprint(remote.metadata) !== metadataFingerprint(local.metadata)
       ) {
         return true;
       }
@@ -280,7 +365,11 @@ export class SyncEngine {
 
   private snapshotToMap(snapshot: Awaited<ReturnType<SyncLibraryPort['syncSnapshot']>>): Map<string, LocalAssetSnapshotEntry> {
     const map = new Map<string, LocalAssetSnapshotEntry>();
+    const paths = new Set<string>();
     for (const asset of snapshot.assets) {
+      const identity = asset.relativePath.normalize('NFC').toLocaleLowerCase('en-US');
+      if (paths.has(identity)) throw new RemoteStorageError('CONFLICT', '不同资产使用相同同步路径；为避免覆盖，已停止同步。');
+      paths.add(identity);
       map.set(asset.syncId, {
         contentHash: asset.contentHash,
         size: asset.size,
@@ -295,15 +384,16 @@ export class SyncEngine {
     driver: RemoteStorageDriver,
     directoryName: string,
     libraryId: string,
-  ): Promise<{ remoteManifest: SyncManifest; tombstones: Set<string> }> {
+  ): Promise<{ remoteManifest: SyncManifest; tombstones: Set<string>; manifestEtag?: string; manifestExists: boolean }> {
     const prefix = directoryName === '' ? '' : `${directoryName}/`;
     const tombstones = new Set<string>();
     let remoteManifest = createEmptyManifest({ libraryId, displayName: '', directoryName });
-    try {
+    const manifestExists = await driver.exists(`${prefix}${SYNC_MANIFEST_FILE}`);
+    let manifestEtag: string | undefined;
+    if (manifestExists) {
       const read = await driver.read(`${prefix}${SYNC_MANIFEST_FILE}`);
+      manifestEtag = read.etag;
       remoteManifest = parseManifest(read.body.toString('utf-8'));
-    } catch {
-      // 无 manifest：视为首次同步。
     }
     try {
       const entries = await driver.list(`${prefix}${SYNC_TRASH_DIR}/`, '1');
@@ -312,10 +402,10 @@ export class SyncEngine {
         const match = entry.path.match(/([^/]+)\.json$/);
         if (match) tombstones.add(decodeURIComponent(match[1]!));
       }
-    } catch {
-      // 无 trash 目录：无墓碑。
+    } catch (error) {
+      if (!(error instanceof RemoteStorageError) || error.code !== 'NOT_FOUND') throw error;
     }
-    return { remoteManifest, tombstones };
+    return { remoteManifest, tombstones, manifestEtag, manifestExists };
   }
 
   private async loadLocalManifest(
@@ -328,7 +418,7 @@ export class SyncEngine {
       try {
         return parseManifest(cached);
       } catch {
-        // 缓存损坏：重新开始。
+        throw new RemoteStorageError('LOCAL_CACHE_INVALID', '本地同步缓存损坏；为保护文件，已停止同步。');
       }
     }
     return createEmptyManifest({
@@ -351,12 +441,16 @@ export class SyncEngine {
     let conflicts = 0;
     let remoteDeletes = 0;
     let localRecycles = 0;
+    let remoteMoves = 0;
+    let localMoves = 0;
     for (const action of actions) {
       if (action.type === 'upload') uploads += 1;
       else if (action.type === 'download') downloads += 1;
       else if (action.type === 'conflict') conflicts += 1;
       else if (action.type === 'delete-remote') remoteDeletes += 1;
       else if (action.type === 'delete-local') localRecycles += 1;
+      else if (action.type === 'move-remote') remoteMoves += 1;
+      else if (action.type === 'relocate-local') localMoves += 1;
     }
     const localKnown = new Set(Object.keys(localManifest.entries));
     const remoteKnown = new Set(Object.keys(remoteManifest.entries));
@@ -370,6 +464,8 @@ export class SyncEngine {
       conflicts,
       remoteDeletes,
       localRecycles,
+      remoteMoves,
+      localMoves,
     };
   }
 }

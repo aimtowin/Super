@@ -210,8 +210,16 @@ async function main() {
     ...(identityFile ? ['-i', identityFile, '-o', 'IdentitiesOnly=yes'] : []),
   ];
 
-  await run('ssh', [...sshOptions, destination, `set -eu; mkdir -p ${quoteRemotePath(stage)}`]);
+  await run('ssh', [...sshOptions, destination, `set -eu; test ! -e ${quoteRemotePath(releaseDirectory)}; mkdir -p ${quoteRemotePath(stage)}`]);
   await run('scp', [...scpOptions, ...files, `${destination}:${stage}/`]);
+  // Verify every uploaded byte before any release/latest promotion. Filenames
+  // are generated locally and never contain shell quotes or directory traversal.
+  const verification = await Promise.all(files.map(async file => {
+    const name = path.basename(file);
+    if (!SAFE_FILE_NAME.test(name)) fail(`Unsafe artifact filename: ${name}`);
+    return `'${await sha256(file)}  ${name}'`;
+  }));
+  await run('ssh', [...sshOptions, destination, `set -eu; cd ${quoteRemotePath(stage)}; printf '%s\\n' ${verification.join(' ')} | sha256sum -c -`]);
   const moveCommand = [
     'set -eu',
     `mkdir -p ${quoteRemotePath(releaseDirectory)}`,

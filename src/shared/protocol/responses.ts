@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { embeddedGenerationSchema, folderInspectionSchema, ignorePreviewSchema } from '../local-upgrade-results';
 
 import { aiSearchPlanSchema, assetMetadataResultSchema, extractedMetadataResultSchema, assetSummarySchema, browseLayoutEntrySchema, collectionSummarySchema, folderBrowseEntrySchema, ignoredPathSchema, linkedFolderDirectoryMutationSchema, linkedFolderRuleSchema, linkedFolderSummarySchema, managedFolderSummarySchema, portableRelativePathSchema, smartCollectionSummarySchema, tagCooccurrenceGraphSchema, tagSummarySchema, trashedFolderSummarySchema } from '../asset-types';
 import { pluginJobRecordSchema } from '../../plugins/plugin-jobs';
@@ -360,7 +361,7 @@ export const assetChangeEventSchema = z.strictObject({
    * `text-save` / `client` / `content-replace` = in-app mutations; UI should use
    * operation-specific copy or silent canvas refresh.
    */
-  source: z.enum(['watcher', 'text-save', 'client', 'content-replace']).optional(),
+  source: z.enum(['watcher', 'text-save', 'client', 'content-replace', 'sync']).optional(),
   /** A watcher presentation hint, never a domain invalidation/refresh gate. */
   suppressWatcherNotification: z.boolean().optional(),
 });
@@ -568,6 +569,10 @@ export const tagOperationSkipSchema = z.strictObject({
 export type TagOperationSkip = z.infer<typeof tagOperationSkipSchema>;
 
 const assetOperationSuccessSchemas = [
+  z.strictObject({ok:z.literal(true),type:z.literal('sync.cancelled')}),
+  z.strictObject({ok: z.literal(true), type: z.literal("asset.embedded-generation"), value: embeddedGenerationSchema.nullable()}),
+  z.strictObject({ok: z.literal(true), type: z.literal("folder.inspected"), value: folderInspectionSchema}),
+  z.strictObject({ok: z.literal(true), type: z.literal("ignore.preview"), value: ignorePreviewSchema}),
   z.strictObject({
     ok: z.literal(true),
     type: z.literal('media.jobs.listed'),
@@ -1217,6 +1222,9 @@ const assetOperationSuccessSchemas = [
     type: z.literal('asset.content.read'),
     assetId: nonBlankString,
     revisionId: nonBlankString,
+    offset: z.number().int().nonnegative().optional(),
+    nextOffset: z.number().int().nonnegative().optional(),
+    sourceToken: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
     byteSize: z.number().int().nonnegative(),
     dataBase64: z.string().max(CONTENT_REPLACE_MAX_BASE64_LENGTH),
     truncated: z.boolean(),
@@ -1339,6 +1347,7 @@ const assetOperationSuccessSchemas = [
   z.strictObject({
     ok: z.literal(true),
     type: z.literal('asset.text.read'),
+    encoding: z.enum(['utf-8', 'utf-16le', 'utf-16be', 'gb18030']).optional(),
     assetId: nonBlankString,
     revisionId: nonBlankString,
     content: z.string(),
@@ -1916,6 +1925,8 @@ const workerSuccessResultSchema = z.discriminatedUnion('type', [
       conflicts: z.number().int().nonnegative(),
       remoteDeletes: z.number().int().nonnegative(),
       localRecycles: z.number().int().nonnegative(),
+      remoteMoves: z.number().int().nonnegative().optional(),
+      localMoves: z.number().int().nonnegative().optional(),
       capabilities: syncCapabilitiesSchema,
     }),
   }),
@@ -1931,6 +1942,8 @@ const workerSuccessResultSchema = z.discriminatedUnion('type', [
       conflicts: z.number().int().nonnegative(),
       remoteDeletes: z.number().int().nonnegative(),
       localRecycles: z.number().int().nonnegative(),
+      remoteMoves: z.number().int().nonnegative().optional(),
+      localMoves: z.number().int().nonnegative().optional(),
       capabilities: syncCapabilitiesSchema,
     }),
     conflicts: z.array(z.strictObject({
@@ -2241,6 +2254,8 @@ const rendererSuccessResultSchema = z.discriminatedUnion('type', [
       conflicts: z.number().int().nonnegative(),
       remoteDeletes: z.number().int().nonnegative(),
       localRecycles: z.number().int().nonnegative(),
+      remoteMoves: z.number().int().nonnegative().optional(),
+      localMoves: z.number().int().nonnegative().optional(),
       capabilities: syncCapabilitiesSchema,
     }),
   }),
@@ -2256,6 +2271,8 @@ const rendererSuccessResultSchema = z.discriminatedUnion('type', [
       conflicts: z.number().int().nonnegative(),
       remoteDeletes: z.number().int().nonnegative(),
       localRecycles: z.number().int().nonnegative(),
+      remoteMoves: z.number().int().nonnegative().optional(),
+      localMoves: z.number().int().nonnegative().optional(),
       capabilities: syncCapabilitiesSchema,
     }),
     conflicts: z.array(z.strictObject({

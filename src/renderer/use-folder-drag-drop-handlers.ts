@@ -50,12 +50,13 @@ export function useFolderDragDropHandlers({
   );
 
   const handleFoldersDroppedOnFolder = useCallback(
-    (targetFolderId: string | null, draggedFolderIds: readonly string[]) => {
+    (targetFolderId: string | null, draggedFolderIds: readonly string[], promoteOnParentDrop = false) => {
       if (!api || !libraryId) return;
       const resolution = resolveFolderOntoFolderDrop({
         targetFolderId,
         draggedFolderIds,
         folders: folderFacts(),
+        promoteOnParentDrop,
       });
       if (resolution.kind === 'reject') {
         if (resolution.reason === 'same-parent') {

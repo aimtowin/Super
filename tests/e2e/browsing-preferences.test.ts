@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import {
   mkdirSync,
   mkdtempSync,
@@ -125,6 +126,7 @@ test("restores canvas preferences after a full restart", async () => {
   let application = await launch();
   try {
     let window = await application.firstWindow();
+    await dismissQuickStart(window);
 
     // Create library
     await window.getByRole("button", { name: "创建资源库" }).click();
@@ -280,6 +282,7 @@ test("uses a middle ellipsis for long filenames in cards and Inspector", async (
       },
     });
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();
@@ -365,6 +368,7 @@ test("lays out a sparse masonry folder from left to right", async () => {
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.setViewportSize({ width: 1440, height: 720 });
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
@@ -450,6 +454,7 @@ test("maintains consistent preferences, accessible names, zoom behavior, and avo
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
 
     // Create library
     await window.getByRole("button", { name: "创建资源库" }).click();

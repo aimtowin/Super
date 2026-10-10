@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -397,12 +397,13 @@ describe('removeLinkedFolder (clarification #7 / Super-ekj)', () => {
 });
 
 describe('deleteLinkedFolderSubtree (clarification #7 / Super-ekj)', () => {
-  it('moves a linked child path to the OS trash by default', async () => {
+  it('unlinks a linked child path by default, preserving indexed and unindexed source bytes', async () => {
     const temp = root();
     const external = path.join(temp, 'linked-tree');
     const child = path.join(external, 'child');
     mkdirSync(child, { recursive: true });
     writeFileSync(path.join(child, 'd.png'), 'child-bytes');
+    writeFileSync(path.join(child, 'desktop.ini'), 'unindexed-bytes');
     writeFileSync(path.join(external, 'root.png'), 'root-bytes');
 
     const trashed: string[] = [];
@@ -429,16 +430,19 @@ describe('deleteLinkedFolderSubtree (clarification #7 / Super-ekj)', () => {
       deleteFromDisk: false,
     });
     expect(trashResult.deletedAssetCount).toBe(1);
-    expect(trashed.some((entry) => entry.includes(`${path.sep}child`))).toBe(true);
+    expect(trashed).toEqual([]);
+    expect(readFileSync(path.join(child, 'd.png'), 'utf8')).toBe('child-bytes');
+    expect(readFileSync(path.join(child, 'desktop.ini'), 'utf8')).toBe('unindexed-bytes');
     expect(existsSync(path.join(external, 'root.png'))).toBe(true);
+    service.refreshManagedAssets(library.libraryId);
+    expect(service.listAssets({ libraryId: library.libraryId, recursive: true }).map((asset) => asset.relativeFilePath)).toEqual(['root.png']);
   });
 
-  it('moves a linked folder root to the OS trash and drops the index', async () => {
+  it('unlinks a linked folder root without moving sources to the OS trash', async () => {
     const temp = root();
     const external = path.join(temp, 'linked-root');
     mkdirSync(external, { recursive: true });
     writeFileSync(path.join(external, 'root.png'), 'root-bytes');
-    const canonicalExternal = realpathSync(external);
 
     const trashed: string[] = [];
     const service = newService({
@@ -464,8 +468,8 @@ describe('deleteLinkedFolderSubtree (clarification #7 / Super-ekj)', () => {
       deleteFromDisk: false,
     });
     expect(trashResult.deletedAssetCount).toBe(1);
-    expect(trashed.some((entry) => entry === canonicalExternal)).toBe(true);
-    expect(existsSync(external)).toBe(false);
+    expect(trashed).toEqual([]);
+    expect(readFileSync(path.join(external, 'root.png'), 'utf8')).toBe('root-bytes');
 
     const remaining = service.listLinkedFolders(library.libraryId);
     expect(remaining.map((folder) => folder.folderId)).not.toContain(

@@ -1,3 +1,4 @@
+import { emptySyncMetadata, mergeSyncMetadata, metadataFingerprint, type SyncMetadata } from '../../src/worker/sync/sync-metadata';
 import { describe, expect, it } from 'vitest';
 
 import type {
@@ -73,6 +74,7 @@ interface FakeAsset {
 
 class FakeLibrary implements SyncLibraryPort {
   assets = new Map<string, FakeAsset>();
+  deletedSyncIds: string[] = [];
   private cache = new Map<string, string>();
   calls: string[] = [];
   conflictCopies: Array<{ syncId: string; name: string }> = [];
@@ -88,7 +90,7 @@ class FakeLibrary implements SyncLibraryPort {
       size: asset.body.length,
       modifiedAt: '2026-08-15T10:00:00Z',
     }));
-    return { library: { libraryId, displayName: this.displayName }, assets };
+    return { library: { libraryId, displayName: this.displayName }, assets, deletedSyncIds: this.deletedSyncIds };
   }
 
   async applySyncContentUpdate(libraryId: string, syncId: string, relativePath: string, body: Buffer) {
@@ -237,7 +239,7 @@ describe('SyncEngine end-to-end (Super-xffq)', () => {
       },
     })));
     const library = new FakeLibrary();
-    // 本地缓存里有过 s1（表示上次同步后本地删了）。
+    library.deletedSyncIds = ['s1']; // Explicit user intent, not mere absence.
     await library.writeSyncManifestCache('lib-1', JSON.stringify({
       formatVersion: 1,
       libraryId: 'lib-1',
@@ -373,5 +375,85 @@ describe('SyncEngine end-to-end (Super-xffq)', () => {
     // 上传 4 字节（1 个文件）。
     expect(last.bytesDone).toBe(4);
     expect(last.bytesTotal).toBe(4);
+  });
+});
+
+class MetadataLibrary extends FakeLibrary {
+  metadata = new Map<string,SyncMetadata>();
+  override async applySyncConflictCopy(libraryId: string, relativePath: string, body: Buffer, name: string) {
+    const copy = await super.applySyncConflictCopy(libraryId, relativePath, body, name);
+    this.assets.set(copy.syncId, {syncId: copy.syncId, relativePath: name, body});
+    return copy;
+  }
+  async readSyncMetadata(_libraryId:string,id:string) {return this.assets.has(id) ? structuredClone(this.metadata.get(id) ?? emptySyncMetadata()) : null;}
+  async applySyncMetadata(libraryId:string,id:string,expected:string,value:SyncMetadata) {
+    const before = await this.readSyncMetadata(libraryId,id);
+    if (!before || metadataFingerprint(before) !== expected) throw Error('Stale metadata');
+    this.metadata.set(id,structuredClone(value));
+  }
+}
+describe('metadata sync boundaries', () => {
+  it('retains losing content metadata and AI provenance on the conflict copy', async () => {
+    const driver = new MemoryDriver(), a = new MetadataLibrary(), b = new MetadataLibrary();
+    a.assets.set('s1', {syncId:'s1', relativePath:'a.txt', body:Buffer.from('initial')});
+    const original = emptySyncMetadata(); original.user.description = 'Manual original';
+    original.ai = [{fieldName:'description', value:'AI provenance', modelId:'model-x', modelVersion:'1', generatedAt:'2026-10-10'}];
+    a.metadata.set('s1', original);
+    const engineA = new SyncEngine(a,{deviceId:'a', now:()=>'2026-10-10T01:00:00Z'}), engineB = new SyncEngine(b,{deviceId:'b', now:()=>'2026-10-10T02:00:00Z'});
+    engineA.buildDriver=()=>driver; engineB.buildDriver=()=>driver;
+    await engineA.syncOnce('lib-1',root); await engineB.syncOnce('lib-1',root);
+    a.assets.get('s1')!.body=Buffer.from('remote-new'); b.assets.get('s1')!.body=Buffer.from('local-new');
+    await engineA.syncOnce('lib-1',root);
+    const result = await engineB.syncOnce('lib-1',root);
+    expect(result.conflicts).toHaveLength(1);
+    const copy = b.conflictCopies[0]!;
+    expect(b.metadata.get(copy.syncId)).toEqual(original);
+    expect(result.manifest.entries[copy.syncId]!.metadata).toEqual(original);
+  });
+  it('merges independent manual edits and never lets AI overwrite manual fields', () => {
+    const base = emptySyncMetadata(), local = structuredClone(base), remote = structuredClone(base);
+    local.user.description = 'Manual'; remote.user.rating = 4;
+    remote.ai = [{fieldName:'description',value:'Generated',modelId:'model',modelVersion:'1',generatedAt:'2026-10-10'}];
+    const merged = mergeSyncMetadata(base,local,remote);
+    expect(merged.user).toMatchObject({description:'Manual',rating:4});
+    expect(merged.ai[0]?.value).toBe('Generated');
+    remote.user.description = 'Other manual';
+    expect(() => mergeSyncMetadata(base,local,remote)).toThrow(/description/);
+  });
+  it('canonicalizes tag order/casing and preserves three-way removals', () => {
+    const base=emptySyncMetadata(); base.humanTags=['A','Keep'];
+    const local=structuredClone(base); local.humanTags=['Keep','Local'];
+    const remote=structuredClone(base); remote.humanTags=['A','Keep','Remote'];
+    expect(mergeSyncMetadata(base,local,remote).humanTags).toEqual(['Keep','Local','Remote']);
+    expect(metadataFingerprint({...base,humanTags:['Keep','A']})).toBe(metadataFingerprint({...base,humanTags:['a','keep']}));
+  });
+  it('syncs metadata-only changes independently of content versions and stops concurrent manual conflicts', async () => {
+    const driver = new MemoryDriver(), a = new MetadataLibrary(), b = new MetadataLibrary();
+    a.assets.set('s1',{syncId:'s1',relativePath:'a.txt',body:Buffer.from('same')});
+    const initial=emptySyncMetadata(); initial.user.description='Initial'; a.metadata.set('s1',initial);
+    const engineA=new SyncEngine(a,{deviceId:'a'}),engineB=new SyncEngine(b,{deviceId:'b'});
+    engineA.buildDriver=()=>driver;engineB.buildDriver=()=>driver;
+    const first=await engineA.syncOnce('lib-1',root);
+    await engineB.syncOnce('lib-1',root); expect(b.metadata.get('s1')?.user.description).toBe('Initial');
+    a.metadata.get('s1')!.user.rating=4;
+    const changed=await engineA.syncOnce('lib-1',root);
+    expect(changed.report.uploads).toBe(0);
+    expect(changed.manifest.entries.s1!.version).toBe(first.manifest.entries.s1!.version);
+    expect(changed.manifest.entries.s1!.metadataVersion).toBe(first.manifest.entries.s1!.metadataVersion+1);
+    await engineB.syncOnce('lib-1',root); expect(b.metadata.get('s1')?.user.rating).toBe(4);
+    const unchanged=await engineB.syncOnce('lib-1',root);
+    expect(unchanged.manifest.entries.s1!.metadataVersion).toBe(changed.manifest.entries.s1!.metadataVersion);
+    a.metadata.get('s1')!.user.description='A'; b.metadata.get('s1')!.user.description='B';
+    await engineA.syncOnce('lib-1',root);
+    const snapshot=Buffer.from(driver.files.get('参考库/manifest.json')!);
+    await expect(engineB.syncOnce('lib-1',root)).rejects.toMatchObject({code:'METADATA_CONFLICT'});
+    expect(driver.files.get('参考库/manifest.json')).toEqual(snapshot); expect(b.metadata.get('s1')?.user.description).toBe('B');
+  });
+  it('does not publish or apply a cancelled metadata pass', async () => {
+    const driver=new MemoryDriver(), a=new MetadataLibrary();
+    a.assets.set('s1',{syncId:'s1',relativePath:'a.txt',body:Buffer.from('same')});
+    const engine=new SyncEngine(a,{deviceId:'a',isCancelled:()=>true}); engine.buildDriver=()=>driver;
+    await expect(engine.syncOnce('lib-1',root)).rejects.toMatchObject({code:'CANCELLED'});
+    expect(driver.files.size).toBe(0);expect(a.metadata.size).toBe(0);
   });
 });

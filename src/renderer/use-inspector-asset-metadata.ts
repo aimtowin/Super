@@ -27,6 +27,7 @@ export type UseInspectorAssetMetadataParams = {
   selectedAssetIdsRef: MutableRefObject<readonly string[]>;
   assetMetadata: AssetMetadataResult | null;
   editDescription: string;
+  editRating: number; editFavorite: boolean; editSourceUrl: string; editAuthor: string;
   setAssetMetadata: Dispatch<SetStateAction<AssetMetadataResult | null>>;
   setVersionConflict: Dispatch<SetStateAction<boolean>>;
   setEditDescription: Dispatch<SetStateAction<string>>; setEditRating: Dispatch<SetStateAction<number>>;
@@ -54,7 +55,7 @@ export type UseInspectorAssetMetadataResult = {
 export function useInspectorAssetMetadata({
   api, library, metadataController, metadataSession,
   selectedAssetId, selectedAssetIds, selectedAssetIdRef, selectedAssetIdsRef,
-  editDescription, setAssetMetadata, setVersionConflict,
+  editDescription, editRating, editFavorite, editSourceUrl, editAuthor, setAssetMetadata, setVersionConflict,
   setEditDescription, setEditRating, setEditFavorite, setEditSourceUrl, setEditAuthor,
   setDescriptionIsAi, aiContentRef, setAiContent, setAssets, setTrashedAssets,
   setNotice, setError,
@@ -65,6 +66,12 @@ export function useInspectorAssetMetadata({
   const editorContext = useMemo(() => ({ owner: metadataSession, assetId: selectedAssetId, selectionKey }),
     [metadataSession, selectedAssetId, selectionKey]);
   const editDescriptionRef = useRef(editDescription);
+  const editorValuesRef = useRef<EditorValues>({ description: editDescription, rating: editRating,
+    favorite: editFavorite, sourcePageUrl: editSourceUrl, author: editAuthor });
+  useLayoutEffect(() => {
+    editorValuesRef.current = { description: editDescription, rating: editRating,
+      favorite: editFavorite, sourcePageUrl: editSourceUrl, author: editAuthor };
+  }, [editDescription, editRating, editFavorite, editSourceUrl, editAuthor]);
   useLayoutEffect(() => { editDescriptionRef.current = editDescription; }, [editDescription]);
   const editorBaselineRef = useRef<{
     context: typeof editorContext;
@@ -168,10 +175,18 @@ export function useInspectorAssetMetadata({
   const loadMetadata = useCallback(async () => {
     const owner = metadataSession;
     if (!owner || !selectedAssetId || !metadataController.isCurrent(owner)) return;
+    // Explicit conflict recovery replaces only the drafts present at the click.
+    // Ordinary/background reads still preserve drafts, as does newer input
+    // entered while this read is in flight. Do not acknowledge a stale read.
+    const conflictDraft = metadataController.hasConflict(owner, selectedAssetId)
+      ? { ...editorValuesRef.current } : undefined;
+    const clickedBaseline = editorBaselineRef.current;
     metadataController.invalidate(owner, [selectedAssetId]);
     const result = await metadataController.request(owner, selectedAssetId, "primary");
     if (!metadataController.isCurrent(owner)) return;
-    if (result.ok) applyCurrentMetadata(owner, selectedAssetId);
+    if (result.ok) applyCurrentMetadata(owner, selectedAssetId,
+      !metadataController.hasConflict(owner, selectedAssetId) && editorBaselineRef.current === clickedBaseline
+        ? conflictDraft : undefined);
     else if (result.error.code !== "CANCELLED") {
       setError(toMessage(new LibraryOperationError(result.error), t("toast.readMetadataFailed"), locale));
     }

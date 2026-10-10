@@ -242,8 +242,10 @@ describe("matchVideoPlaybackRateKey / stepVideoPlaybackRate (Super-soii)", () =>
     expect(matchVideoPlaybackRateKey({ ...base, key: "C" })).toBe("faster");
     expect(stepVideoPlaybackRate(1, "faster")).toBe(1.25);
     expect(stepVideoPlaybackRate(1, "slower")).toBe(0.75);
-    expect(stepVideoPlaybackRate(0.5, "slower")).toBe(0.5);
-    expect(stepVideoPlaybackRate(2, "faster")).toBe(2);
+    expect(stepVideoPlaybackRate(0.5, "slower")).toBe(0.25);
+    expect(stepVideoPlaybackRate(0.25, "slower")).toBe(0.25);
+    expect(stepVideoPlaybackRate(2, "faster")).toBe(3);
+    expect(stepVideoPlaybackRate(4, "faster")).toBe(4);
   });
 
   it("matches X/C by physical code under IME Process keys", () => {

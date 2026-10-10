@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -234,6 +235,7 @@ test("falls back to the start screen when the recent library no longer exists", 
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await expect(
       window.getByRole("heading", { name: "创建本地资源库" }),
     ).toBeVisible({ timeout: 10_000 });

@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -12,7 +13,7 @@ test.describe.configure({ timeout: 120_000 });
 function writeCompatiblePlugin(directory: string): void {
   const manifest = {
     ...manifestFixture,
-    engines: { super: '>=0.1.0 <1.0.0', pluginApi: 1 },
+    engines: { super: '>=0.1.0 <3.0.0', pluginApi: 1 },
   };
   mkdirSync(path.join(directory, 'dist', 'ui'), { recursive: true });
   writeFileSync(path.join(directory, 'super-plugin.json'), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -43,6 +44,7 @@ test('installs a library plugin through the settings bridge, then trusts and Saf
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole('button', { name: '创建资源库' }).click();
     await window.getByRole('textbox', { name: '名称' }).fill(libraryName);
     await window.getByRole('button', { name: '创建', exact: true }).click();
@@ -74,6 +76,15 @@ test('installs a library plugin through the settings bridge, then trusts and Saf
     await expect(githubDialog.getByText('请输入有效的 GitHub HTTPS 仓库地址、owner/repository 或 Release 链接。', { exact: true })).toBeVisible();
     await githubDialog.getByRole('button', { name: '返回' }).click();
     await installDialog.getByLabel('安装范围').selectOption('library');
+    // A rejected local package must leave a visible, actionable failure, not
+    // appear to do nothing. Compatibility checks remain enforced in Main.
+    writeFileSync(path.join(packageDirectory, 'super-plugin.json'), JSON.stringify({
+      ...manifestFixture, engines: {super: '>=0.1.0 <1.0.0', pluginApi: 1},
+    }));
+    await installDialog.getByRole('button', { name: '本地安装' }).click();
+    await expect(installDialog.getByRole('alert')).toBeVisible();
+    await expect(dialog.getByText(/Palette Tools\s*-\s*v/)).toHaveCount(0);
+    writeCompatiblePlugin(packageDirectory);
     await installDialog.getByRole('button', { name: '本地安装' }).click();
 
     const libraryCard = dialog.locator('.plugin-settings-scope-card').filter({ hasText: '资源库插件' });

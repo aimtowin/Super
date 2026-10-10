@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -47,6 +48,7 @@ test("library switcher, breadcrumbs, and workspace history", async () => {
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
 
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
@@ -132,18 +134,8 @@ test("library switcher, breadcrumbs, and workspace history", async () => {
       await window.keyboard.press("Escape");
       await expect(window.getByRole("dialog")).toHaveCount(0);
 
-      await settingsButton.click();
-      await window.getByRole("menuitem", { name: "关于", exact: true }).hover();
-      await expect(window.locator(".main-menu-submenu")).toBeVisible();
-      await window
-        .getByRole("menuitem", { name: "开源组件与许可", exact: true })
-        .click();
-      await expect(
-        window.getByRole("dialog", { name: "开源组件与许可" }),
-      ).toBeVisible();
-      await window.keyboard.press("Escape");
-      await expect(window.getByRole("dialog")).toHaveCount(0);
-
+      // License notices remain in About and the shipped notices; there is
+      // no longer a separate licenses menu/dialog.
       await settingsButton.click();
       await window.getByRole("menuitem", { name: "关于", exact: true }).hover();
       await window.getByRole("menuitem", { name: "关于 Super Lib", exact: true }).click();

@@ -57,7 +57,7 @@ async function mount(initial = metadata(), immediateAi = false) {
     const result = useInspectorAssetMetadata({
       api: api as SuperLibraryApi, library, metadataController: controller, metadataSession: owner,
       selectedAssetId: "a", selectedAssetIds: selection.current, selectedAssetIdRef: primary, selectedAssetIdsRef: selection,
-      assetMetadata, editDescription: description, setAssetMetadata, setVersionConflict: ignore, setEditDescription,
+      assetMetadata, editDescription: description, editRating: 0, editFavorite: false, editSourceUrl: "", editAuthor: "", setAssetMetadata, setVersionConflict: ignore, setEditDescription,
       setEditAuthor: ignore, setEditSourceUrl: ignore, setEditRating: ignore, setEditFavorite: ignore,
       setDescriptionIsAi, aiContentRef: aiRef, setAiContent,
       setAssets: ignore, setTrashedAssets: ignore, setNotice: ignore, setError: ignore,

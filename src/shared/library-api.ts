@@ -1,3 +1,4 @@
+import type { EmbeddedGenerationInfo, FolderInspection, IgnorePreview } from './local-upgrade-results';
 import type { PublicError, PublicErrorReason } from './protocol/errors';
 
 /** Super-xffq：WebDAV 服务端能力探测结果。 */
@@ -23,6 +24,8 @@ export interface SyncReport {
   conflicts: number;
   remoteDeletes: number;
   localRecycles: number;
+  remoteMoves?: number;
+  localMoves?: number;
 }
 
 import type {
@@ -227,6 +230,9 @@ export interface PluginJobStatus {
 }
 
 export interface SuperLibraryApi {
+  getEmbeddedGeneration(input: {libraryId: string; assetId: string}): Promise<LibraryApiResult<EmbeddedGenerationInfo | null>>;
+  inspectFolder(input: {libraryId: string; folderId: string}): Promise<LibraryApiResult<FolderInspection>>;
+  previewIgnoreRules(input: {libraryId: string; content: string}): Promise<LibraryApiResult<IgnorePreview>>;
   create(input: { displayName: string }): Promise<LibraryApiResult<RendererLibrarySummary>>;
   open(): Promise<LibraryApiResult<RendererLibrarySummary>>;
   /** Reveal a Main-owned recovery report without exposing its filesystem path. */
@@ -501,7 +507,7 @@ export interface SuperLibraryApi {
   // Collections
   listCollections(input: { libraryId: string }): Promise<LibraryApiResult<CollectionSummary[]>>;
   createCollection(input: { libraryId: string; parentId?: string; name: string }): Promise<LibraryApiResult<CollectionSummary & { historyEntryId?: string }>>;
-  updateCollection(input: { libraryId: string; collectionId: string; name?: string; description?: string | null; coverAssetId?: string | null; position?: number }): Promise<LibraryApiResult<CollectionSummary & { historyEntryId?: string }>>;
+  updateCollection(input: { libraryId: string; collectionId: string; name?: string; parentId?: string | null; description?: string | null; coverAssetId?: string | null; position?: number }): Promise<LibraryApiResult<CollectionSummary & { historyEntryId?: string }>>;
   reorderCollections(input: { libraryId: string; orderedCollectionIds: string[] }): Promise<LibraryApiResult<{ orderedCollectionIds: string[]; historyEntryId?: string }>>;
   deleteCollection(input: { libraryId: string; collectionId: string }): Promise<LibraryApiResult<{ collectionId: string; historyEntryId?: string }>>;
   addCollectionAssets(input: { libraryId: string; collectionId: string; assetIds: string[] }): Promise<LibraryApiResult<{ collectionId: string; historyEntryId?: string }>>;
@@ -539,6 +545,7 @@ export interface SuperLibraryApi {
   undoCopyAssets(input: { libraryId: string; operationId: string; conflictStrategy?: 'error' | 'keep-both' | 'replace' | 'skip' }): Promise<LibraryApiResult<{ undoneCount: number; skippedCount: number; assets: AssetSummary[] }>>;
   renameAssetFile(input: { libraryId: string; assetId: string; newBaseName?: string; newFileName?: string }): Promise<LibraryApiResult<AssetSummary & { historyEntryId?: string }>>;
   readTextAsset(input: { libraryId: string; assetId: string; maxBytes?: number }): Promise<LibraryApiResult<{
+    encoding?: 'utf-8' | 'utf-16le' | 'utf-16be' | 'gb18030';
     assetId: string;
     revisionId: string;
     content: string;
@@ -548,12 +555,14 @@ export interface SuperLibraryApi {
     editable: boolean;
     mimeType: string;
   }>>;
+  transformImageAsset(input: { libraryId: string; assetId: string; expectedRevisionId: string; quarterTurns: number; flipHorizontal: boolean; flipVertical: boolean }): Promise<LibraryApiResult<{ assetId: string; revisionId: string; byteSize: number }>>;
   saveTextAsset(input: {
     libraryId: string;
     assetId: string;
     content: string;
     expectedRevisionId?: string;
     createRevision?: boolean;
+    convertToUtf8?: boolean;
   }): Promise<LibraryApiResult<{
     asset: AssetSummary;
     revisionId: string;
@@ -713,6 +722,7 @@ export interface SuperLibraryApi {
   /** Super-xffq: 首次同步差异预览（不写任何内容）。 */
   syncPreview(input: { libraryId: string; serverId: string; directoryName?: string }): Promise<LibraryApiResult<SyncReport>>;
   /** Super-xffq: 执行完整双向同步。 */
+  cancelSync(input: {libraryId:string}): Promise<LibraryApiResult<void>>;
   syncRun(input: { libraryId: string; serverId: string; directoryName?: string }): Promise<LibraryApiResult<{ report: SyncReport; conflicts: Array<{ syncId: string; conflictCopyPath: string }> }>>;
   requestPreview(input: { libraryId: string; assetId: string; mode: 'client' | 'fullscreen'; intent?: 'viewer' | 'hover' | 'proxy-fallback'; exrPlane?: number; colorSpace?: string }): Promise<LibraryApiResult<PreviewResolution>>;
   /** Move an already-viewable image or PDF into a Main-authorized floating window. */

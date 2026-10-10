@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { Icon, type IconName } from "./Icons";
+import { matchingTreeIds, orderSidebarTree, sortSidebarSiblings, type SidebarSort } from "./sidebar-discovery";
 import { IconActionButton } from "./icon-action-button";
 import {
   linkedFolderHoverDetail,
@@ -69,6 +70,8 @@ import { PaneSurface } from "./ui/surfaces";
 import { SidebarEmojiDialog } from "./SidebarEmojiDialog";
 import { emojiKey } from "./sidebar-emoji-preferences";
 import { useSidebarEmoji } from "./use-sidebar-emoji";
+import type { SidebarAppearance } from "./sidebar-appearance-preferences";
+import { SIDEBAR_APPEARANCE_COLORS } from "./sidebar-appearance-catalog";
 
 // ---------------------------------------------------------------------------
 // NavRow — local presentational row
@@ -76,7 +79,7 @@ import { useSidebarEmoji } from "./use-sidebar-emoji";
 
 function NavRow({
   icon,
-  emoji,
+  appearance,
   label,
   count,
   active,
@@ -99,7 +102,7 @@ function NavRow({
   navCollectionId,
 }: {
   icon: IconName;
-  emoji?: string;
+  appearance?: SidebarAppearance;
   label: string;
   count?: number;
   active?: boolean;
@@ -151,12 +154,12 @@ function NavRow({
         title={hoverTitle}
         type="button"
       >
-        {emoji ? (
+        {appearance?.glyph ? (
           <span className="sidebar-emoji-glyph" aria-hidden="true">
-            {emoji}
+            {appearance.glyph.kind === "emoji" ? appearance.glyph.value : <Icon name={appearance.glyph.value} size={15} color={appearance.color ? SIDEBAR_APPEARANCE_COLORS[appearance.color] : iconColor} />}
             {navFolderKind === "linked" ? <span className="sidebar-emoji-link-badge"><Icon name={icon} size={9} color={iconColor} /></span> : null}
           </span>
-        ) : <Icon name={icon} size={15} color={iconColor} />}
+        ) : <Icon name={icon} size={15} color={appearance?.color ? SIDEBAR_APPEARANCE_COLORS[appearance.color] : iconColor} />}
         <span className="nav-row-label">{label}</span>
         {count !== undefined && (
           <span aria-hidden="true" className="nav-count">
@@ -480,6 +483,8 @@ function InlineSmartCollectionEditRow({
 // ---------------------------------------------------------------------------
 
 function Section({
+  onHeadingDragOver,
+  onHeadingDrop,
   title,
   titleAction,
   titleActive,
@@ -494,6 +499,8 @@ function Section({
   secondaryLabel,
   children,
 }: {
+  onHeadingDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
+  onHeadingDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
   title: string;
   titleAction?: () => void;
   titleActive?: boolean;
@@ -514,7 +521,7 @@ function Section({
   const linkLabel = secondaryLabel ?? t("nav.secondaryAction", { title });
   return (
     <section className="nav-section">
-      <div className="nav-section-heading">
+      <div className="nav-section-heading" onDragOver={onHeadingDragOver} onDrop={onHeadingDrop}>
         {titleAction ? (
           <button
             type="button"
@@ -673,6 +680,7 @@ export interface NavigationSidebarProps {
   onInlineCollectionRenameCancel: () => void;
   // --- Folder creation entry (sidebar 「+」; opens the inline edit row) ---
   onAddFolder: () => void;
+  onBatchCreateFolders?: () => void;
   /** SMART-007: open sidebar inline smart-collection name row. */
   onAddSmartCollection: () => void;
   /** AI-assisted smart search keeps the manual rule builder available. */
@@ -702,7 +710,7 @@ export interface NavigationSidebarProps {
   ) => void;
 
   // --- Collection drag/drop ---
-  onReorderCollection: (sourceId: string, targetId: string) => void;
+  onReorderCollection: (sourceId: string, targetId: string | null) => void;
   onImportDroppedFiles: (
     files: File[],
     targetFolderId: string | null | undefined,
@@ -723,6 +731,10 @@ export interface NavigationSidebarProps {
 
 export function NavigationSidebar(props: NavigationSidebarProps) {
   const t = useT();
+  const [sidebarQuery, setSidebarQuery] = useState('');
+  const [sidebarSort, setSidebarSort] = useState<SidebarSort>(() => {
+    try { const stored = localStorage.getItem('super.sidebar-sort.v1'); return stored === 'name-asc' || stored === 'name-desc' ? stored : 'manual'; } catch { return 'manual'; }
+  });
   const {
     footer,
     library,
@@ -782,6 +794,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
     onInlineCollectionRenameCommit,
     onInlineCollectionRenameCancel,
     onAddFolder,
+    onBatchCreateFolders,
     onAddSmartCollection,
     onOpenAiSmartSearch,
     inlineFolderEdit,
@@ -798,7 +811,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
     onCopyManagedToLinked,
   } = props;
 
-  const { icons: emojiIcons, save: saveEmoji } = useSidebarEmoji(library?.libraryId);
+  const { appearances: emojiIcons, save: saveEmoji } = useSidebarEmoji(library?.libraryId);
   const [emojiTarget, setEmojiTarget] = useState<{
     libraryId: string; key: string; name: string; icon: IconName; returnFocus: HTMLElement | null;
   } | null>(null);
@@ -1002,10 +1015,14 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
     };
   }
 
+  const unifiedEntries = buildUnifiedDirectoryNavEntries(folders, linkedFolders);
+  const directoryMatches = matchingTreeIds(unifiedEntries, sidebarQuery, row => row.folderId, row => row.parentFolderId, row => row.name);
+  const collectionMatches = matchingTreeIds(collections, sidebarQuery, row => row.collectionId, row => row.parentId, row => row.name);
   const directoryEntries = filterCollapsedDirectoryEntries(
-    buildUnifiedDirectoryNavEntries(folders, linkedFolders),
-    collapsedFolderIds,
+    orderSidebarTree(unifiedEntries.filter(row => directoryMatches.has(row.folderId)), sidebarSort, row => row.folderId, row => row.parentFolderId, row => row.name),
+    sidebarQuery.trim() ? new Set<string>() : collapsedFolderIds,
   );
+  if (sidebarQuery.trim()) collapsedCollectionIds.clear();
   const foldersWithChildren = managedFolderIdsWithChildren(
     buildUnifiedDirectoryNavEntries(folders, linkedFolders),
   );
@@ -1034,7 +1051,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
           );
         }
         const hasChildren = foldersWithChildren.has(entry.folderId);
-        const expanded = !collapsedFolderIds.has(entry.folderId);
+        const expanded = Boolean(sidebarQuery.trim()) || !collapsedFolderIds.has(entry.folderId);
         return (
           <NavRow
             active={isManagedFolderNavActive(browseNavFlags, entry.folderId)}
@@ -1061,7 +1078,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
               ) : undefined
             }
             icon="folder"
-            emoji={emojiIcons[emojiKey("folder", entry.folderId)]}
+            appearance={emojiIcons[emojiKey("folder", entry.folderId)]}
             key={entry.folderId}
             label={entry.name}
             navFolderId={entry.folderId}
@@ -1122,7 +1139,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
       const offline = entry.status === "offline";
       const linkedAffordance = linkedFolderNavAffordance(entry.status);
       const hasChildren = foldersWithChildren.has(entry.folderId);
-      const expanded = !collapsedFolderIds.has(entry.folderId);
+      const expanded = sidebarQuery.trim() !== "" || !collapsedFolderIds.has(entry.folderId);
       const linkedRootId = entry.linkedFolderId;
       return (
         <NavRow
@@ -1149,7 +1166,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
             ) : undefined
           }
           icon={linkedAffordance.icon}
-          emoji={emojiIcons[emojiKey("folder", entry.folderId)]}
+          appearance={emojiIcons[emojiKey("folder", entry.folderId)]}
           iconColor={linkedAffordance.iconColor}
           key={entry.folderId}
           label={entry.name}
@@ -1306,7 +1323,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
     parentId: string | null,
     depth: number,
   ): ReactNode {
-    const children = collectionTree.get(parentId) ?? [];
+    const children = sortSidebarSiblings((collectionTree.get(parentId) ?? []).filter(row => collectionMatches.has(row.collectionId)), sidebarSort, row => row.name);
     const rows: ReactNode[] = [];
     if (showCollectionInput && newCollectionParentId === parentId) {
       rows.push(
@@ -1434,7 +1451,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
               ) : undefined
             }
             icon="collection"
-            emoji={emojiIcons[emojiKey("collection", c.collectionId)]}
+            appearance={emojiIcons[emojiKey("collection", c.collectionId)]}
             label={c.name}
             count={c.assetCount}
             active={activeCollectionId === c.collectionId && !activeTagId}
@@ -1498,6 +1515,12 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
       data-ui-surface-variant="navigation"
     >
       <nav className="navigation-scroll">
+        <div className="sidebar-discovery-controls">
+          <input className="text-field" type="search" aria-label={t("localUpgrade.sidebarSearch")} placeholder={t("localUpgrade.sidebarSearch")} value={sidebarQuery} onChange={event => setSidebarQuery(event.target.value)} />
+          <select className="text-field" aria-label={t("localUpgrade.sidebarSort")} value={sidebarSort} onChange={event => { const value = event.target.value as SidebarSort; setSidebarSort(value); try { localStorage.setItem('super.sidebar-sort.v1', value); } catch { /* Session still works when storage is unavailable. */ } }}>
+            <option value="manual">{t("localUpgrade.manualSort")}</option><option value="name-asc">{t("localUpgrade.nameAsc")}</option><option value="name-desc">{t("localUpgrade.nameDesc")}</option>
+          </select>
+        </div>
         <NavRow
           active={library ? isAllAssetsNavActive(browseNavFlags) : true}
           count={library ? allAssetCount : undefined}
@@ -1628,6 +1651,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
         >
           {library ? (
             <>
+              {onBatchCreateFolders && <button className="sidebar-batch-folders" type="button" onClick={onBatchCreateFolders}>{t("localUpgrade.batchFolders")}…</button>}
               {renderDirectoryEntries()}
             </>
           ) : (
@@ -1636,6 +1660,14 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
         </Section>
         <Section
           title={t("nav.collections")}
+          onHeadingDragOver={event => {
+            if (draggedCollectionId) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }
+          }}
+          onHeadingDrop={event => {
+            if (!draggedCollectionId) return;
+            event.preventDefault(); event.stopPropagation();
+            onReorderCollection(draggedCollectionId, null);
+          }}
           action={
             library
               ? () => onAddCollection(activeCollectionId)
@@ -1683,12 +1715,12 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
                 />
               ) : null}
               {smartCollections.length ? (
-                smartCollections.map((sc) => (
+                sortSidebarSiblings(smartCollections.filter(sc => sc.name.toLocaleLowerCase().includes(sidebarQuery.trim().toLocaleLowerCase())), sidebarSort, sc => sc.name).map((sc) => (
                   <NavRow
                     active={activeSmartCollectionId === sc.collectionId}
                     count={sc.assetCount}
                     icon="smart"
-                    emoji={emojiIcons[emojiKey("smart-collection", sc.collectionId)]}
+                    appearance={emojiIcons[emojiKey("smart-collection", sc.collectionId)]}
                     key={sc.collectionId}
                     label={sc.name}
                     onClick={() => void onChooseSmartCollection(sc.collectionId)}
@@ -1719,7 +1751,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
       {emojiTarget && emojiTarget.libraryId === library?.libraryId ? (
         <SidebarEmojiDialog key={`${emojiTarget.libraryId}:${emojiTarget.key}`}
           name={emojiTarget.name} defaultIcon={emojiTarget.icon} returnFocus={emojiTarget.returnFocus}
-          initialEmoji={emojiIcons[emojiTarget.key]}
+          initialAppearance={emojiIcons[emojiTarget.key]}
           onSave={emoji => saveEmoji(emojiTarget.key, emoji)} onClose={() => setEmojiTarget(null)} />
       ) : null}
     </PaneSurface>

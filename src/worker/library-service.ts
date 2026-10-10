@@ -1,4 +1,8 @@
 import { randomUUID, createHash } from 'node:crypto';
+import { syncMetadataSchema, canonicalSyncMetadata, metadataFingerprint, type SyncMetadata } from './sync/sync-metadata';
+import { readEmbeddedGeneration } from './embedded-generation';
+import type { Sharp } from 'sharp';
+import { embeddedGenerationSchema, type FolderInspection, type IgnorePreview, type EmbeddedGenerationInfo } from '../shared/local-upgrade-results';
 import {
   accessSync,
   closeSync,
@@ -129,6 +133,7 @@ import {
   recordMigrationFailure,
 } from './schema-failure';
 import { sanitizeAiDescription } from '../shared/ai-analysis-settings';
+import { decodeTextBytes, type TextEncoding } from '../shared/text-encoding';
 import {
   CONTENT_REPLACE_BATCH_MAX_ITEMS,
   CONTENT_REPLACE_MAX_BYTES,
@@ -491,6 +496,8 @@ import { assetAuthorSchema, sourcePageUrlSchema } from '../shared/protocol/reque
 import { extractAuthorFromExif } from './author-from-exif';
 import {
   extractRawImageMetadata,
+  resolvedImagePixelSize,
+  usablePixelDimension,
   type RawImageMetadata,
   type RawImageMetadataParser,
 } from './raw-image-metadata';
@@ -2978,6 +2985,38 @@ const ACTIVE_LINKED_FOLDER_PATH_INDEX_SCHEMA_CHECKSUM = createHash('sha256')
   .update(ACTIVE_LINKED_FOLDER_PATH_INDEX_SCHEMA_SQL)
   .digest('hex');
 
+// Migration v50: retain explicit user deletion after the asset row is purged.
+// Index reconciliation/unlinking MUST NOT be interpreted as a remote delete.
+const SYNC_DELETION_INTENT_SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS sync_deleted_assets (
+    sync_id TEXT PRIMARY KEY,
+    deleted_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS sync_restored_assets (
+    sync_id TEXT PRIMARY KEY,
+    restored_at TEXT NOT NULL
+  );
+  INSERT OR IGNORE INTO sync_deleted_assets (sync_id, deleted_at)
+    SELECT sync_id, deleted_at FROM assets
+     WHERE sync_id IS NOT NULL AND deleted_at IS NOT NULL;
+  CREATE TRIGGER IF NOT EXISTS sync_asset_trashed
+    AFTER UPDATE OF deleted_at ON assets
+    WHEN NEW.deleted_at IS NOT NULL AND NEW.sync_id IS NOT NULL
+    BEGIN
+      INSERT OR REPLACE INTO sync_deleted_assets VALUES (NEW.sync_id, NEW.deleted_at);
+      DELETE FROM sync_restored_assets WHERE sync_id = NEW.sync_id;
+    END;
+  CREATE TRIGGER IF NOT EXISTS sync_asset_restored
+    AFTER UPDATE OF deleted_at ON assets
+    WHEN OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL AND NEW.sync_id IS NOT NULL
+    BEGIN
+      DELETE FROM sync_deleted_assets WHERE sync_id = NEW.sync_id;
+      INSERT OR REPLACE INTO sync_restored_assets VALUES (NEW.sync_id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+    END;
+`;
+const SYNC_DELETION_INTENT_SCHEMA_CHECKSUM = createHash('sha256')
+  .update(SYNC_DELETION_INTENT_SCHEMA_SQL).digest('hex');
+
 function ensurePaletteColorIndexSchema(connection: DatabaseConnection): void {
   // Compatibility fixtures and real interrupted upgrades can retain the table
   // while their migration receipt is absent. Make the additive v48 recipe
@@ -3169,6 +3208,10 @@ export const MIGRATIONS = [
     sql: ACTIVE_LINKED_FOLDER_PATH_INDEX_SCHEMA_SQL,
     checksum: ACTIVE_LINKED_FOLDER_PATH_INDEX_SCHEMA_CHECKSUM,
   },
+  { version: 50, sql: SYNC_DELETION_INTENT_SCHEMA_SQL, checksum: SYNC_DELETION_INTENT_SCHEMA_CHECKSUM },
+  {version: 51,
+    sql: 'CREATE TABLE IF NOT EXISTS revision_generation_info (revision_id TEXT PRIMARY KEY REFERENCES revisions(revision_id) ON DELETE CASCADE, info_json TEXT);',
+    checksum: createHash('sha256').update('CREATE TABLE IF NOT EXISTS revision_generation_info (revision_id TEXT PRIMARY KEY REFERENCES revisions(revision_id) ON DELETE CASCADE, info_json TEXT);').digest('hex')},
 ] as const;
 export const SUPPORTED_SCHEMA_VERSION = MIGRATIONS.at(-1)!.version;
 
@@ -4176,7 +4219,7 @@ export interface AssetsChangedEvent {
   changedCount: number;
   libraryId: string;
   missingCount: number;
-  source?: 'watcher' | 'text-save' | 'content-replace' | 'client';
+  source?: 'watcher' | 'text-save' | 'content-replace' | 'client' | 'sync';
   /** Presentation only: domain subscribers must still process this change. */
   suppressWatcherNotification?: boolean;
   type: 'asset.changed';
@@ -4993,6 +5036,7 @@ function migrateLegacyPluginMigrationHistory(connection: DatabaseConnection): vo
   // migration receipts.
   ensurePaletteColorIndexSchema(connection);
   connection.exec(ACTIVE_LINKED_FOLDER_PATH_INDEX_SCHEMA_SQL);
+  connection.exec(SYNC_DELETION_INTENT_SCHEMA_SQL);
   connection.prepare('DELETE FROM schema_migrations WHERE version >= 24').run();
   const insert = connection.prepare(
     'INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)',
@@ -5871,6 +5915,7 @@ export class LibraryService {
    */
   private readonly textAssetPreviewCache = new Map<string, {
     value: {
+      encoding?: TextEncoding;
       assetId: string;
       revisionId: string;
       content: string;
@@ -9169,8 +9214,14 @@ export class LibraryService {
         }
       }
       const pending = [...restore];
+      const restoredIds = new Set<string>();
+      const existingParent = openLibrary.connection.prepare('SELECT 1 FROM collections WHERE collection_id = ? AND library_id = ?');
       while (pending.length > 0) {
-        const index = pending.findIndex((item) => item.parentId === null || restoreIds.has(item.parentId));
+        // A single-row rename/reparent snapshot does not include its unchanged
+        // parent. Resolve that parent from this library; parents being restored
+        // in this snapshot must be inserted first (not merely present in the set).
+        const index = pending.findIndex((item) => item.parentId === null || restoredIds.has(item.parentId)
+          || (!restoreIds.has(item.parentId) && !!existingParent.get(item.parentId, openLibrary.summary.libraryId)));
         if (index < 0) throw new LibraryServiceError('FOLDER_NOT_FOUND');
         const [item] = pending.splice(index, 1);
         if (!item) throw new LibraryServiceError('LIBRARY_CORRUPT');
@@ -9197,6 +9248,7 @@ export class LibraryService {
           new Date().toISOString(),
           new Date().toISOString(),
         );
+        restoredIds.add(item.collectionId);
       }
       if (affectedIds.length > 0) {
         openLibrary.connection.prepare(
@@ -9565,6 +9617,19 @@ export class LibraryService {
   ): { affectedCount: number; operationId?: string } {
     const payload = recipe.payload;
     switch (recipe.kind) {
+      case 'asset-content-backup': {
+        const libraryId = openLibrary.summary.libraryId, assetId = payload.assetId as string;
+        const source = this.resolveAssetPath(libraryId, assetId);
+        if (sha256FileAtPath(source) !== payload.expectedHash) throw new LibraryServiceError('VERSION_CONFLICT', { reason: 'SOURCE_CHANGED' });
+        const backup = path.join(openLibrary.summary.libraryPath, '.super', 'edit-backups', (payload.backupId as string) + '.bin');
+        const stat = lstatSync(backup);
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 64 * 1024 * 1024 || sha256FileAtPath(backup) !== payload.targetHash) throw new LibraryServiceError('LIBRARY_CORRUPT');
+        const asset = this.managedMoveSummaries(openLibrary, [assetId])[0];
+        if (!asset?.currentRevisionId || asset.locationKind !== 'managed') throw new LibraryServiceError('LIBRARY_NOT_WRITABLE');
+        const result = this.withHistoryReplay(() => this.replaceEditedContent(libraryId, assetId, asset.currentRevisionId!, readFileSync(backup)));
+        this.invalidateTextAssetPreviewCache(libraryId, assetId);
+        return { affectedCount: 1, operationId: result.operationId };
+      }
       case 'managed-asset-move': {
         const result = this.withHistoryReplay(() => this.moveAssets({
           libraryId: openLibrary.summary.libraryId,
@@ -12830,12 +12895,9 @@ export class LibraryService {
 
   /**
    * Clarification #7: delete a linked folder path.
-   * - relativePath "": the linked folder root — OS trash (or rm) of the
-   *   source tree, then drop the library index (same as removeLinkedFolder
-   *   after the bytes are gone).
+   * - relativePath "": the linked folder root.
    * - relativePath child: a linked *child* folder.
-   * - deleteFromDisk false: move sources to the OS trash (linked bytes are not
-   *   library-owned, so they cannot enter the app trash) and drop index rows.
+   * - deleteFromDisk false: unlink only; external bytes are never library trash.
    * - deleteFromDisk true: irreversible rm of the directory tree + rows.
    */
   async deleteLinkedFolderSubtree(input: {
@@ -12904,6 +12966,9 @@ export class LibraryService {
 
     if (input.deleteFromDisk) {
       if (linked.status === 'available' && existsSync(dirPath)) {
+        // Validate every real parent before recursively deleting a linked path.
+        this.linkedAssetPath(openLibrary, input.linkedFolderId,
+          isLinkedRoot ? '.super-delete-probe' : `${relativePath}/.super-delete-probe`);
         try {
           rmSync(dirPath, { force: true, recursive: true });
         } catch (error) {
@@ -12911,6 +12976,7 @@ export class LibraryService {
         }
       }
       if (isLinkedRoot) {
+        this.recordExplicitSyncDeletion(openLibrary, assetRows.map((row) => row.asset_id));
         return {
           deletedAssetCount: this.removeLinkedFolder({
             libraryId: input.libraryId,
@@ -12921,6 +12987,8 @@ export class LibraryService {
       }
       if (assetRows.length > 0) {
         openLibrary.connection.transaction(() => {
+          this.recordExplicitSyncDeletion(openLibrary, assetRows.map((row) => row.asset_id));
+          this.dissolveImageSequencesForAssets(openLibrary, assetRows.map((row) => row.asset_id));
           for (const row of assetRows) {
             openLibrary.connection
               .prepare('DELETE FROM assets WHERE asset_id = ?')
@@ -12931,35 +12999,24 @@ export class LibraryService {
       return { deletedAssetCount: assetRows.length, failedCount: 0 };
     }
 
-    // Default: OS trash for indexed files (chunked), then trash leftover dir.
-    let deletedAssetCount = 0;
-    let failedCount = 0;
-    const ids = assetRows.map((row) => row.asset_id);
-    for (let offset = 0; offset < ids.length; offset += 20) {
-      const chunk = ids.slice(offset, offset + 20);
-      const result = await this.deleteLinkedAssets({
-        libraryId: input.libraryId,
-        assetIds: chunk,
-        deleteSourceFile: true,
-      });
-      deletedAssetCount += result.deletedCount;
-      failedCount += result.failedCount;
-    }
-    if (linked.status === 'available' && existsSync(dirPath)) {
-      const trashItem = this.options.trashItem ?? defaultTrashItem;
-      try {
-        await trashItem(dirPath);
-      } catch {
-        // Files already trashed; directory cleanup is best-effort.
-      }
-    }
-    if (isLinkedRoot && failedCount === 0) {
-      this.removeLinkedFolder({
+    if (isLinkedRoot) {
+      const result = this.removeLinkedFolder({
         libraryId: input.libraryId,
         folderId: input.linkedFolderId,
       });
+      return { deletedAssetCount: result.removedAssetCount, failedCount: 0 };
     }
-    return { deletedAssetCount, failedCount };
+    // Persist the exclusion before dropping rows, otherwise the next watcher
+    // scan would re-import this still-existing external subtree immediately.
+    openLibrary.connection.transaction(() => {
+      this.setIgnore({ libraryId: input.libraryId, locationKind: 'linked',
+        linkedFolderId: input.linkedFolderId, relativePath, pathKind: 'folder', ignored: true });
+      this.dissolveImageSequencesForAssets(openLibrary, assetRows.map((row) => row.asset_id));
+      for (const row of assetRows) {
+        openLibrary.connection.prepare('DELETE FROM assets WHERE asset_id = ?').run(row.asset_id);
+      }
+    })();
+    return { deletedAssetCount: assetRows.length, failedCount: 0 };
   }
 
   /**
@@ -13418,6 +13475,7 @@ export class LibraryService {
 
     openLibrary.connection.transaction(() => {
       this.dissolveImageSequencesForAssets(openLibrary, assetIds);
+      this.recordExplicitSyncDeletion(openLibrary, assetIds);
       for (const row of rows) {
         openLibrary.connection
           .prepare('DELETE FROM assets WHERE asset_id = ?')
@@ -13467,6 +13525,7 @@ export class LibraryService {
 
     openLibrary.connection.transaction(() => {
       this.dissolveImageSequencesForAssets(openLibrary, assetIds);
+      this.recordExplicitSyncDeletion(openLibrary, assetIds);
       for (const row of rows) {
         openLibrary.connection
           .prepare('DELETE FROM assets WHERE asset_id = ?')
@@ -13666,7 +13725,10 @@ export class LibraryService {
       )
       : [];
     const directoryIndex = buildLinkedDirectoryIndex(paths, diskPrefixes);
-    const children = directoryIndex.childrenOf(resolved.relativePath);
+    const children = directoryIndex.childrenOf(resolved.relativePath).filter((child) =>
+      input.showIgnored === true || !this.explicitFolderIgnored(
+        openLibrary, 'linked', resolved.linkedFolderId, child.relativePath,
+      ));
     if (children.length === 0) return [];
     const { artifactIdsByPath, candidateIdsByPath } = this.linkedDirectoryCoverMaps(
       openLibrary,
@@ -18834,9 +18896,7 @@ export class LibraryService {
     // file is intentionally broader than this set; this gate only decides
     // whether AI can obtain a decoded visual derivative.
     const imageExts = new Set<string>(IMAGE_EXTENSIONS);
-    const videoExts = new Set([
-      '.mp4', '.mov', '.avi', '.wmv', '.webm', '.mkv', '.m4v',
-    ]);
+    const videoExts = new Set<string>(VIDEO_EXTENSIONS);
     const modelExts = new Set<string>(MODEL_EXTENSIONS);
 
     let enqueued = 0;
@@ -20229,7 +20289,7 @@ export class LibraryService {
     if (mediaType === 'document' && ext === '.pdf') {
       return this.generatePdfThumbnail(input, openLibrary, assetPath, revisionId, execution);
     }
-    if (mediaType === 'document') {
+    if (mediaType === 'document' && ['.html', '.htm'].includes(ext)) {
       const renderer = this.options.documentThumbnailRenderer;
       if (!renderer) return null;
       return this.generateHtmlThumbnail(
@@ -20807,6 +20867,7 @@ export class LibraryService {
     let imageProcessed = false;
 
     try {
+      try { this.getEmbeddedGeneration(input); } catch (error) { this.diagnose('image.embedded-generation', error, {assetId: input.assetId}); }
       const headerSize = readImageDimensionsSync(assetPath);
       if (headerSize) {
         this.persistExtractedImageDimensions(openLibrary, revisionId, headerSize);
@@ -21390,11 +21451,19 @@ export class LibraryService {
       size: number;
       modifiedAt: string;
     }>;
+    missingSyncIds: string[];
+    deletedSyncIds: string[];
+    restoredSyncIds: string[];
   } {
     const openLibrary = this.requireOpenLibrary(libraryId);
-    const assets = this.listAssets({ libraryId, recursive: true }).filter(
-      (asset) => asset.availability === 'available' && asset.deletedAt === null,
-    );
+    // Do not use browse projection: it hides ignored/sequence-member assets.
+    const assets = openLibrary.connection.prepare(
+      `SELECT a.asset_id, a.relative_file_path, a.location_kind, a.linked_folder_id, a.availability, r.modified_at
+         FROM assets a LEFT JOIN revisions r ON r.revision_id = a.current_revision_id
+        WHERE a.deleted_at IS NULL`,
+    ).all() as Array<{ asset_id: string; relative_file_path: string;
+      location_kind: 'managed' | 'linked'; linked_folder_id: string | null;
+      availability: string; modified_at: string | null }>;
     const out: Array<{
       syncId: string;
       assetId: string;
@@ -21403,22 +21472,49 @@ export class LibraryService {
       size: number;
       modifiedAt: string;
     }> = [];
+    const missingSyncIds: string[] = [];
     for (const asset of assets) {
-      const absolutePath = this.resolveAssetPath(libraryId, asset.assetId);
-      if (!existsSync(absolutePath)) continue;
-      out.push({
-        syncId: this.ensureAssetSyncId(openLibrary, asset.assetId),
-        assetId: asset.assetId,
-        relativePath: asset.relativeFilePath,
-        contentHash: sha256FileAtPath(absolutePath),
-        size: asset.byteSize,
-        modifiedAt: asset.modifiedAt,
-      });
+      const syncId = this.ensureAssetSyncId(openLibrary, asset.asset_id);
+      if (asset.availability !== 'available' || !asset.modified_at
+        || this.isExplicitlyIgnored(openLibrary, asset.location_kind, asset.linked_folder_id, asset.relative_file_path, 'asset')) {
+        missingSyncIds.push(syncId);
+        continue;
+      }
+      try {
+        const absolutePath = this.resolveAssetPath(libraryId, asset.asset_id);
+        const stat = statSync(absolutePath);
+        if (!stat.isFile()) { missingSyncIds.push(syncId); continue; }
+        out.push({ syncId, assetId: asset.asset_id, relativePath: asset.relative_file_path,
+          contentHash: sha256FileAtPath(absolutePath), size: stat.size, modifiedAt: stat.mtime.toISOString() });
+      } catch (error) {
+        if (!isMissingPathError(error)) throw error;
+        missingSyncIds.push(syncId);
+      }
     }
     return {
       library: { libraryId, displayName: this.libraryDisplayName(libraryId) },
       assets: out,
+      missingSyncIds,
+      deletedSyncIds: (openLibrary.connection.prepare('SELECT sync_id FROM sync_deleted_assets')
+        .all() as Array<{ sync_id: string }>).map((row) => row.sync_id),
+      restoredSyncIds: (openLibrary.connection.prepare('SELECT sync_id FROM sync_restored_assets')
+        .all() as Array<{ sync_id: string }>).map((row) => row.sync_id),
     };
+  }
+
+  private recordExplicitSyncDeletion(openLibrary: OpenLibrary, assetIds: readonly string[]): void {
+    const statement = openLibrary.connection.prepare(
+      `INSERT OR REPLACE INTO sync_deleted_assets (sync_id, deleted_at)
+       SELECT sync_id, ? FROM assets WHERE asset_id = ? AND sync_id IS NOT NULL`,
+    );
+    const now = new Date().toISOString();
+    for (const assetId of assetIds) statement.run(now, assetId);
+  }
+
+  acknowledgeSyncRestores(libraryId: string, syncIds: readonly string[]): void {
+    const openLibrary = this.requireOpenLibrary(libraryId);
+    const remove = openLibrary.connection.prepare('DELETE FROM sync_restored_assets WHERE sync_id = ?');
+    openLibrary.connection.transaction(() => { for (const syncId of syncIds) remove.run(syncId); })();
   }
 
   /**
@@ -21434,8 +21530,18 @@ export class LibraryService {
   ): { assetId: string; created: boolean } {
     const openLibrary = this.requireOpenLibrary(libraryId);
     this.assertLibraryWritable(openLibrary);
-    const existing = this.assetRowBySyncId(openLibrary, syncId);
+    const normalizedPath = normalizeRelativeAssetPath(relativePath);
+    if (normalizedPath !== relativePath) throw new LibraryServiceError('INVALID_IMPORT_DECISION');
+    let existing = this.assetRowBySyncId(openLibrary, syncId);
     if (!existing) {
+      const destination = this.folderPath(openLibrary, relativePath);
+      if (this.portableDiskDestination(openLibrary, relativePath)
+        || openLibrary.connection.prepare('SELECT asset_id FROM assets WHERE path_identity = ? AND deleted_at IS NULL')
+          .get(portablePathIdentity(relativePath))) {
+        throw new LibraryServiceError('INVALID_IMPORT_DECISION', { reason: 'SOURCE_CHANGED' });
+      }
+      // Resolve the exact destination folder before import, not just basename.
+      const targetFolderId = this.ensureSyncParentFolder(openLibrary, relativePath);
       // 新资产：临时文件走既有导入管线（revision/搜索索引/缩略图全部正确）。
       const stageDir = mkdtempSync(path.join(tmpdir(), 'super-sync-import-'));
       const stagePath = path.join(stageDir, path.posix.basename(relativePath));
@@ -21443,8 +21549,11 @@ export class LibraryService {
         writeFileSync(stagePath, body);
         const prepared = this.prepareOrExecuteImport({
           libraryId,
+          ...(targetFolderId ? { targetFolderId } : {}),
           sourceKind: 'files',
           sourcePaths: [stagePath],
+          expandImageSequences: false,
+          createImageSequence: false,
         });
         if ('importId' in prepared) {
           this.resolveImport({
@@ -21470,11 +21579,17 @@ export class LibraryService {
       if (!byPath) {
         throw new LibraryServiceError('INVALID_IMPORT_SOURCE', { reason: 'SOURCE_NOT_FOUND' });
       }
+      if (!existsSync(destination)) throw new LibraryServiceError('ASSET_NOT_FOUND');
       const newSyncId = syncId;
       openLibrary.connection
         .prepare('UPDATE assets SET sync_id = ? WHERE asset_id = ?')
         .run(newSyncId, byPath.asset_id);
       return { assetId: byPath.asset_id, created: true };
+    }
+
+    if (existing.relative_file_path !== relativePath) {
+      this.applySyncRelocate(libraryId, syncId, relativePath);
+      existing = this.assetRowBySyncId(openLibrary, syncId)!;
     }
 
     // 已存在：覆盖文件 + 新 revision。
@@ -21541,6 +21656,57 @@ export class LibraryService {
     return { assetId: existing.asset_id, created: false };
   }
 
+  private ensureSyncParentFolder(openLibrary: OpenLibrary, relativePath: string): string | null {
+    const components = relativePath.split('/').slice(0, -1);
+    let relative = '';
+    let parentFolderId: string | null = null;
+    for (const name of components) {
+      relative = relative ? `${relative}/${name}` : name;
+      const row = openLibrary.connection.prepare('SELECT folder_id FROM managed_folders WHERE path_identity = ?')
+        .get(portablePathIdentity(relative)) as { folder_id: string } | undefined;
+      parentFolderId = row?.folder_id ?? this.createManagedFolder({ libraryId: openLibrary.summary.libraryId,
+        name, ...(parentFolderId ? { parentFolderId } : {}) }).folderId;
+    }
+    return parentFolderId;
+  }
+
+  /** Keep the same asset/revision/sync identity while applying a remote move. */
+  applySyncRelocate(libraryId: string, syncId: string, relativePath: string): void {
+    const openLibrary = this.requireOpenLibrary(libraryId);
+    this.assertLibraryWritable(openLibrary);
+    if (normalizeRelativeAssetPath(relativePath) !== relativePath) throw new LibraryServiceError('INVALID_IMPORT_DECISION');
+    const existing = this.assetRowBySyncId(openLibrary, syncId);
+    if (!existing) throw new LibraryServiceError('ASSET_NOT_FOUND');
+    if (existing.relative_file_path === relativePath) return;
+    // A server move may not silently relocate an external application's files.
+    if (existing.location_kind !== 'managed') throw new LibraryServiceError('LIBRARY_NOT_WRITABLE');
+    const occupied = openLibrary.connection.prepare(
+      'SELECT asset_id FROM assets WHERE path_identity = ? AND deleted_at IS NULL AND asset_id != ?',
+    ).get(portablePathIdentity(relativePath), existing.asset_id);
+    if (occupied || this.portableDiskDestination(openLibrary, relativePath)) {
+      throw new LibraryServiceError('INVALID_IMPORT_DECISION', { reason: 'SOURCE_CHANGED' });
+    }
+    const from = this.folderPath(openLibrary, existing.relative_file_path);
+    const to = this.folderPath(openLibrary, relativePath);
+    const folderId = this.ensureSyncParentFolder(openLibrary, relativePath);
+    this.noteClientFilesystemMutation(libraryId);
+    renamePathWithRetry(from, to);
+    try {
+      openLibrary.connection.transaction(() => {
+        openLibrary.connection.prepare(
+          'UPDATE assets SET relative_file_path = ?, path_identity = ?, managed_folder_id = ?, updated_at = ? WHERE asset_id = ?',
+        ).run(relativePath, portablePathIdentity(relativePath), folderId, new Date().toISOString(), existing.asset_id);
+        this.syncAssetSearchContent(openLibrary.connection, existing.asset_id);
+      })();
+    } catch (error) {
+      renamePathWithRetry(to, from);
+      throw error;
+    }
+    this.invalidateArtifactPathCache(libraryId);
+    this.options.onAssetsChanged?.({ type: 'asset.changed', libraryId,
+      changedCount: 1, missingCount: 0, source: 'client', assetIds: [existing.asset_id] });
+  }
+
   /** 远端墓碑传播：本地资产进回收站（已回收资产为幂等 no-op）。 */
   applySyncRecycle(libraryId: string, syncId: string): void {
     const openLibrary = this.requireOpenLibrary(libraryId);
@@ -21555,48 +21721,17 @@ export class LibraryService {
    */
   applySyncConflictCopy(
     libraryId: string,
-    relativePath: string,
+    _relativePath: string,
     body: Buffer,
     conflictName: string,
   ): { syncId: string; contentHash: string; size: number } {
     const openLibrary = this.requireOpenLibrary(libraryId);
     this.assertLibraryWritable(openLibrary);
-    const stageDir = mkdtempSync(path.join(tmpdir(), 'super-sync-conflict-'));
-    const stagePath = path.join(stageDir, path.posix.basename(conflictName));
-    try {
-      writeFileSync(stagePath, body);
-      const prepared = this.prepareOrExecuteImport({
-        libraryId,
-        sourceKind: 'files',
-        sourcePaths: [stagePath],
-      });
-      if ('importId' in prepared) {
-        this.resolveImport({
-          importId: prepared.importId,
-          suspectedDuplicate: 'create-copy',
-          nameConflict: 'keep-both',
-        });
-      }
-    } finally {
-      rmSync(stageDir, { force: true, recursive: true });
-    }
-    const imported = openLibrary.connection
-      .prepare(
-        `SELECT asset_id FROM assets
-          WHERE relative_file_path = ? AND deleted_at IS NULL
-          ORDER BY created_at DESC LIMIT 1`,
-      )
-      .get(path.posix.basename(conflictName)) as { asset_id: string } | undefined;
-    if (!imported) {
-      throw new LibraryServiceError('INVALID_IMPORT_SOURCE', { reason: 'SOURCE_NOT_FOUND' });
-    }
     const syncId = randomUUID();
-    openLibrary.connection
-      .prepare('UPDATE assets SET sync_id = ? WHERE asset_id = ?')
-      .run(syncId, imported.asset_id);
+    const imported = this.applySyncContentUpdate(libraryId, syncId, conflictName, body);
     return {
       syncId,
-      contentHash: sha256FileAtPath(this.resolveAssetPath(libraryId, imported.asset_id)),
+      contentHash: sha256FileAtPath(this.resolveAssetPath(libraryId, imported.assetId)),
       size: body.length,
     };
   }
@@ -21810,10 +21945,12 @@ export class LibraryService {
     const artifactsDir = this.artifactsDir(openLibrary);
     mkdirSync(artifactsDir, { recursive: true });
 
+    let embeddedCover = false;
     try {
-      await this.probeVideoAsset(
+      const probe = await this.probeVideoAsset(
         input, openLibrary, assetPath, revisionId, ffprobePath, execution,
       );
+      embeddedCover = probe.hasEmbeddedCover === true;
     } catch (error) {
       const resourceError = asMediaResourceExhaustedError(error, 'ffmpeg-audio');
       if (resourceError) throw resourceError;
@@ -21821,8 +21958,12 @@ export class LibraryService {
     }
 
     let waveformArtifactId: string | null = null;
+    if (embeddedCover) {
+      try { waveformArtifactId = await this.generateVideoPoster(input, openLibrary, assetPath, revisionId, ffmpegPath, artifactsDir, execution, "thumbnail"); }
+      catch (error) { if (execution.signal?.aborted) throw error; const resourceError = asMediaResourceExhaustedError(error, "ffmpeg-audio-cover"); if (resourceError) throw resourceError; this.diagnose("audio-cover", error, input); }
+    }
     try {
-      waveformArtifactId = await this.generateAudioWaveformPng(
+      if (!waveformArtifactId) waveformArtifactId = await this.generateAudioWaveformPng(
         input,
         openLibrary,
         assetPath,
@@ -22506,7 +22647,7 @@ export class LibraryService {
     revisionId: string,
     ffprobePath: string,
     execution: MediaExecutionContext,
-  ): Promise<{ durationSec: number; width: number | null; height: number | null }> {
+  ): Promise<{ durationSec: number; width: number | null; height: number | null; hasEmbeddedCover?: boolean }> {
     const artifactId = randomUUID();
     const artifactsDir = this.artifactsDir(openLibrary);
     mkdirSync(artifactsDir, { recursive: true });
@@ -22600,7 +22741,7 @@ export class LibraryService {
           );
       })();
 
-      return { durationSec, width, height };
+      return { durationSec, width, height, hasEmbeddedCover: probeJson.streams?.some((stream: { disposition?: { attached_pic?: number } }) => stream.disposition?.attached_pic === 1) === true };
     } catch (error) {
       // Write failed artifact
       this.writeFailedArtifact(openLibrary, artifactId, revisionId, 'extracted_metadata',
@@ -22618,6 +22759,7 @@ export class LibraryService {
     ffmpegPath: string,
     artifactsDir: string,
     execution: MediaExecutionContext,
+    kind: 'video_poster' | 'thumbnail' = 'video_poster',
   ): Promise<string> {
     const artifactId = randomUUID();
     const artifactRelPath = `${artifactId}.jpg`;
@@ -22658,14 +22800,14 @@ export class LibraryService {
           `INSERT INTO revision_artifacts
              (artifact_id, revision_id, kind, mime_type, byte_size, file_path,
               generator_version, status, generated_at)
-           VALUES (?, ?, 'video_poster', 'image/jpeg', ?, ?, ?, 'ready', ?)`,
+           VALUES (?, ?, ?, 'image/jpeg', ?, ?, ?, 'ready', ?)`,
         )
-        .run(artifactId, revisionId, outputStat.size, artifactRelPath,
-          `ffmpeg@${FFMPEG_VERSION}`, new Date().toISOString());
+        .run(artifactId, revisionId, kind, outputStat.size, artifactRelPath,
+          kind === 'thumbnail' ? AUDIO_WAVEFORM_GENERATOR : `ffmpeg@${FFMPEG_VERSION}`, new Date().toISOString());
 
       return artifactId;
     } catch (error) {
-      this.writeFailedArtifact(openLibrary, artifactId, revisionId, 'video_poster',
+      this.writeFailedArtifact(openLibrary, artifactId, revisionId, kind,
         'image/jpeg', artifactRelPath, `ffmpeg@${FFMPEG_VERSION}`, error);
       throw error;
     }
@@ -23247,9 +23389,9 @@ export class LibraryService {
     const artifactRelPath = `${artifactId}.json`;
     const artifactAbsPath = path.join(artifactsDir, artifactRelPath);
     try {
-      writeFileSync(artifactAbsPath, JSON.stringify(metadata, null, 2), 'utf-8');
+      const pixelSize = resolvedImagePixelSize(metadata, readImageDimensionsSync(assetPath));
+      writeFileSync(artifactAbsPath, JSON.stringify({ ...metadata, ...pixelSize }, null, 2), 'utf-8');
       const outputStat = statSync(artifactAbsPath);
-      const headerSize = readImageDimensionsSync(assetPath);
       const now = new Date().toISOString();
       openLibrary.connection.transaction(() => {
         openLibrary.connection
@@ -23273,9 +23415,9 @@ export class LibraryService {
             revisionId,
             outputStat.size,
             artifactRelPath,
-            metadata.width ?? headerSize?.width ?? null,
-            metadata.height ?? headerSize?.height ?? null,
-            'exifr@7.1.3;raw-image-metadata-v1',
+            pixelSize.width,
+            pixelSize.height,
+            'exifr@7.1.3;raw-image-metadata-v2',
             now,
           );
       })();
@@ -24133,7 +24275,9 @@ export class LibraryService {
     // pdfjs / an embedded browser. No thumbnail job is required to open.
     if (mediaType === 'document' && asset.current_revision_id) {
       const extension = path.extname(asset.relative_file_path).toLowerCase();
-      const documentMime = extension === '.pdf'
+      const documentMime = ['.ttf', '.otf', '.woff', '.woff2', '.ttc'].includes(extension)
+        ? (extension === '.ttc' ? 'font/collection' : 'font/' + extension.slice(1))
+        : extension === '.pdf'
         ? 'application/pdf'
         : extension === '.html' || extension === '.htm'
           ? 'text/html'
@@ -25595,12 +25739,12 @@ export class LibraryService {
     // even though `assetSupportsThumbnail` declares them thumbnail-capable.
     const supportedExtensions = [
       ...IMAGE_EXTENSIONS.map((extension) => extension.slice(1)),
-      'mp4', 'webm', 'mov', 'avi', 'wmv', 'mkv', 'm4v',
+      ...VIDEO_EXTENSIONS.map((extension) => extension.slice(1)),
       ...AUDIO_EXTENSION_NAMES,
       ...MODEL_EXTENSIONS.map((extension) => extension.slice(1)),
-      ...DOCUMENT_EXTENSIONS.map((extension) => extension.slice(1)),
+      ...DOCUMENT_EXTENSIONS.filter((extension) => ['.pdf', '.html', '.htm'].includes(extension)).map((extension) => extension.slice(1)),
     ];
-    const videoExtensions = ['mp4', 'webm', 'mov', 'avi', 'wmv', 'mkv', 'm4v'];
+    const videoExtensions = VIDEO_EXTENSIONS.map((extension) => extension.slice(1));
     const nowInvalidate = new Date().toISOString();
     if (options.skipStaleRepair) {
       // Background fill only inserts missing generate_thumbnail rows.
@@ -26756,6 +26900,7 @@ export class LibraryService {
 
   private buildFilterWhere(
     filters: FilterClause[],
+    hasGenerationInfo = true,
   ): { sql: string; params: unknown[] } {
     const conditions: string[] = [];
     const params: unknown[] = [];
@@ -26884,6 +27029,15 @@ export class LibraryService {
           params.push(...filter.values);
           break;
         }
+        case 'generation_status': {
+          const marked = hasGenerationInfo ? 'EXISTS (SELECT 1 FROM revision_generation_info g WHERE g.revision_id = a.current_revision_id AND g.info_json IS NOT NULL)' : '0';
+          const yes = filter.values.includes('marked'), no = filter.values.includes('unmarked');
+          if (yes && no) break;
+          if (yes) conditions.push(filter.exclude ? `NOT (${marked})` : marked);
+          else if (no) conditions.push(filter.exclude ? marked : `NOT (${marked})`);
+          else conditions.push('1 = 0');
+          break;
+        }
         case 'analysis_status': {
           const hasAcceptedAnalysis = `EXISTS (
             SELECT 1 FROM asset_ai_analysis_state ai_state
@@ -26964,6 +27118,10 @@ export class LibraryService {
   } {
     const openLibrary = this.requireOpenLibrary(input.libraryId);
     const connection = openLibrary.connection;
+    if (input.filters?.some(filter => filter.field === 'generation_status') && !openLibrary.readOnly && hasTable(connection, 'revision_generation_info')) {
+      const candidates = connection.prepare("SELECT a.asset_id FROM assets a LEFT JOIN revision_generation_info g ON g.revision_id = a.current_revision_id WHERE a.deleted_at IS NULL AND a.availability = 'available' AND lower(a.relative_file_path) LIKE '%.png' AND g.revision_id IS NULL LIMIT 64").all() as Array<{asset_id: string}>;
+      for (const asset of candidates) { try { this.getEmbeddedGeneration({libraryId: input.libraryId, assetId: asset.asset_id}); } catch { /* unavailable/ignored is not reclassified */ } }
+    }
     if (input.filters?.some((filter) => filter.field === 'color')) {
       // A bounded compatibility upgrade makes historical palettes increasingly
       // complete while preserving a responsive first colour-filter request.
@@ -27023,6 +27181,7 @@ export class LibraryService {
       : { sql: '', params: [] };
     const { sql: filterWhere, params: filterParams } = this.buildFilterWhere(
       input.filters ?? [],
+      hasTable(connection, "revision_generation_info"),
     );
 
     // A collection browse is a relational scope, not an asset-id list. Build
@@ -27568,8 +27727,8 @@ export class LibraryService {
           // The IPC schema deliberately accepts positive dimensions or null;
           // a single unknown-size asset must not invalidate the full browse
           // layout and take the library worker offline.
-          width: row.layout_width != null && row.layout_width > 0 ? row.layout_width : null,
-          height: row.layout_height != null && row.layout_height > 0 ? row.layout_height : null,
+          width: usablePixelDimension(row.layout_width),
+          height: usablePixelDimension(row.layout_height),
           previewArtifactId: row.layout_preview_artifact_id ?? null,
           displayName: path.posix.basename(row.relative_file_path),
           relativeFilePath: row.relative_file_path,
@@ -28693,16 +28852,9 @@ export class LibraryService {
       thumbnailStatus: row.thumbnail_status ?? null,
       thumbnailArtifactId: row.thumbnail_artifact_id ?? null,
       mediaType: row.media_type ?? 'other',
-      // Probe writes width/height 0 for audio-only streams; AssetSummary
-      // requires positive-or-null, so coerce zeros before IPC validation.
-      width:
-        row.artifact_width != null && row.artifact_width > 0
-          ? row.artifact_width
-          : null,
-      height:
-        row.artifact_height != null && row.artifact_height > 0
-          ? row.artifact_height
-          : null,
+      // Old/corrupt artifact rows must not invalidate an entire IPC page.
+      width: usablePixelDimension(row.artifact_width),
+      height: usablePixelDimension(row.artifact_height),
       durationMs: row.artifact_duration_ms ?? null,
       sequence: null,
     };
@@ -29610,6 +29762,7 @@ export class LibraryService {
   private readCachedTextAssetPreview(
     key: string,
   ): {
+    encoding?: TextEncoding;
     assetId: string;
     revisionId: string;
     content: string;
@@ -29631,6 +29784,7 @@ export class LibraryService {
   private cacheTextAssetPreview(
     key: string,
     value: {
+      encoding?: TextEncoding;
       assetId: string;
       revisionId: string;
       content: string;
@@ -29675,6 +29829,7 @@ export class LibraryService {
     assetId: string;
     maxBytes?: number;
   }): {
+    encoding?: TextEncoding;
     assetId: string;
     revisionId: string;
     content: string;
@@ -29751,22 +29906,24 @@ export class LibraryService {
       });
     }
 
-    if (buffer.includes(0)) {
+    const truncated = buffer.length > maxBytes;
+    const slice = truncated ? buffer.subarray(0, maxBytes) : buffer;
+    const decoded = decodeTextBytes(slice, truncated);
+    if (decoded.binary) {
       throw new LibraryServiceError('INVALID_IMPORT_DECISION', { reason: 'UNSUPPORTED_FORMAT' });
     }
 
-    const truncated = buffer.length > maxBytes;
-    const slice = truncated ? buffer.subarray(0, maxBytes) : buffer;
-    const content = slice.toString('utf8');
+    const content = decoded.text;
     const extension = path.extname(row.relative_file_path).toLowerCase();
     const value = {
+      encoding: decoded.encoding,
       assetId: row.asset_id,
       revisionId: row.current_revision_id,
       content,
       truncated,
       byteSize: truncated ? maxBytes : buffer.length,
       lineCount: countTextLines(content),
-      editable: row.location_kind === 'managed' && !isTrashed,
+      editable: row.location_kind === 'managed' && !isTrashed && !truncated && decoded.encoding === 'utf-8',
       mimeType: textMimeForExtension(extension) ?? 'text/plain',
     };
     this.cacheTextAssetPreview(cacheKey, value);
@@ -29783,6 +29940,7 @@ export class LibraryService {
     content: string;
     expectedRevisionId?: string;
     createRevision?: boolean;
+    convertToUtf8?: boolean;
   }): {
     asset: AssetSummary;
     revisionId: string;
@@ -29827,7 +29985,28 @@ export class LibraryService {
     const absolutePath = this.resolveAssetPath(input.libraryId, input.assetId);
     const dir = path.dirname(absolutePath);
     const tmpPath = path.join(dir, `.super-text-edit-${randomUUID()}.tmp`);
-    const payload = Buffer.from(input.content, 'utf8');
+    // The existing save API writes UTF-8; never silently transcode a legacy
+    // source or replace the full file with a truncated preview.
+    if (statSync(absolutePath).size > TEXT_VIEWER_MAX_BYTES) {
+      throw new LibraryServiceError('INVALID_IMPORT_DECISION', { reason: 'UNSUPPORTED_FORMAT' });
+    }
+    const original = readFileSync(absolutePath);
+    const decodedOriginal = decodeTextBytes(original);
+    if (original.length > TEXT_VIEWER_MAX_BYTES || decodedOriginal.binary || (decodedOriginal.encoding !== 'utf-8' && !input.convertToUtf8)) {
+      throw new LibraryServiceError('INVALID_IMPORT_DECISION', { reason: 'UNSUPPORTED_FORMAT' });
+    }
+    if (input.convertToUtf8 && decodedOriginal.encoding !== 'utf-8') {
+      // Explicit conversion never overwrites edited or externally changed bytes.
+      if (!input.expectedRevisionId || input.content !== decodedOriginal.text) throw new LibraryServiceError('VERSION_CONFLICT');
+      this.replaceContentWithEditBackup(input.libraryId, input.assetId, input.expectedRevisionId, input.content.length ? Buffer.from(input.content, 'utf8') : Buffer.from([0xef,0xbb,0xbf]), 'localUpgrade.convertText');
+      const [asset] = this.managedMoveSummaries(openLibrary, [input.assetId]);
+      if (!asset?.currentRevisionId) throw new LibraryServiceError('ASSET_NOT_FOUND');
+      this.invalidateTextAssetPreviewCache(input.libraryId, input.assetId);
+      return { asset, revisionId: asset.currentRevisionId, byteSize: Buffer.byteLength(input.content, 'utf8'), lineCount: countTextLines(input.content) };
+    }
+    const utf8Content = Buffer.from(input.content, 'utf8');
+    const payload = original.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))
+      ? Buffer.concat([original.subarray(0, 3), utf8Content]) : utf8Content;
     this.noteClientFilesystemMutation(input.libraryId);
     try {
       writeFileSync(tmpPath, payload);
@@ -29939,6 +30118,65 @@ export class LibraryService {
       byteSize: storedByteSize,
       lineCount: countTextLines(input.content),
     };
+  }
+
+  async transformImageAsset(input: { libraryId: string; assetId: string; expectedRevisionId: string; quarterTurns: number; flipHorizontal: boolean; flipVertical: boolean }): Promise<{ assetId: string; revisionId: string; byteSize: number }> {
+    const openLibrary = this.requireOpenLibrary(input.libraryId);
+    this.assertLibraryWritable(openLibrary);
+    const asset = this.managedMoveSummaries(openLibrary, [input.assetId])[0];
+    if (!asset || asset.locationKind !== 'managed' || asset.currentRevisionId !== input.expectedRevisionId) throw new LibraryServiceError('VERSION_CONFLICT');
+    if (!Number.isInteger(input.quarterTurns) || input.quarterTurns < 0 || input.quarterTurns > 3) throw new LibraryServiceError('INVALID_ASSET_METADATA');
+    const source = this.resolveAssetPath(input.libraryId, input.assetId), ext = path.extname(source).toLowerCase();
+    if (!['.png', '.jpg', '.jpeg', '.jfif', '.webp', '.avif', '.tif', '.tiff'].includes(ext) || statSync(source).size > CONTENT_REPLACE_MAX_BYTES) throw new LibraryServiceError('INVALID_IMPORT_DECISION', { reason: 'UNSUPPORTED_FORMAT' });
+    const hash = sha256FileAtPath(source);
+    const sharp = requireSharp() as unknown as (input: string | Buffer, options?: {limitInputPixels:number}) => Sharp;
+    const pipeline = sharp(source, { limitInputPixels: 16_777_216 });
+    const metadata = await pipeline.metadata();
+    if ((metadata.pages ?? 1) > 1) throw new LibraryServiceError('INVALID_IMPORT_DECISION', { reason: 'UNSUPPORTED_FORMAT' });
+    const oriented = await pipeline.autoOrient().keepMetadata().withMetadata({ orientation: 1 }).keepIccProfile().toBuffer();
+    let transformed = sharp(oriented).rotate(input.quarterTurns * 90);
+    const odd = input.quarterTurns % 2 === 1;
+    if (odd ? input.flipVertical : input.flipHorizontal) transformed = transformed.flop();
+    if (odd ? input.flipHorizontal : input.flipVertical) transformed = transformed.flip();
+    const bytes = await transformed.keepMetadata().withMetadata({ orientation: 1 }).keepIccProfile().toBuffer();
+    if (sha256FileAtPath(source) !== hash) throw new LibraryServiceError('VERSION_CONFLICT', { reason: 'SOURCE_CHANGED' });
+    this.replaceContentWithEditBackup(input.libraryId, input.assetId, input.expectedRevisionId, bytes);
+    const result = this.managedMoveSummaries(openLibrary, [input.assetId])[0]!;
+    return { assetId: input.assetId, revisionId: result.currentRevisionId!, byteSize: bytes.length };
+  }
+
+  private replaceEditedContent(libraryId: string, assetId: string, expectedRevisionId: string, payload: Buffer) {
+    let stagingToken: string | undefined;
+    for (let offset = 0; offset < payload.length; offset += CONTENT_REPLACE_STAGE_CHUNK_MAX_BYTES) {
+      const end = Math.min(payload.length, offset + CONTENT_REPLACE_STAGE_CHUNK_MAX_BYTES);
+      stagingToken = this.stageManagedAssetContent({ libraryId, assetId, stagingToken, dataBase64: payload.subarray(offset, end).toString('base64'), complete: end === payload.length }).stagingToken;
+    }
+    return this.replaceManagedAssetContentBatch({ libraryId, items: [{ assetId, expectedRevisionId, stagingToken }] });
+  }
+
+  private replaceContentWithEditBackup(libraryId: string, assetId: string, expectedRevisionId: string, payload: Buffer, labelKey = 'localUpgrade.writeImage'): void {
+    const openLibrary = this.requireOpenLibrary(libraryId);
+    this.assertLibraryWritable(openLibrary);
+    const asset = this.managedMoveSummaries(openLibrary, [assetId])[0];
+    if (!asset || asset.locationKind !== 'managed' || asset.currentRevisionId !== expectedRevisionId) throw new LibraryServiceError('VERSION_CONFLICT');
+    const source = this.resolveAssetPath(libraryId, assetId);
+    if (lstatSync(source).size > CONTENT_REPLACE_MAX_BYTES || payload.length === 0 || payload.length > CONTENT_REPLACE_MAX_BYTES) throw new LibraryServiceError('INVALID_ASSET_METADATA');
+    const originalHash = sha256FileAtPath(source), targetHash = createHash('sha256').update(payload).digest('hex');
+    if (targetHash === originalHash) return;
+    const backupRoot = path.join(openLibrary.summary.libraryPath, '.super', 'edit-backups');
+    mkdirSync(backupRoot, { recursive: true });
+    if (lstatSync(backupRoot).isSymbolicLink()) throw new LibraryServiceError('LIBRARY_NOT_WRITABLE');
+    const beforeId = randomUUID(), afterId = randomUUID();
+    copyFileSync(source, path.join(backupRoot, beforeId + '.bin'));
+    writeFileSync(path.join(backupRoot, afterId + '.bin'), payload, { flag: 'wx', mode: 0o600 });
+    for (const id of [beforeId, afterId]) {
+      const fd = openSync(path.join(backupRoot, id + '.bin'), 'r+');
+      try { fsyncSync(fd); } finally { closeSync(fd); }
+    }
+    if (sha256FileAtPath(path.join(backupRoot, beforeId + '.bin')) !== originalHash || sha256FileAtPath(source) !== originalHash) throw new LibraryServiceError('VERSION_CONFLICT', { reason: 'SOURCE_CHANGED' });
+    this.replaceEditedContent(libraryId, assetId, expectedRevisionId, payload);
+    const recipe = (expectedHash: string, targetHash: string, backupId: string): HistoryRecipe => ({ kind: 'asset-content-backup', version: 1, payload: { assetId, expectedHash, targetHash, backupId } });
+    this.recordOperationHistory({ libraryId, commandId: 'asset.content.edit', labelKey, labelArgs: {}, affectedCount: 1, affectedEntities: [assetId], forwardRecipe: recipe(originalHash, targetHash, afterId), inverseRecipe: recipe(targetHash, originalHash, beforeId) });
   }
 
   /**
@@ -30622,6 +30860,9 @@ export class LibraryService {
     libraryId: string;
     assetId: string;
     maxBytes?: number;
+    offset?: number;
+    expectedRevisionId?: string;
+    sourceToken?: string;
   }): {
     assetId: string;
     revisionId: string;
@@ -30629,6 +30870,9 @@ export class LibraryService {
     dataBase64: string;
     truncated: boolean;
     mimeType: string | null;
+    offset?: number;
+    nextOffset?: number;
+    sourceToken?: string;
   } {
     const openLibrary = this.requireOpenLibrary(input.libraryId);
     const row = openLibrary.connection
@@ -30649,9 +30893,12 @@ export class LibraryService {
     if (row.deleted_at !== null || row.availability !== 'available' || !row.current_revision_id) {
       throw new LibraryServiceError('ASSET_NOT_FOUND', { reason: 'SOURCE_NOT_FOUND' });
     }
+    const start = input.offset ?? 0;
+    if (!Number.isSafeInteger(start) || start < 0 || (start > 0 && (!input.sourceToken || !input.expectedRevisionId))) throw new LibraryServiceError('INVALID_ASSET_METADATA');
+    if (input.expectedRevisionId && input.expectedRevisionId !== row.current_revision_id) throw new LibraryServiceError('VERSION_CONFLICT');
     const maxBytes = Math.min(
       Math.max(1, input.maxBytes ?? CONTENT_REPLACE_MAX_BYTES),
-      CONTENT_REPLACE_MAX_BYTES,
+      input.offset === undefined ? CONTENT_REPLACE_MAX_BYTES : CONTENT_REPLACE_STAGE_CHUNK_MAX_BYTES,
     );
     if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
       throw new LibraryServiceError('INVALID_ASSET_METADATA');
@@ -30671,21 +30918,26 @@ export class LibraryService {
       if (!Number.isSafeInteger(byteSize)) {
         throw new LibraryServiceError('LIBRARY_NOT_WRITABLE');
       }
-      const bytesToRead = Math.min(byteSize, maxBytes);
+      const fingerprint = (stat: typeof stats) => createHash('sha256').update(JSON.stringify([row.current_revision_id, stat.size, stat.mtimeMs, stat.ctimeMs, stat.dev, stat.ino])).digest('hex');
+      const sourceToken = fingerprint(stats);
+      if (start > byteSize || (input.sourceToken && input.sourceToken !== sourceToken)) throw new LibraryServiceError('VERSION_CONFLICT', { reason: 'SOURCE_CHANGED' });
+      const bytesToRead = Math.min(byteSize - start, maxBytes);
       const buffer = Buffer.allocUnsafe(bytesToRead);
       let offset = 0;
       while (offset < bytesToRead) {
-        const count = readSync(descriptor, buffer, offset, bytesToRead - offset, offset);
+        const count = readSync(descriptor, buffer, offset, bytesToRead - offset, start + offset);
         if (count === 0) break;
         offset += count;
       }
       const payload = offset === buffer.length ? buffer : buffer.subarray(0, offset);
+      if (fingerprint(fstatSync(descriptor)) !== sourceToken) throw new LibraryServiceError('VERSION_CONFLICT', { reason: 'SOURCE_CHANGED' });
       return {
+        ...(input.offset === undefined ? {} : {offset: start, nextOffset: start + payload.length, sourceToken}),
         assetId: row.asset_id,
         revisionId: row.current_revision_id,
         byteSize,
         dataBase64: payload.toString('base64'),
-        truncated: byteSize > payload.length,
+        truncated: byteSize > start + payload.length,
         mimeType,
       };
     } catch (error) {
@@ -31897,14 +32149,9 @@ export class LibraryService {
         if (assetRow) restoredAssets.push(this.assetSummaryFromRow(assetRow));
       }
 
-      this.createDetectedImageSequences(
-        openLibrary,
-        restoredAssets.map((asset) => asset.assetId),
-      );
-
       // Restore changes the library-wide Trash count even when the caller is
       // browsing another scope. Publish only after the committed operation
-      // and sequence reconstruction have completed.
+      // has completed. Restoring independent images must not regroup them.
       if (restoredAssets.length > 0) {
         this.options.onAssetsChanged?.({
           type: 'asset.changed',
@@ -33069,6 +33316,7 @@ export class LibraryService {
           trashedRows.map((row) => row.asset_id),
         );
         for (const row of trashedRows) {
+          this.recordExplicitSyncDeletion(openLibrary, [row.asset_id]);
           openLibrary.connection
             .prepare('DELETE FROM assets WHERE asset_id = ?')
             .run(row.asset_id);
@@ -33747,16 +33995,11 @@ export class LibraryService {
       }).length;
 
     if (restoredCount > 0) {
-      const refreshed = this.refreshManagedAssets(input.libraryId, { includeAssets: true });
-      const restoredIds = new Set(
-        rows.filter((row) => matches.has(row.asset_id)).map((row) => row.asset_id),
-      );
+      // Relinking is not a whole-library reconciliation. Retain unmatched
+      // historical rows for a later replacement and report accurate counts.
+      const restoredIds = rows.filter(row => matches.has(row.asset_id)).map(row => row.asset_id);
       restoredAssets.length = 0;
-      for (const asset of refreshed.assets ?? []) {
-        if (restoredIds.has(asset.assetId)) {
-          restoredAssets.push(asset);
-        }
-      }
+      restoredAssets.push(...this.managedMoveSummaries(openLibrary, restoredIds));
     }
 
     return { restoredCount, unchangedMissingCount, assets: restoredAssets };
@@ -33949,6 +34192,125 @@ export class LibraryService {
         throw new LibraryServiceError('ASSET_NOT_FOUND');
       }
     }
+  }
+
+  /** Indexed, read-only information: never walks the user's source tree. */
+  inspectFolder(input: {libraryId: string; folderId: string}): FolderInspection {
+    const lib = this.requireOpenLibrary(input.libraryId);
+    const managed = this.listManagedFolders(input.libraryId, true);
+    const folder = managed.find(row => row.folderId === input.folderId);
+    const linked = folder ? [] : this.listLinkedFolders(input.libraryId, true);
+    const external = linked.find(row => row.folderId === input.folderId);
+    if (!folder && !external) throw new LibraryServiceError('FOLDER_NOT_FOUND');
+    let predicate: string;
+    let params: Array<string | number>;
+    if (folder) {
+      predicate = `a.location_kind = 'managed' AND a.managed_folder_id IN (
+        WITH RECURSIVE subtree(folder_id) AS (SELECT ? UNION
+          SELECT f.folder_id FROM managed_folders f JOIN subtree s ON f.parent_folder_id = s.folder_id)
+        SELECT folder_id FROM subtree)`;
+      params = [input.folderId];
+    } else {
+      const rootId = external!.linkedFolderId ?? external!.folderId;
+      const prefix = external!.relativePath ? external!.relativePath + '/' : '';
+      predicate = "a.location_kind = 'linked' AND a.linked_folder_id = ?";
+      params = [rootId];
+      if (prefix) { predicate += ' AND substr(a.relative_file_path, 1, ?) = ?'; params.push([...prefix].length, prefix); }
+    }
+    const totals = lib.connection.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(r.byte_size),0) AS bytes
+      FROM assets a LEFT JOIN revisions r ON r.revision_id = a.current_revision_id
+      WHERE a.deleted_at IS NULL AND ${predicate}`).get(...params) as {count: number; bytes: number};
+    const covers = this.searchAssets({libraryId: input.libraryId, scope: {kind: 'folder', folderId: input.folderId, recursive: true}, limit: 4, showIgnored: true}).items;
+    return {folderId: input.folderId, name: folder?.name ?? external!.displayName,
+      absolutePath: folder ? path.join(this.assetsPath(lib), folder.relativePath) : path.join(external!.absoluteRootPath, external!.relativePath ?? ''),
+      locationKind: folder ? 'managed' : 'linked', status: external?.status ?? 'available',
+      assetCount: totals.count, byteSize: totals.bytes,
+      childFolderCount: folder?.childFolderCount ?? linked.filter(row => row.parentFolderId === input.folderId).length, covers};
+  }
+
+  /** Uses exactly the same matcher as save, but changes neither disk nor index. */
+  previewIgnoreRules(input: {libraryId: string; content: string}): IgnorePreview {
+    const lib = this.requireOpenLibrary(input.libraryId);
+    if (input.content.length > 128_000 || input.content.includes('\0') || input.content.split('\n').length > 2000) throw new LibraryServiceError('INVALID_ASSET_METADATA');
+    const rules = parseGitignore(input.content);
+    const result: IgnorePreview = {matchedAssets: 0, matchedFolders: 0, paths: []};
+    for (const [kind, sql] of [
+      ['folder', 'SELECT folder_id AS cursor, relative_path AS relativePath FROM managed_folders WHERE folder_id > ? ORDER BY folder_id LIMIT 512'],
+      ['asset', "SELECT asset_id AS cursor, relative_file_path AS relativePath FROM assets WHERE location_kind = 'managed' AND deleted_at IS NULL AND asset_id > ? ORDER BY asset_id LIMIT 512"],
+    ] as const) {
+      let cursor = '';
+      for (;;) {
+        const rows = lib.connection.prepare(sql).all(cursor) as Array<{cursor: string; relativePath: string}>;
+        if (!rows.length) break;
+        cursor = rows[rows.length - 1]!.cursor;
+        for (const row of rows) {
+        if (!gitignoreMatchesPath(rules, row.relativePath)) continue;
+        if (kind === 'asset') result.matchedAssets++; else result.matchedFolders++;
+        if (result.paths.length < 200) result.paths.push({relativePath: row.relativePath, kind});
+        }
+      }
+    }
+    return result;
+  }
+
+  readSyncMetadata(libraryId: string, syncId: string): SyncMetadata | null {
+    const lib = this.requireOpenLibrary(libraryId);
+    const asset = lib.connection.prepare("SELECT asset_id FROM assets WHERE sync_id = ? AND deleted_at IS NULL").get(syncId) as {asset_id: string} | undefined;
+    if (!asset) return null;
+    this.assertAssetsNotExplicitlyIgnored(lib,[asset.asset_id]);
+    const meta = this.getAssetMetadata({libraryId,assetId:asset.asset_id});
+    const humanTags = (lib.connection.prepare('SELECT t.name FROM human_asset_tags h JOIN tags t ON t.tag_id = h.tag_id WHERE h.asset_id = ? ORDER BY t.name').all(asset.asset_id) as Array<{name: string}>).map(row => row.name);
+    const aiTags = (lib.connection.prepare('SELECT t.name, h.model_id AS modelId, h.model_version AS modelVersion FROM ai_asset_tags h JOIN tags t ON t.tag_id = h.tag_id WHERE h.asset_id = ? ORDER BY t.name').all(asset.asset_id) as Array<{name: string; modelId: string; modelVersion: string}>);
+    const analysis = lib.connection.prepare('SELECT analyzed_at AS analyzedAt, model_id AS modelId, model_version AS modelVersion FROM asset_ai_analysis_state WHERE asset_id = ?').get(asset.asset_id) as SyncMetadata['analysis'];
+    return canonicalSyncMetadata({formatVersion:1,analysis:analysis ?? null,user:{description:meta.description,rating:meta.rating,favorite:meta.favorite,sourcePageUrl:meta.sourcePageUrl,author:meta.author},humanTags,aiTags,ai:this.getAiContent(libraryId,asset.asset_id) as SyncMetadata['ai']});
+  }
+
+  applySyncMetadata(libraryId: string, syncId: string, expectedFingerprint: string, value: SyncMetadata): void {
+    const lib = this.requireOpenLibrary(libraryId); this.assertLibraryWritable(lib);
+    const parsed = syncMetadataSchema.parse(value), current = this.readSyncMetadata(libraryId,syncId);
+    if (!current) throw new LibraryServiceError('ASSET_NOT_FOUND');
+    if (metadataFingerprint(current) !== expectedFingerprint) throw new LibraryServiceError('VERSION_CONFLICT',{reason:'SOURCE_CHANGED'});
+    if (metadataFingerprint(current) === metadataFingerprint(parsed)) return;
+    const asset = lib.connection.prepare('SELECT asset_id, current_revision_id FROM assets WHERE sync_id = ? AND deleted_at IS NULL').get(syncId) as {asset_id:string;current_revision_id:string};
+    this.assertAssetsNotExplicitlyIgnored(lib,[asset.asset_id]);
+    const now = new Date().toISOString();
+    lib.connection.transaction(() => {
+      lib.connection.prepare(`INSERT INTO asset_metadata(asset_id,description,rating,favorite,source_page_url,author,entity_version,updated_at)
+        VALUES (?,?,?,?,?,?,1,?) ON CONFLICT(asset_id) DO UPDATE SET description=excluded.description,rating=excluded.rating,
+        favorite=excluded.favorite,source_page_url=excluded.source_page_url,author=excluded.author,entity_version=asset_metadata.entity_version+1,updated_at=excluded.updated_at`)
+        .run(asset.asset_id,parsed.user.description,parsed.user.rating,Number(parsed.user.favorite),parsed.user.sourcePageUrl,parsed.user.author,now);
+      const tagId = (name: string) => {
+        const existing = lib.connection.prepare('SELECT tag_id FROM tags WHERE library_id = ? AND name = ? COLLATE NOCASE').get(libraryId,name) as {tag_id:string} | undefined;
+        if (existing) return existing.tag_id;
+        const id = randomUUID(); lib.connection.prepare('INSERT INTO tags(tag_id,library_id,name,created_at) VALUES (?,?,?,?)').run(id,libraryId,name,now); return id;
+      };
+      lib.connection.prepare('DELETE FROM human_asset_tags WHERE asset_id = ?').run(asset.asset_id);
+      for (const name of parsed.humanTags) lib.connection.prepare('INSERT OR IGNORE INTO human_asset_tags(asset_id,tag_id) VALUES (?,?)').run(asset.asset_id,tagId(name));
+      lib.connection.prepare('DELETE FROM ai_asset_tags WHERE asset_id = ?').run(asset.asset_id);
+      for (const tag of parsed.aiTags) lib.connection.prepare('INSERT OR IGNORE INTO ai_asset_tags(asset_id,tag_id,revision_id,model_id,model_version) VALUES (?,?,?,?,?)').run(asset.asset_id,tagId(tag.name),asset.current_revision_id,tag.modelId,tag.modelVersion);
+      lib.connection.prepare('DELETE FROM ai_content WHERE asset_id = ?').run(asset.asset_id);
+      for (const item of parsed.ai) lib.connection.prepare('INSERT INTO ai_content(ai_content_id,asset_id,revision_id,field_name,value,model_id,model_version,generated_at) VALUES (?,?,?,?,?,?,?,?)').run(randomUUID(),asset.asset_id,asset.current_revision_id,item.fieldName,item.value,item.modelId,item.modelVersion,item.generatedAt);
+      lib.connection.prepare('DELETE FROM asset_ai_analysis_state WHERE asset_id = ?').run(asset.asset_id);
+      if (parsed.analysis) lib.connection.prepare('INSERT INTO asset_ai_analysis_state(asset_id,analyzed_at,model_id,model_version) VALUES (?,?,?,?)').run(asset.asset_id,parsed.analysis.analyzedAt,parsed.analysis.modelId,parsed.analysis.modelVersion);
+      this.syncAssetSearchContent(lib.connection,asset.asset_id);
+    })();
+    this.options.onAssetsChanged?.({type:'asset.changed',libraryId,changedCount:1,missingCount:0,assetIds:[asset.asset_id],source:'sync'});
+  }
+
+  getEmbeddedGeneration(input: {libraryId: string; assetId: string}): EmbeddedGenerationInfo | null {
+    const lib = this.requireOpenLibrary(input.libraryId);
+    const asset = lib.connection.prepare('SELECT current_revision_id FROM assets WHERE asset_id = ? AND deleted_at IS NULL').get(input.assetId) as {current_revision_id: string | null} | undefined;
+    if (!asset) throw new LibraryServiceError('ASSET_NOT_FOUND');
+    this.assertAssetsNotExplicitlyIgnored(lib,[input.assetId]);
+    const exists = hasTable(lib.connection, 'revision_generation_info');
+    const cached = exists && asset.current_revision_id ? lib.connection.prepare('SELECT info_json FROM revision_generation_info WHERE revision_id = ?').get(asset.current_revision_id) as {info_json: string | null} | undefined : undefined;
+    if (cached) {
+      if (!cached.info_json) return null;
+      try { return embeddedGenerationSchema.parse(JSON.parse(cached.info_json)); } catch { return null; }
+    }
+    const info = readEmbeddedGeneration(this.resolveAssetPath(input.libraryId,input.assetId));
+    if (!lib.readOnly && exists && asset.current_revision_id) lib.connection.prepare('INSERT OR IGNORE INTO revision_generation_info(revision_id,info_json) VALUES (?,?)').run(asset.current_revision_id, info ? JSON.stringify(info) : null);
+    return info;
   }
 
   getGitignore(libraryId: string): { content: string } {
@@ -38291,7 +38653,7 @@ export class LibraryService {
     })();
     markStage('transaction');
     this.persistSourceImageDimensionsForAssets(openLibrary, discoveredAssetIds);
-    this.createDetectedImageSequences(openLibrary, discoveredAssetIds);
+    // Only explicit imports/manual sequence creation may group new images.
     this.reconcileLinkedWatchers(openLibrary);
     markStage('post-phases');
 

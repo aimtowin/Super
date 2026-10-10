@@ -45,8 +45,8 @@ test("sidebar Emoji picker persists, resets and respects modal keyboard interact
     const row = () => page.locator('.nav-row[data-nav-folder-kind="managed"]').filter({ hasText: "图标测试文件夹" });
     const openPicker = async () => {
       await row().click({ button: "right" });
-      await page.getByRole("menuitem", { name: "设置 Emoji…", exact: true }).click();
-      await expect(page.getByRole("dialog", { name: "设置 Emoji 图标" })).toBeVisible();
+      await page.getByRole("menuitem", { name: "设置文件夹图标", exact: true }).click();
+      await expect(page.getByRole("dialog", { name: "设置图标" })).toBeVisible();
     };
     await openPicker();
     const input = () => page.getByRole("textbox", { name: "输入或粘贴一个 Emoji" });
@@ -54,6 +54,9 @@ test("sidebar Emoji picker persists, resets and respects modal keyboard interact
     await input().fill("not an emoji");
     await expect(page.getByRole("button", { name: "保存", exact: true })).toBeDisabled();
     await input().fill("👩🏽‍💻");
+    await page.getByLabel("分类", { exact: true }).selectOption("animals");
+    await expect(page.getByRole("button", { name: "🐱", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "😀", exact: true })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("emoji-dark.png") });
     await page.getByRole("button", { name: "保存", exact: true }).focus();
     await page.keyboard.press("Tab");
@@ -72,6 +75,15 @@ test("sidebar Emoji picker persists, resets and respects modal keyboard interact
     await page.keyboard.press("Escape");
     await expect(page.locator("#sidebar-emoji")).toHaveCount(0);
     await openPicker();
+    await page.getByRole("button", { name: "图形", exact: true }).click();
+    await page.getByRole("textbox", { name: "搜索分类或图形", exact: true }).fill("star");
+    await page.getByRole("button", { name: "star", exact: true }).click();
+    await page.getByRole("button", { name: "粉色", exact: true }).click();
+    await page.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(row().locator(".sidebar-emoji-glyph svg")).toHaveCSS("color", "rgb(232, 113, 171)");
+    await openPicker();
+    await expect(page.getByRole("button", { name: "图形", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "粉色", exact: true })).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "恢复默认", exact: true }).click();
     await expect(row().locator(".sidebar-emoji-glyph")).toHaveCount(0);
   } finally { await app.close(); }

@@ -94,6 +94,23 @@ function buildContext(driver: MemoryDriver, local: Map<string, Buffer>): {
 }
 
 describe('runSyncActions end-to-end (Super-xffq)', () => {
+  it.each(['local', 'remote'] as const)('does not replace either original when conflict preservation fails (winner=%s)', async (winner) => {
+    const driver = new MemoryDriver();
+    driver.files.set('参考库/assets/file.bin', Buffer.from('remote-original'));
+    const manifest = createEmptyManifest({ libraryId: 'lib-1', displayName: '参考库', directoryName: '参考库' });
+    const remote = { path: 'file.bin', contentHash: 'remote', size: 15, version: 2,
+      deviceId: 'b', modifiedAt: '2026-08-15T12:00:00Z', metadataVersion: 1 };
+    manifest.entries.a1 = remote;
+    const { context, writtenLocal } = buildContext(driver, new Map([['a1', Buffer.from('local-original')]]));
+    context.saveLocalConflictCopy = async () => { throw new Error('copy storage unavailable'); };
+    await expect(runSyncActions([{ type: 'conflict', assetId: 'a1', winner, remote,
+      local: { ...remote, contentHash: 'local', deviceId: 'a' } }], manifest, context))
+      .rejects.toThrow('copy storage unavailable');
+    expect(driver.files.get('参考库/assets/file.bin')?.toString()).toBe('remote-original');
+    expect(writtenLocal.size).toBe(0);
+    expect(manifest.entries.a1!.contentHash).toBe('remote');
+  });
+
   it('uploads a new asset, writes manifest entries and stores remote content', async () => {
     const driver = new MemoryDriver();
     const manifest = createEmptyManifest({ libraryId: 'lib-1', displayName: '参考库', directoryName: '参考库' });
@@ -200,6 +217,7 @@ describe('runSyncActions end-to-end (Super-xffq)', () => {
       localManifest,
       remoteManifest,
       remoteTombstones: new Set(),
+      localDeleted: new Set(['a1']),
     });
     const result = await runSyncActions(actions, localManifest, context);
 

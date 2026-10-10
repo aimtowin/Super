@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -47,6 +48,7 @@ test("tag management chip grid: create, sort, select, menu, merge, delete", asyn
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
 
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
@@ -64,7 +66,7 @@ test("tag management chip grid: create, sort, select, menu, merge, delete", asyn
     // Enter the management workspace from the sidebar.
     await window
       .locator(".navigation-pane")
-      .getByRole("button", { name: "标签管理" })
+      .getByRole("button", { name: "标签管理", exact: true })
       .click();
     const workspace = window.getByTestId("tag-management-workspace");
     await expect(workspace).toBeVisible();

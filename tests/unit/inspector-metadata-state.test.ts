@@ -50,6 +50,20 @@ async function mount(initial: InspectorPanelProps) {
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 
 describe("real Inspector: incomplete complete-selection state (A5)", () => {
+  it("shows one version-conflict alert rather than mislabeling a rejected write as a read failure", async () => {
+    const reload = vi.fn();
+    const f = await mount(props({
+      selectedAssetIds: ["a"], selectedAssets: [asset], versionConflict: true,
+      metadataReadState: {status: "error", total: 1, ready: 0, failedAssetIds: ["a"]},
+      loadMetadata: reload,
+    }));
+    const alerts = f.host.querySelectorAll('[role="alert"]');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]?.textContent).toContain("元数据已被其他操作修改");
+    expect(f.host.querySelector('[data-metadata-state="error"]')).toBeNull();
+    await act(async () => {alerts[0]?.querySelector<HTMLButtonElement>("button")?.click();});
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
   it("does not render single editor or primary tags while a 1,000-ID selection is pending", async () => {
     const ids = Array.from({ length: 1_000 }, (_, index) => index === 0 ? "a" : `asset-${index}`);
     const f = await mount(props({ selectedAssetIds: ids, metadataReadState: { status: "loading", total: 1_000, ready: 1, failedAssetIds: [] } }));

@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { assetSummarySchema } from '../../src/shared/asset-types';
 import { colorFilterSql } from '../../src/shared/color-filter-presets';
-import { detectPbrTextureChannel, pbrTextureDisplayFilter } from '../../src/renderer/pbr-texture-channel';
+import { resolveImagePreviewChannel, pbrTextureDisplayFilter } from '../../src/renderer/pbr-texture-channel';
 import { LibraryService } from '../../src/worker/library-service';
 import { createLibrarySyncPort } from '../../src/worker/sync/library-port';
 import { createEmptyManifest, type SyncManifestEntry } from '../../src/worker/sync/manifest';
@@ -177,7 +177,7 @@ describe('Serpent post-0.1.4 audit — desired behaviour, known failures stay re
   });
 
   it('U07 a filename alone must not desaturate an ordinary image preview', () => {
-    const inferred = detectPbrTextureChannel('photo_roughness.png');
+    const inferred = resolveImagePreviewChannel('photo_roughness.png');
     expect(inferred ? pbrTextureDisplayFilter(inferred) : 'none').toBe('none');
   });
 

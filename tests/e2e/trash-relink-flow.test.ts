@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import { _electron as electron, expect, test } from '@playwright/test';
 
 import { assetCard, resolveElectronExecutablePath } from './electron-test-helpers';
 
-test('cancels a batch relink preview and later applies a fresh preview', async () => {
+test('cancels a legacy missing-asset batch relink preview and later applies a fresh preview', async () => {
   const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'super-relink-e2e-'));
   const libraryName = '批量找回验收';
   const libraryPath = path.join(temporaryRoot, libraryName);
@@ -33,15 +34,30 @@ test('cancels a batch relink preview and later applies a fresh preview', async (
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole('button', { name: '创建资源库' }).click();
     await window.getByRole('textbox', { name: '名称' }).fill(libraryName);
     await window.getByRole('button', { name: '创建', exact: true }).click();
     await window.getByRole('button', { name: '导入文件', exact: true }).first().click();
     await expect(assetCard(window, 'missing.txt')).toBeVisible();
 
-    const managedPath = path.join(libraryPath, 'Assets', 'missing.txt');
-    rmSync(managedPath);
-    await window.getByRole('button', { name: '刷新磁盘变化' }).click();
+    // Seed a historical broken location, not a successful current disk
+    // reconciliation: confirmed removals intentionally leave no index row.
+    // This only writes the owned fixture DB, never the installed user's library.
+    const managedPath = path.join(libraryPath, 'Assets', 'legacy', 'missing.txt');
+    await application.evaluate(({app}, fixturePath) => {
+      const {createRequire} = process.getBuiltinModule('node:module');
+      const require = createRequire(`${app.getAppPath()}/package.json`);
+      const Database = require('better-sqlite3');
+      const database = new Database(`${fixturePath}/.super/library.db`);
+      try {
+        const result = database.prepare(
+          "UPDATE assets SET availability = 'missing', relative_file_path = 'legacy/missing.txt', path_identity = 'legacy/missing.txt' WHERE relative_file_path = 'missing.txt'",
+        ).run();
+        if (result.changes !== 1) throw new Error('Expected one owned legacy fixture asset.');
+      } finally {database.close();}
+    }, libraryPath);
+    await window.getByRole('button', { name: '所有资产', exact: true }).click();
     await assetCard(window, 'missing.txt').click();
     const inspectorStatus = window.locator('.inspector-status-row');
     await expect(inspectorStatus).toBeVisible();

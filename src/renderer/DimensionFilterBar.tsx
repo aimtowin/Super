@@ -119,6 +119,7 @@ export type DimensionFilterBarProps = {
   setAvailabilityFilter: (value: "any" | "available" | "missing") => void;
   excludeAvailabilityFilter: boolean;
   setExcludeAvailabilityFilter: (value: boolean) => void;
+  generationStatusFilter?: "any" | "marked" | "unmarked";
   analysisStatusFilter: "any" | "analyzed" | "unanalyzed";
   setAnalysisStatusFilter: (value: "any" | "analyzed" | "unanalyzed") => void;
   aspectRatioRange: RangeState;
@@ -675,6 +676,10 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
               role="dialog"
             >
               <FilterPanelHeader label={t("filter.dimColor")} excluding={excludeColorFilter} active={colorActive} disabled={controlsDisabled} onChange={setExcludeColorFilter} />
+              <div className="dimension-custom-color">
+                <label>{t("localUpgrade.customColor")} <input type="color" aria-label={t("localUpgrade.customColor")} value={/^#[a-f0-9]{6}~/iu.test(colorFilter) ? colorFilter.slice(0,7) : "#487fe5"} disabled={controlsDisabled} onChange={(event) => setColorFilter(`${event.target.value}~20`)} /></label>
+                {/^#[\da-f]{6}~\d+$/iu.test(colorFilter) && <label>{t("localUpgrade.colorTolerance")} <input type="range" min="0" max="100" value={Number(colorFilter.split('~')[1])} aria-label={t("localUpgrade.colorTolerance")} onChange={(event) => setColorFilter(`${colorFilter.split('~')[0]}~${event.target.value}`)} /> {colorFilter.split('~')[1]}%</label>}
+              </div>
               <div className="dimension-palette-heading">
                 <span>{t("filter.palette")}</span>
                 <span className="dimension-palette-selection">

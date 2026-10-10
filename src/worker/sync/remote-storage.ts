@@ -53,11 +53,11 @@ export interface RemoteStorageDriver {
   list(path: string, depth?: '0' | '1' | 'infinity'): Promise<RemoteEntry[]>;
   read(path: string): Promise<RemoteReadResult>;
   write(path: string, body: Buffer, options?: RemoteWriteOptions): Promise<RemoteWriteResult>;
-  delete(path: string): Promise<void>;
+  delete(path: string, options?: { ifMatch?: string }): Promise<void>;
   /** 创建目录（含中间层级）；已存在视为成功。 */
   mkdir(path: string): Promise<void>;
   /** 移动/重命名；服务端不支持 MOVE 时抛出 DriverUnsupportedError。 */
-  move(from: string, to: string): Promise<void>;
+  move(from: string, to: string, options?: { ifMatch?: string }): Promise<void>;
   exists(path: string): Promise<boolean>;
   /** 连接级能力探测，结果可缓存；失败抛出可读错误。 */
   probe(): Promise<DriverCapabilities>;

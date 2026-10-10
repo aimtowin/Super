@@ -77,6 +77,25 @@ function numeric(value: unknown): number | null {
   return null;
 }
 
+/** Pixel counts must satisfy the same contract as list/layout IPC responses. */
+export function usablePixelDimension(value: unknown): number | null {
+  const parsed = numeric(value);
+  return parsed !== null && Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function resolvedImagePixelSize(
+  metadata: { width: unknown; height: unknown },
+  header: { width: unknown; height: unknown } | null | undefined,
+): { width: number | null; height: number | null } {
+  for (const candidate of [metadata, header]) {
+    if (!candidate) continue;
+    const width = usablePixelDimension(candidate.width);
+    const height = usablePixelDimension(candidate.height);
+    if (width !== null && height !== null) return { width, height };
+  }
+  return { width: null, height: null };
+}
+
 function scalar(value: unknown): number | string | null {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
@@ -106,12 +125,12 @@ export function normalizeRawImageMetadata(output: unknown): RawImageMetadata {
     ? output as Record<string, unknown>
     : {};
   return {
-    width: numeric(firstValue(record, [
+    width: usablePixelDimension(firstValue(record, [
       'ExifImageWidth',
       'ImageWidth',
       'PixelXDimension',
     ])),
-    height: numeric(firstValue(record, [
+    height: usablePixelDimension(firstValue(record, [
       'ExifImageHeight',
       'ImageHeight',
       'PixelYDimension',

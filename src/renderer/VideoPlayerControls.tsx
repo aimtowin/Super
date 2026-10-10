@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from "react";
 
+import { useWorkspaceMediaBookmark, useWorkspacePreviewSession } from "./workspace-preview-session";
 import { Icon } from "./Icons";
 import { iconActionAttrs } from "./icon-action-attrs";
 import { useT } from "./i18n";
@@ -112,6 +113,8 @@ export function VideoPlayerControls({
 }: VideoPlayerControlsProps) {
   const t = useT();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const previewSession = useWorkspacePreviewSession();
+  useWorkspaceMediaBookmark(videoRef, src);
   const trackRef = useRef<HTMLDivElement>(null);
   // Zoom/pan/fit mirrors the image viewer. Space remains playback; F remains
   // the existing next-frame shortcut. Numpad . fits the viewer.
@@ -140,10 +143,10 @@ export function VideoPlayerControls({
       seekSessionRef.current?.cancel();
     };
   }, []);
-  const [playbackRate, setPlaybackRate] = useState<VideoPlaybackRate>(1);
+  const [playbackRate, setPlaybackRate] = useState<VideoPlaybackRate>((previewSession?.media?.rate ?? 1) as VideoPlaybackRate);
   const [paused, setPaused] = useState(true);
   const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [currentTime, setCurrentTime] = useState(previewSession?.media?.time ?? 0);
   const [sourceNatural, setSourceNatural] = useState({ w: 0, h: 0 });
   const [scrubRatio, setScrubRatio] = useState<number | null>(null);
   const playbackRateRef = useRef(playbackRate);
@@ -377,7 +380,7 @@ export function VideoPlayerControls({
   }, [displayTransform.quarterTurns, measureAndFit]);
 
   useEffect(() => {
-    if (fitRequestToken === undefined) return;
+    if (fitRequestToken === undefined || fitRequestToken === 0) return;
     fitToWindow();
   }, [fitRequestToken, fitToWindow]);
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { saveWorkspaceViewport, useWorkspacePreviewSession } from "./workspace-preview-session";
 import { isMacPlatform } from "./commands/command-types";
 import {
   matchGlobalZoomShortcut,
@@ -49,6 +50,8 @@ export function useViewerZoomPan({
   onSwipeNext,
   onSwipePrevious,
 }: UseViewerZoomPanOptions) {
+  const session = useWorkspacePreviewSession();
+  const savedViewport = useRef(session?.viewport);
   const viewportRef = useRef<HTMLDivElement>(null);
   const naturalRef = useRef<ViewerNaturalSize>({ w: 0, h: 0 });
   const fitScaleRef = useRef(0);
@@ -91,8 +94,9 @@ export function useViewerZoomPan({
       const clamped = clampPan(next);
       viewRef.current = clamped;
       setView(clamped);
+      saveWorkspaceViewport(session, {natural: {...naturalRef.current}, view: clamped});
     },
-    [clampPan],
+    [clampPan, session],
   );
 
   const measureAndFit = useCallback(
@@ -111,7 +115,11 @@ export function useViewerZoomPan({
       const previousFit = fitScaleRef.current || nextFit;
       fitScaleRef.current = nextFit;
       setFitScale(nextFit);
-      if (mode === "reset") {
+      const saved = savedViewport.current;
+      if (saved && saved.natural.w === nextNatural.w && saved.natural.h === nextNatural.h) {
+        savedViewport.current = undefined;
+        commitView({...saved.view, scale: clampViewerScale(saved.view.scale)});
+      } else if (mode === "reset") {
         commitView({ scale: nextFit, x: 0, y: 0 });
       } else {
         const ratio = viewRef.current.scale / previousFit;
@@ -127,6 +135,7 @@ export function useViewerZoomPan({
   );
 
   const fitToWindow = useCallback(() => {
+    savedViewport.current = undefined;
     const viewport = viewportRef.current;
     const { w, h } = naturalRef.current;
     if (!viewport || w <= 0 || h <= 0) return;

@@ -69,12 +69,26 @@ export function colorPresetById(id: string): ColorPreset | undefined {
   return COLOR_PRESETS.find((preset) => preset.id === id);
 }
 
-export function parseColorFilterIds(raw: string): ColorPresetId[] {
+export function parseColorFilterIds(raw: string): string[] {
   const allowed = new Set<string>(COLOR_PRESET_IDS);
   return raw
     .split(',')
     .map((value) => value.trim())
-    .filter((value): value is ColorPresetId => allowed.has(value));
+    .filter((value) => allowed.has(value) || parseCustomColor(value) !== null);
+}
+
+/** Portable token, also usable in saved smart-collection color clauses. */
+export function parseCustomColor(value: string): { hex: string; tolerance: number; hue: number; saturation: number; lightness: number } | null {
+  const match = /^(#[\da-f]{6})~(\d{1,3})$/iu.exec(value);
+  if (!match || Number(match[2]) > 100) return null;
+  const hex = match[1]!.toLowerCase();
+  const rgb = [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16) / 255);
+  const [r, g, b] = rgb as [number, number, number];
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+  const lightness = (max + min) / 2;
+  const saturation = delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+  const hue = delta === 0 ? 0 : ((max === r ? (g - b) / delta : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4) * 60 + 360) % 360;
+  return { hex, tolerance: Number(match[2]), hue, saturation, lightness };
 }
 
 /**
@@ -84,7 +98,7 @@ export function parseColorFilterIds(raw: string): ColorPresetId[] {
  */
 export function colorFilterSql(
   hueColumn: string,
-  ids: readonly ColorPresetId[],
+  ids: readonly string[],
   exclude: boolean,
   lightnessColumn = 'palette_color.lightness',
   saturationColumn = 'palette_color.saturation',
@@ -93,11 +107,21 @@ export function colorFilterSql(
   const params: number[] = [];
 
   for (const id of ids) {
+    const custom = parseCustomColor(id);
+    if (custom) {
+      // Similarity is a documented HSL window, not a misleading perceptual DeltaE claim.
+      const margin = custom.tolerance / 100;
+      const hue = custom.saturation < 0.16 ? '' : ` AND ${hueColumn} IS NOT NULL AND MIN(ABS(${hueColumn} - ?), 360 - ABS(${hueColumn} - ?)) <= ?`;
+      clauses.push(`(${lightnessColumn} IS NOT NULL AND ${saturationColumn} IS NOT NULL AND ABS(${lightnessColumn} - ?) <= ? AND ABS(${saturationColumn} - ?) <= ?${hue})`);
+      params.push(custom.lightness, margin + 0.005, custom.saturation, margin + 0.005);
+      if (hue) params.push(custom.hue, custom.hue, Math.max(1, margin * 180));
+      continue;
+    }
     const preset = colorPresetById(id);
     if (!preset) continue;
     if (preset.kind === 'hue') {
       const spans = preset.hues.map(() => `(${hueColumn} >= ? AND ${hueColumn} < ?)`);
-      clauses.push(`(${hueColumn} IS NOT NULL AND (${spans.join(' OR ')}))`);
+      clauses.push(`(${hueColumn} IS NOT NULL AND ${saturationColumn} IS NOT NULL AND ${lightnessColumn} IS NOT NULL AND ${saturationColumn} >= 0.16 AND ${lightnessColumn} >= 0.18 AND ${lightnessColumn} < 0.82 AND (${spans.join(' OR ')}))`);
       for (const span of preset.hues) params.push(span.min, span.max);
       continue;
     }

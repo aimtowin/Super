@@ -56,8 +56,8 @@ describe('managed folders', () => {
     });
     expect(existsSync(path.join(library.libraryPath, 'Assets', 'UI', 'Buttons'))).toBe(true);
     expect(service.listManagedFolders(library.libraryId)).toEqual([
-      { ...parent, childFolderCount: 1 },
-      child,
+      { ...parent, childFolderCount: 1, autoAiAnalysis: false },
+      {...child, autoAiAnalysis: false},
     ]);
     service.closeAll();
   });

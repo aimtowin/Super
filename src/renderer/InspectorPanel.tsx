@@ -6,6 +6,9 @@ import {
   useLayoutEffect,
 } from "react";
 
+import { EmbeddedGenerationPanel } from "./EmbeddedGenerationPanel";
+import { FolderInspector } from "./FolderInspector";
+import { parseTagNames } from "./sidebar-discovery";
 import { Icon } from "./Icons";
 import { InspectorCardFeelMotion } from "./inspector-card-feel-motion";
 import { useInspectorCardFeel } from "./InspectorCardFeelProvider";
@@ -130,6 +133,7 @@ export interface AiContent {
 }
 
 export interface InspectorPanelProps {
+  selectedFolderId?: string;
   selectedAsset: AssetSummary | undefined;
   /** Full multi-selection in canvas order; primary is still `selectedAsset`. */
   selectedAssets?: AssetSummary[];
@@ -174,9 +178,9 @@ export interface InspectorPanelProps {
   handleAuthorInput: (e: React.ChangeEvent<HTMLInputElement>) => void;
   // Tag chip props (REQ-TAG-003)
   allTags: TagSummary[];
-  onAssignTagToAsset?: (tagId: string) => void;
+  onAssignTagToAsset?: (tagId: string) => void | Promise<void>;
   onRemoveTagFromAsset?: (tagId: string) => void;
-  onCreateAndAssignTag?: (tagName: string) => void;
+  onCreateAndAssignTag?: (tagName: string) => void | Promise<void>;
   // REQ-MENU-007 / REQ-SELECT-004: multi-select UE edit model (null = single-asset path).
   multiEdit?: InspectorMultiEditModel | null;
   /** 点击色卡分段复制颜色后的反馈（toast 由 App 统一发）。copied=false 表示剪贴板写入失败。 */
@@ -928,6 +932,18 @@ export function InspectorPanel(props: InspectorPanelProps) {
 
     if (event.key === "Enter") {
       event.preventDefault();
+      const names = parseTagNames(tagInputValue);
+      if (names.length > 1) {
+        void (async () => {
+          for (const name of names) {
+            const existing = allTags.find(tag => tag.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+            if (existing) { if (!displayedTagIds.has(existing.tagId)) await onAssignTagToAsset?.(existing.tagId); }
+            else await onCreateAndAssignTag?.(name);
+          }
+        })();
+        closeTagInput();
+        return;
+      }
       const activeSuggestion = tagSuggestions[activeTagSuggestionIndex];
       if (activeSuggestion) {
         submitTagSuggestion(activeSuggestion);
@@ -1129,7 +1145,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
             </div>
           )}
 
-          {(metadataPending || metadataFailed) && (
+          {(metadataPending || (metadataFailed && !(versionConflict && (isMultiEdit ? multiEdit !== null : displayMetadata !== null)))) && (
             <div className={metadataFailed ? "inline-error inspector-version-conflict" : "inspector-ai-analyzing"}
               role={metadataFailed ? "alert" : "status"} aria-live="polite" data-metadata-state={metadataFailed ? "error" : "loading"}>
               {metadataFailed ? <Icon name="warning" size={14} /> : <span className="activity-pulse" />}
@@ -1310,7 +1326,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
           {(isMultiEdit ? multiEdit !== null : displayMetadata !== null) ? (
             <>
               {versionConflict && (
-                <div className="inline-error inspector-version-conflict">
+                <div className="inline-error inspector-version-conflict" role="alert">
                   <Icon name="warning" size={14} />
                   <div>
                     <strong>{t("inspector.versionConflict")}</strong>
@@ -1662,6 +1678,8 @@ export function InspectorPanel(props: InspectorPanelProps) {
             <div className="inspector-metadata-placeholder" aria-hidden="true" />
           )}
 
+          {!isMultiEdit && api && library && selectedAsset.mediaType === "image" && <EmbeddedGenerationPanel api={api} libraryId={library.libraryId} assetId={selectedAsset.assetId} />}
+
           {aiAnalyzing && (
             <div className="inspector-ai-analyzing" role="status">
               <span className="activity-pulse" />
@@ -1696,6 +1714,8 @@ export function InspectorPanel(props: InspectorPanelProps) {
           )}
 
         </div>
+      ) : library && api && props.selectedFolderId ? (
+        <FolderInspector api={api} libraryId={library.libraryId} folderId={props.selectedFolderId} key={`${library.libraryId}:${props.selectedFolderId}`} />
       ) : library ? (
         <div className="inspector-content">
           <div className="inspector-identity">

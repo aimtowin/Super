@@ -121,7 +121,7 @@ async function mountInspector(initialSummary = summary(), strict = false) {
       api: probe.api, library, selectedAssetId: primaryRef.current, selectedAssetIds: selectedRef.current,
       selectedAssetIdRef: primaryRef, selectedAssetIdsRef: selectedRef,
       metadataController: controller, metadataSession: owner,
-      assetMetadata, editDescription: "", setAssetMetadata,
+      assetMetadata, editDescription: "", editRating: 0, editFavorite: false, editSourceUrl: "", editAuthor: "", setAssetMetadata,
       setVersionConflict: ignore, setEditDescription: ignore,
       setEditRating: ignore, setEditFavorite: ignore,
       setEditSourceUrl: ignore, setEditAuthor: ignore,

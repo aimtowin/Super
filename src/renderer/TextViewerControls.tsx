@@ -20,6 +20,7 @@ export type TextViewerControlsProps = {
   assetId: string;
   onClose: () => void;
   onSaved?: () => void;
+  allowConvert?: boolean;
 };
 
 export type TextViewerControlsHandle = {
@@ -42,6 +43,7 @@ export const TextViewerControls = forwardRef<
     assetId,
     onClose,
     onSaved,
+    allowConvert = false,
   },
   ref,
 ) {
@@ -53,10 +55,13 @@ export const TextViewerControls = forwardRef<
   const [openedContent, setOpenedContent] = useState("");
   const [revisionId, setRevisionId] = useState<string | null>(null);
   const [editable, setEditable] = useState(false);
+  const [encoding, setEncoding] = useState('utf-8');
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [wrapLines, setWrapLines] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const onSavedRef = useRef(onSaved);
   const contentRef = useRef(content);
   const baselineRef = useRef(baseline);
@@ -91,13 +96,16 @@ export const TextViewerControls = forwardRef<
   const resizeTextarea = useCallback(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
-    textarea.style.height = "0px";
-    textarea.style.height = `${textarea.scrollHeight}px`;
     const layer = textarea.parentElement;
     const minWidth = layer?.clientWidth ?? 0;
-    textarea.style.width = "0px";
-    textarea.style.width = `${Math.max(textarea.scrollWidth, minWidth)}px`;
-  }, []);
+    if (wrapLines) textarea.style.width = "100%";
+    else {
+      textarea.style.width = "0px";
+      textarea.style.width = `${Math.max(textarea.scrollWidth, minWidth)}px`;
+    }
+    textarea.style.height = "0px";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [wrapLines]);
 
   // Parent remounts with key=`${libraryId}:${assetId}` so loading starts true.
   useEffect(() => {
@@ -118,6 +126,7 @@ export const TextViewerControls = forwardRef<
         setOpenedContent(result.value.content);
         setRevisionId(result.value.revisionId);
         setEditable(result.value.editable);
+        setEncoding(result.value.encoding ?? 'utf-8');
         setTruncated(result.value.truncated);
         setLoading(false);
       })
@@ -183,6 +192,7 @@ export const TextViewerControls = forwardRef<
                 setRevisionId(latest.value.revisionId);
                 setTruncated(latest.value.truncated);
                 setEditable(latest.value.editable);
+                setEncoding(latest.value.encoding ?? 'utf-8');
               }
             } catch {
               // Keep the conflict message below.
@@ -253,8 +263,10 @@ export const TextViewerControls = forwardRef<
           <span>
             {t("preview.textLineCount", { count: lineCount })}
             {truncated ? ` · ${t("preview.textTruncated")}` : ""}
-            {!editable ? ` · ${t("preview.textReadOnly")}` : ""}
+            {` · ${encoding.toUpperCase()}`}
+            {!editable ? ` · ${t(encoding !== 'utf-8' ? "preview.textEncodingReadOnly" : "preview.textReadOnly")}` : ""}
           </span>
+          {actionNotice && <span role="status">{actionNotice}</span>}
           {actionError ? (
             <button
               className="preview-text-error-btn"
@@ -266,6 +278,20 @@ export const TextViewerControls = forwardRef<
           ) : null}
         </div>
         <div className="preview-text-actions">
+          <button className="preview-text-action-chip" type="button" aria-pressed={wrapLines} onClick={() => setWrapLines(current => !current)}>{t("localUpgrade.wrap")}</button>
+          {allowConvert && !editable && !truncated && encoding !== 'utf-8' && <button className="preview-text-action-chip" disabled={saving} type="button" onClick={async () => {
+            if (!window.confirm(t("localUpgrade.convertConfirm"))) return;
+            setActionError(null); setActionNotice(null);
+            setSaving(true);
+            try {
+              const result = await api.saveTextAsset({ libraryId, assetId, content, expectedRevisionId: revisionId ?? undefined, convertToUtf8: true });
+              if (!result.ok) { setActionError(messageForPublicError(result.error, locale)); return; }
+              setEncoding('utf-8'); setEditable(true); setRevisionId(result.value.revisionId);
+              invalidateTextAssetPreviewCache(libraryId, assetId); onSavedRef.current?.();
+              setActionNotice(t("localUpgrade.converted"));
+            } catch (error) { setActionError(error instanceof Error ? error.message : t("preview.textSaveFailed")); }
+            finally { setSaving(false); }
+          }}>{t("localUpgrade.convertText")}</button>}
           {editable ? (
             <button
               className="preview-text-action-chip"
@@ -285,9 +311,9 @@ export const TextViewerControls = forwardRef<
           </button>
         </div>
       </div>
-      <div className="preview-text-scroll">
+      <div className={`preview-text-scroll${wrapLines ? " is-wrapped" : ""}`}>
         <div className="preview-text-line-layer">
-          <pre aria-hidden="true" className="preview-text-gutter">
+          <pre aria-hidden="true" hidden={wrapLines} className="preview-text-gutter">
             {gutter}
           </pre>
           <textarea

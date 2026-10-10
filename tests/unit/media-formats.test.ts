@@ -15,6 +15,16 @@ import {
 } from '../../src/shared/media-formats';
 
 describe('media format registry', () => {
+  it('recognizes JFIF/AVIF as real image routes and FLV as proxy-capable video', () => {
+    for (const [extension, mime] of [['.JFIF', 'image/jpeg'], ['.AVIF', 'image/avif']]) {
+      expect(isSupportedImageExtension(extension!)).toBe(true);
+      expect(imageDecoderForExtension(extension!)).toBe('sharp');
+      expect(imageMimeForExtension(extension!)).toBe(mime);
+      expect(directImageMimeForExtension(extension!)).toBe(mime);
+    }
+    expect(isSupportedVideoExtension('clip.FLV')).toBe(true);
+    expect(videoMimeForExtension('.flv')).toBe('video/x-flv');
+  });
   it('routes web-native and derived images through the intended decoder', () => {
     expect(imageDecoderForExtension('poster.PNG')).toBe('sharp');
     expect(imageDecoderForExtension('art.svg')).toBe('sharp');

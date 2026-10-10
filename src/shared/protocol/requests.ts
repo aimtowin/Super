@@ -534,6 +534,21 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     libraryId: identifierSchema,
   }),
   z.strictObject({
+    type: z.literal('asset.embedded-generation.request'),
+    libraryId: identifierSchema,
+    assetId: identifierSchema,
+  }),
+  z.strictObject({
+    type: z.literal('folder.inspect.request'),
+    libraryId: identifierSchema,
+    folderId: folderScopeIdSchema,
+  }),
+  z.strictObject({
+    type: z.literal('ignore.preview.request'),
+    libraryId: identifierSchema,
+    content: z.string().max(128_000),
+  }),
+  z.strictObject({
     type: z.literal('ignore.gitignore.get.request'),
     libraryId: identifierSchema,
   }),
@@ -869,7 +884,13 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     maxBytes: z.number().int().positive().max(2_097_152).optional(),
   }),
   z.strictObject({
+    type: z.literal('asset.image.transform.request'),
+    libraryId: identifierSchema, assetId: identifierSchema, expectedRevisionId: identifierSchema,
+    quarterTurns: z.number().int().min(0).max(3), flipHorizontal: z.boolean(), flipVertical: z.boolean(),
+  }),
+  z.strictObject({
     type: z.literal('asset.text.save.request'),
+    convertToUtf8: z.boolean().optional(),
     libraryId: identifierSchema,
     assetId: identifierSchema,
     content: z.string().max(1_048_576),
@@ -1034,6 +1055,7 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     serverId: nonBlankString,
     directoryName: z.string().optional(),
   }),
+  z.strictObject({ type:z.literal('sync.cancel.request'), libraryId:identifierSchema }),
   z.strictObject({
     type: z.literal('sync.run.request'),
     libraryId: identifierSchema,
@@ -1357,6 +1379,7 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
     allowInsecureTls: z.boolean().optional(),
     directoryName: z.string().optional(),
   }),
+  z.strictObject({type:z.literal('sync.cancel'),libraryId:identifierSchema}),
   z.strictObject({
     type: z.literal('sync.run'),
     libraryId: identifierSchema,
@@ -1641,6 +1664,21 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('ignore.list'),
     libraryId: identifierSchema,
+  }),
+  z.strictObject({
+    type: z.literal('asset.embedded-generation'),
+    libraryId: identifierSchema,
+    assetId: identifierSchema,
+  }),
+  z.strictObject({
+    type: z.literal('folder.inspect'),
+    libraryId: identifierSchema,
+    folderId: folderScopeIdSchema,
+  }),
+  z.strictObject({
+    type: z.literal('ignore.preview'),
+    libraryId: identifierSchema,
+    content: z.string().max(128_000),
   }),
   z.strictObject({
     type: z.literal('ignore.gitignore.get'),
@@ -1953,6 +1991,9 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
     libraryId: identifierSchema,
     assetId: identifierSchema,
     maxBytes: z.number().int().positive().max(CONTENT_REPLACE_MAX_BYTES),
+    offset: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    expectedRevisionId: identifierSchema.optional(),
+    sourceToken: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
   }),
   z.strictObject({
     type: z.literal('asset.restore'),
@@ -2087,7 +2128,13 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
     maxBytes: z.number().int().positive().max(2_097_152).optional(),
   }),
   z.strictObject({
+    type: z.literal('asset.image.transform'),
+    libraryId: identifierSchema, assetId: identifierSchema, expectedRevisionId: identifierSchema,
+    quarterTurns: z.number().int().min(0).max(3), flipHorizontal: z.boolean(), flipVertical: z.boolean(),
+  }),
+  z.strictObject({
     type: z.literal('asset.text.save'),
+    convertToUtf8: z.boolean().optional(),
     libraryId: identifierSchema,
     assetId: identifierSchema,
     content: z.string().max(1_048_576),

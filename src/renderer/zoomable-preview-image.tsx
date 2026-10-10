@@ -159,7 +159,7 @@ export const ZoomableImage = forwardRef<
   useImperativeHandle(ref, () => ({ fitToWindow }), [fitToWindow]);
 
   useEffect(() => {
-    if (fitRequestToken === undefined) return;
+    if (fitRequestToken === undefined || fitRequestToken === 0) return;
     fitToWindow();
   }, [fitRequestToken, fitToWindow]);
 

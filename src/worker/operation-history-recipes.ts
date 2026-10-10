@@ -21,6 +21,7 @@ const descriptorSchema = z.strictObject({
 });
 
 const descriptors: readonly OperationHistoryRecipeDescriptor[] = [
+  { forwardKind: 'asset-content-backup', inverseKind: 'asset-content-backup', version: 1 },
   { forwardKind: 'history-barrier', inverseKind: 'history-barrier', version: 1 },
   { forwardKind: 'managed-asset-move', inverseKind: 'managed-asset-move-undo', version: 1 },
   { forwardKind: 'managed-asset-copy', inverseKind: 'managed-asset-copy-undo', version: 1 },
@@ -141,6 +142,10 @@ const recipePayloadSchemas: ReadonlyMap<string, z.ZodType> = new Map<string, z.Z
     completeRenameSchema,
     z.strictObject({ items: z.array(renameItemSchema).min(1) }),
   ])],
+  ['asset-content-backup', z.strictObject({
+    assetId: identifierSchema, expectedHash: z.string().regex(/^[a-f0-9]{64}$/u),
+    targetHash: z.string().regex(/^[a-f0-9]{64}$/u), backupId: z.string().uuid(),
+  })],
   ['asset-metadata-snapshot', z.strictObject({
     assetId: identifierSchema,
     expected: metadataSnapshotSchema,

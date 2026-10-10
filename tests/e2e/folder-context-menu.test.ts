@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { _electron as electron, expect, test, type Page } from "@playwright/test";
 
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -157,6 +158,7 @@ test("keeps a top-clamped folder context menu clickable above the toolbar", asyn
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await createLibrary(window, libraryName);
     await dismissQuickStartIfOpen(window);
     await createFolderViaSidebar(window, "顶部菜单");
@@ -267,6 +269,7 @@ test("creates a nested subfolder inline from the folder context menu", async () 
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await createLibrary(window, libraryName);
     await createFolderViaSidebar(window, "父级");
 
@@ -363,6 +366,7 @@ test("renames a folder inline from the context menu and keeps its assets visible
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await createLibrary(window, libraryName);
     await createFolderViaSidebar(window, "原画");
 
@@ -445,6 +449,7 @@ test("keeps the inline rename row open with an inline conflict error and allows 
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await createLibrary(window, libraryName);
     await createFolderViaSidebar(window, "素材甲");
     // 创建后自动进入新文件夹（产品行为）——回根再建第二个，保证两者同父级。
@@ -501,6 +506,7 @@ test("shows inline invalid-name errors for illegal folder names and cancels with
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await createLibrary(window, libraryName);
     await createFolderViaSidebar(window, "角色");
 
@@ -555,6 +561,7 @@ test("creates under the selected folder from the sidebar plus entry, cancels wit
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await createLibrary(window, libraryName);
     await createFolderViaSidebar(window, "父级");
 

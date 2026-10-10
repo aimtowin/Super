@@ -602,6 +602,9 @@ export const automationCommandInputSchemas = {
   }),
   'asset.content.read': z.strictObject({
     assetId: nonBlankString,
+    offset: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    expectedRevisionId: nonBlankString.optional(),
+    sourceToken: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
     maxBytes: z.number().int().positive().max(CONTENT_REPLACE_MAX_BYTES).default(CONTENT_REPLACE_MAX_BYTES),
   }),
   'asset.move': z.strictObject({
@@ -999,6 +1002,9 @@ const assetContentReadWorkerResultSchema = z.strictObject({
   type: z.literal('asset.content.read'),
   assetId: nonBlankString,
   revisionId: nonBlankString,
+  offset: z.number().int().nonnegative().optional(),
+  nextOffset: z.number().int().nonnegative().optional(),
+  sourceToken: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
   byteSize: z.number().int().nonnegative(),
   dataBase64: z.string().max(CONTENT_REPLACE_MAX_BASE64_LENGTH),
   truncated: z.boolean(),
@@ -1481,6 +1487,9 @@ export const automationCommandResultSchemas = {
   'asset.content.read': z.strictObject({
     assetId: nonBlankString,
     revisionId: nonBlankString,
+    offset: z.number().int().nonnegative().optional(),
+    nextOffset: z.number().int().nonnegative().optional(),
+    sourceToken: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
     byteSize: z.number().int().nonnegative(),
     dataBase64: z.string().max(CONTENT_REPLACE_MAX_BASE64_LENGTH),
     truncated: z.boolean(),
@@ -2358,6 +2367,9 @@ export const automationCommandRegistry = [
       libraryId,
       assetId: input.assetId,
       maxBytes: input.maxBytes,
+      ...(input.offset === undefined ? {} : {offset:input.offset}),
+      ...(input.expectedRevisionId === undefined ? {} : {expectedRevisionId:input.expectedRevisionId}),
+      ...(input.sourceToken === undefined ? {} : {sourceToken:input.sourceToken}),
     }),
     projectResult: (result) => {
       const parsed = assetContentReadWorkerResultSchema.safeParse(result);
@@ -2369,6 +2381,7 @@ export const automationCommandRegistry = [
           dataBase64: parsed.data.dataBase64,
           truncated: parsed.data.truncated,
           mimeType: parsed.data.mimeType,
+          ...(parsed.data.offset === undefined ? {} : {offset: parsed.data.offset, nextOffset:parsed.data.nextOffset, sourceToken:parsed.data.sourceToken}),
         }
         : undefined;
     },
@@ -3729,7 +3742,7 @@ export function generateAutomationTypeDeclaration(
     '      setRating(assetIds: readonly string[], rating: 0 | 1 | 2 | 3 | 4 | 5): Promise<SuperRatingUpdateResult>;',
     '      copyFilePaths(assetIds: readonly string[]): Promise<{ readonly copiedCount: number }>;',
     '      moveToTrash(assetIds: readonly string[]): Promise<{ readonly trashedCount: number; readonly operationId: string }>;',
-    '      readContent(assetId: string, options?: { readonly maxBytes?: number }): Promise<{ readonly assetId: string; readonly revisionId: string; readonly byteSize: number; readonly dataBase64: string; readonly truncated: boolean; readonly mimeType: string | null }>;',
+    '      readContent(assetId: string, options?: { readonly maxBytes?: number; readonly offset?: number; readonly expectedRevisionId?: string; readonly sourceToken?: string }): Promise<{ readonly assetId: string; readonly revisionId: string; readonly byteSize: number; readonly dataBase64: string; readonly truncated: boolean; readonly mimeType: string | null; readonly offset?: number; readonly nextOffset?: number; readonly sourceToken?: string }>;',
     '      replaceContent(assetId: string, dataBase64: string, options?: { readonly expectedRevisionId?: string; readonly mimeHint?: string }): Promise<{ readonly assetId: string; readonly revisionId: string; readonly byteSize: number }>;',
     '      stageContent(assetId: string, dataBase64: string, options?: { readonly stagingToken?: string; readonly complete?: boolean }): Promise<{ readonly assetId: string; readonly stagingToken: string; readonly byteSize: number; readonly complete: boolean }>;',
     '      replaceContentBatch(items: readonly ({ readonly assetId: string; readonly dataBase64: string; readonly expectedRevisionId: string } | { readonly assetId: string; readonly stagingToken: string; readonly expectedRevisionId: string })[]): Promise<{ readonly operationId: string; readonly items: readonly { readonly assetId: string; readonly revisionId: string; readonly byteSize: number }[] }>;',

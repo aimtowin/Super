@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { _electron as electron, expect, test, type Page } from "@playwright/test";
 
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -121,6 +122,7 @@ test("folder browse stays direct until include-subfolders is checked", async () 
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await createLibrary(window, libraryName);
     await createFolderViaSidebar(window, "父文件夹");
 
@@ -220,6 +222,7 @@ test("asset cards can be dropped onto folder cards in the browse canvas", async 
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await createLibrary(window, libraryName);
     await createFolderViaSidebar(window, "父文件夹");
     await sidebarFolderRow(window, "父文件夹").click();
@@ -272,6 +275,7 @@ test("managed folder rows can be dragged into Trash", async () => {
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await createLibrary(window, libraryName);
     await createFolderViaSidebar(window, "待回收文件夹");
     const folderRow = sidebarFolderRow(window, "待回收文件夹");

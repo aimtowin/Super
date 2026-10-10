@@ -10,10 +10,15 @@ import type { SyncLibraryPort } from './sync-engine';
 
 export function createLibrarySyncPort(libraryService: LibraryService): SyncLibraryPort {
   return {
+    async readSyncMetadata(libraryId,syncId) { return libraryService.readSyncMetadata(libraryId,syncId); },
+    async applySyncMetadata(libraryId,syncId,expectedFingerprint,value) { libraryService.applySyncMetadata(libraryId,syncId,expectedFingerprint,value); },
     async syncSnapshot(libraryId) {
       const snapshot = libraryService.syncSnapshot(libraryId);
       return {
         library: snapshot.library,
+        missingSyncIds: snapshot.missingSyncIds,
+        deletedSyncIds: snapshot.deletedSyncIds,
+        restoredSyncIds: snapshot.restoredSyncIds,
         assets: snapshot.assets.map((asset) => ({
           syncId: asset.syncId,
           assetId: asset.assetId,
@@ -29,6 +34,12 @@ export function createLibrarySyncPort(libraryService: LibraryService): SyncLibra
     },
     async applySyncRecycle(libraryId, syncId) {
       libraryService.applySyncRecycle(libraryId, syncId);
+    },
+    async applySyncRelocate(libraryId, syncId, relativePath) {
+      libraryService.applySyncRelocate(libraryId, syncId, relativePath);
+    },
+    async acknowledgeSyncRestores(libraryId, syncIds) {
+      libraryService.acknowledgeSyncRestores(libraryId, syncIds);
     },
     async applySyncConflictCopy(libraryId, relativePath, body, conflictName) {
       return libraryService.applySyncConflictCopy(libraryId, relativePath, body, conflictName);

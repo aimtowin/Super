@@ -378,6 +378,7 @@ const categoricalFilterClauseSchema = z.strictObject({
     'source_url',
     'availability',
     'analysis_status',
+    'generation_status',
     'color',
   ]),
   values: z.array(boundedSearchValue).max(MAX_FORMAT_FILTER_VALUES),

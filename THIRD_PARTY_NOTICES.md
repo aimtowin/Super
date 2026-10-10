@@ -4,6 +4,8 @@ Super (MIT, see [LICENSE](LICENSE)) 依赖以下开源组件。各组件按其�
 
 ## 运行时依赖
 
+本软件从 [dolag233/Serpent](https://github.com/dolag233/Serpent) 0.1.4 接力开发，保留 MIT 版权和许可。本轮侧栏 Emoji 分类目录另借鉴其 0.2.9 固定快照 `f58701a6` 的 `src/shared/entity-appearance.ts`；图形复用 Super 已有 Icon，未复制远程 SVG 或上游整个外观迁移。主 [LICENSE](LICENSE) 同时保留 Serpent / Super contributors 的版权。
+
 | 组件 | 许可证 | 用途 |
 |---|---|---|
 | [Electron](https://www.electronjs.org/) | MIT | 桌面应用运行时 |

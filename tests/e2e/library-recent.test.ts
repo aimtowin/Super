@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -54,6 +55,7 @@ test("lists other recent libraries in the switcher and opens one directly", asyn
   let application = await launch(firstParentPath);
   try {
     let window = await application.firstWindow();
+    await dismissQuickStart(window);
     await expect(
       window.getByRole("heading", { name: "创建本地资源库" }),
     ).toBeVisible();
@@ -190,6 +192,7 @@ test("keeps decoded previews isolated when switching between libraries", async (
   );
   try {
     let window = await application.firstWindow();
+    await dismissQuickStart(window);
     await expect(
       window.getByRole("heading", { name: "创建本地资源库" }),
     ).toBeVisible();

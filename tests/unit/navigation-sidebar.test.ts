@@ -12,7 +12,7 @@ import {
 import { LocaleProvider } from "../../src/renderer/i18n";
 import type { ContextMenuDescriptor } from "../../src/renderer/context-menu";
 import { emojiKey, emojiStorageKey } from "../../src/renderer/sidebar-emoji-preferences";
-import * as emojiPreferences from "../../src/renderer/sidebar-emoji-preferences";
+import * as emojiPreferences from "../../src/renderer/sidebar-appearance-preferences";
 
 function createNavigationProps(
   overrides: Partial<NavigationSidebarProps> = {},
@@ -147,16 +147,16 @@ describe("NavigationSidebar emoji icons", () => {
     expect(row(name).querySelector(".sidebar-emoji-glyph")).toBeNull();
   });
   it("persists after remount and rename; isolates library switches and closes stale editors", async () => {
-    const p = props(); await render(p); await open("Folder", p); await click("📚"); await click("Save");
+    const p = props(); await render(p); await open("Folder", p); await click("🎨"); await click("Save");
     await act(async () => root.unmount()); root = createRoot(container);
     p.folders[0] = { ...p.folders[0]!, name: "Renamed" };
-    await render(p); expect(row("Renamed").querySelector(".sidebar-emoji-glyph")?.textContent).toBe("📚");
+    await render(p); expect(row("Renamed").querySelector(".sidebar-emoji-glyph")?.textContent).toBe("🎨");
     await open("Renamed", p);
     await render({ ...p, library: { ...p.library!, libraryId: "other" } });
     expect(document.querySelector("#sidebar-emoji")).toBeNull();
     expect(row("Renamed").querySelector(".sidebar-emoji-glyph")).toBeNull();
     await render(p); expect(document.querySelector("#sidebar-emoji")).toBeNull();
-    expect(row("Renamed").querySelector(".sidebar-emoji-glyph")?.textContent).toBe("📚");
+    expect(row("Renamed").querySelector(".sidebar-emoji-glyph")?.textContent).toBe("🎨");
   });
   it("cancel and Escape do not write; save errors keep the editor open", async () => {
     const p = props(); await render(p); await open("Folder", p); await click("🔥"); await click("Cancel");
@@ -165,7 +165,7 @@ describe("NavigationSidebar emoji icons", () => {
     await act(async () => document.querySelector("#sidebar-emoji-input")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
     expect(document.querySelector("#sidebar-emoji")).toBeNull();
     await open("Folder", p); await click("🌍");
-    vi.spyOn(emojiPreferences, "saveEmojiPreference").mockImplementation(() => { throw new Error("quota"); });
+    vi.spyOn(emojiPreferences, "saveSidebarAppearance").mockImplementation(() => { throw new Error("quota"); });
     await click("Save");
     expect(document.querySelector("#sidebar-emoji-message")?.textContent).toContain("Could not save");
     expect(document.querySelector("#sidebar-emoji")).not.toBeNull();

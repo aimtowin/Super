@@ -6,6 +6,20 @@ import type { Locator, Page } from '@playwright/test';
 
 const require = createRequire(path.resolve('package.json'));
 
+/** Complete first-run onboarding through its real UI before unrelated tests. */
+export async function dismissQuickStart(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const raw = localStorage.getItem('superApi.quick-start.v1');
+    if (raw && JSON.parse(raw).status === 'done') return true;
+    return Boolean(document.querySelector('#quick-start-guide')?.getClientRects().length);
+  });
+  const guide = page.locator('#quick-start-guide');
+  if (await guide.isVisible()) {
+    await page.getByRole('button', {name: '跳过引导', exact: true}).click();
+    await guide.waitFor({state: 'hidden'});
+  }
+}
+
 /**
  * Super-wgmy: 日志按会话拆分（super-<时间戳>.log）。返回 logs 目录下
  * 最新的会话日志路径（mtime 优先，同名则按名称降序）；目录为空时返回

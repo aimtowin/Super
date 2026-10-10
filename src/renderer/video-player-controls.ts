@@ -10,7 +10,7 @@
  * so all of it stays unit-testable outside a DOM environment.
  */
 
-export const VIDEO_PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
+export const VIDEO_PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4] as const;
 
 export type VideoPlaybackRate = (typeof VIDEO_PLAYBACK_RATES)[number];
 

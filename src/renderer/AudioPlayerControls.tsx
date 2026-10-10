@@ -1,3 +1,4 @@
+import { useWorkspaceMediaBookmark, useWorkspacePreviewSession } from "./workspace-preview-session";
 import {
   useCallback,
   useEffect,
@@ -45,6 +46,7 @@ export interface AudioPlayerControlsProps {
   volume: number;
   /** Wide viewer waveform strip (audio `video_poster`), optional until ready. */
   waveformUrl?: string;
+  coverUrl?: string;
 }
 
 const SCRUB_STEP_SECONDS = 5;
@@ -65,9 +67,13 @@ export function AudioPlayerControls({
   src,
   volume,
   waveformUrl,
+  coverUrl,
 }: AudioPlayerControlsProps) {
   const t = useT();
+  const [showWaveform, setShowWaveform] = useState(() => { try { return localStorage.getItem('super.audio.waveform.v1') !== 'false'; } catch { return true; } });
   const audioRef = useRef<HTMLAudioElement>(null);
+  const previewSession = useWorkspacePreviewSession();
+  useWorkspaceMediaBookmark(audioRef, src);
   const trackRef = useRef<HTMLDivElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
   const scrubbingPointerId = useRef<number | null>(null);
@@ -94,7 +100,7 @@ export function AudioPlayerControls({
   }, []);
   const [paused, setPaused] = useState(true);
   const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [currentTime, setCurrentTime] = useState(previewSession?.media?.time ?? 0);
   const [scrubRatio, setScrubRatio] = useState<number | null>(null);
   const [trailParticles, setTrailParticles] = useState<TrailParticle[]>([]);
   const [trailNowMs, setTrailNowMs] = useState(0);
@@ -141,7 +147,7 @@ export function AudioPlayerControls({
   useEffect(() => {
     const audio = audioRef.current;
     const audioActive = Boolean(audio && !audio.paused && !audio.ended);
-    if (!audioActive && trailParticlesRef.current.length === 0) return;
+    if (!showWaveform || (!audioActive && trailParticlesRef.current.length === 0)) return;
     let frameId = 0;
     const tick = (nowMs: number) => {
       const current = audioRef.current;
@@ -175,7 +181,7 @@ export function AudioPlayerControls({
     };
     frameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameId);
-  }, [paused]);
+  }, [paused, showWaveform]);
 
   const seekToRatio = useCallback((ratio: number, mode: "coalesce" | "commit") => {
     const audio = audioRef.current;
@@ -222,7 +228,9 @@ export function AudioPlayerControls({
   };
 
   return (
-    <div className="preview-audio-stage">
+    <div className={`preview-audio-stage${showWaveform ? "" : " without-waveform"}`}>
+      <label className="audio-waveform-preference"><input type="checkbox" checked={showWaveform} onChange={event => { const next = event.target.checked; setShowWaveform(next); try { localStorage.setItem("super.audio.waveform.v1", String(next)); } catch { /* Session preference remains active. */ } }} />{t("localUpgrade.audioWaveform")}</label>
+      {!showWaveform && coverUrl ? <img alt="" className="preview-audio-cover" src={coverUrl} /> : null}
       <div
         aria-label={t("preview.videoScrubAria")}
         aria-valuemax={Math.round(duration)}

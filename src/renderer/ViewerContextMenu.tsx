@@ -30,6 +30,8 @@ interface ViewerContextMenuProps {
   onFlipVertical: () => void;
   onFullscreen: () => void;
   onRotate: () => void;
+  onRotateBack?: () => void;
+  onWriteImage?: () => void;
   position: ViewerContextMenuPosition;
   transformable: boolean;
 }
@@ -52,6 +54,8 @@ export function ViewerContextMenu({
   onFlipVertical,
   onFullscreen,
   onRotate,
+  onRotateBack,
+  onWriteImage,
   position,
   transformable,
 }: ViewerContextMenuProps) {
@@ -152,6 +156,8 @@ export function ViewerContextMenu({
       role="menu"
       style={style}
     >
+      {onWriteImage ? <button className="context-menu-item" type="button" onClick={action(onWriteImage)}><span className="context-menu-item-label">{t("localUpgrade.writeImage")}</span></button> : null}
+      {transformable && onRotateBack ? <button className="context-menu-item" onClick={action(onRotateBack)} type="button"><span className="context-menu-item-label">{t("localUpgrade.rotateBack")}</span></button> : null}
       {transformable ? (
         <div className="context-menu-section" role="group">
           <button

@@ -10,6 +10,8 @@ import type { LibraryServiceError } from '../../src/worker/library-service';
 import { portablePathIdentity } from '../../src/worker/library-rules';
 import { importNoConflict as importFile } from './import-no-conflict';
 
+import { seedLegacyMissingAssets } from './legacy-missing-fixture';
+
 const roots: string[] = [];
 
 // LibraryService holds SQLite connections and recursive fs watchers; on
@@ -87,6 +89,7 @@ describe('managed folder rename', () => {
       relativePath: 'a/bee',
       directAssetCount: 1,
       childFolderCount: 0,
+      autoAiAnalysis: false,
     });
     expect(existsSync(path.join(assetsRoot, 'a', 'b'))).toBe(false);
     expect(readFileSync(path.join(assetsRoot, 'a', 'bee', 'pic.png'), 'utf8')).toBe('nested-content');
@@ -105,6 +108,7 @@ describe('managed folder rename', () => {
       relativePath: 'ex',
       directAssetCount: 1,
       childFolderCount: 1,
+      autoAiAnalysis: false,
     });
     expect(existsSync(path.join(assetsRoot, 'a'))).toBe(false);
     expect(readFileSync(path.join(assetsRoot, 'ex', 'bee', 'pic.png'), 'utf8')).toBe('nested-content');
@@ -134,8 +138,8 @@ describe('managed folder rename', () => {
     }
 
     expect(service.listManagedFolders(library.libraryId)).toEqual([
-      { folderId: top.folderId, parentFolderId: null, name: 'ex', relativePath: 'ex', directAssetCount: 1, childFolderCount: 1 },
-      { folderId: nested.folderId, parentFolderId: top.folderId, name: 'bee', relativePath: 'ex/bee', directAssetCount: 1, childFolderCount: 0 },
+      { folderId: top.folderId, parentFolderId: null, name: 'ex', relativePath: 'ex', directAssetCount: 1, childFolderCount: 1, autoAiAnalysis: false },
+      { folderId: nested.folderId, parentFolderId: top.folderId, name: 'bee', relativePath: 'ex/bee', directAssetCount: 1, childFolderCount: 0, autoAiAnalysis: false },
     ]);
     service.closeAll();
   });
@@ -203,6 +207,7 @@ describe('managed folder rename', () => {
       relativePath: 'Same',
       directAssetCount: 0,
       childFolderCount: 0,
+      autoAiAnalysis: false,
     });
     expect(existsSync(path.join(library.libraryPath, 'Assets', 'Same'))).toBe(true);
 
@@ -402,9 +407,9 @@ describe('managed folder rename', () => {
     writeFileSync(source, 'lost');
     const asset = importFile(service, library.libraryId, source, folder.folderId).assets[0]!;
 
-    // The file vanishes on disk; the asset reconciles to missing.
+    // Seed the historical missing-index state; today's scan purges confirmed absence.
     rmSync(path.join(library.libraryPath, 'Assets', 'Hold', 'lost.png'));
-    service.refreshManagedAssets(library.libraryId);
+    seedLegacyMissingAssets(service, library.libraryId, library.libraryPath);
     expect(service.listAssets({ libraryId: library.libraryId, recursive: true })
       .find((candidate) => candidate.assetId === asset.assetId)?.availability).toBe('missing');
 

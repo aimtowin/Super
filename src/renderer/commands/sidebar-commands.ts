@@ -223,7 +223,8 @@ export const sidebarCommandDefinitions: readonly SidebarCommandDefinition[] = [
   {
     id: 'folder.move-to-trash',
     title: (ctx) =>
-      translateForLocale(ctx.locale, 'command.folder.moveToTrash'),
+      translateForLocale(ctx.locale, ctx.locationKind === 'linked'
+        ? 'command.folder.unlinkSubtree' : 'command.folder.moveToTrash'),
     group: 'delete',
     shortcut: {
       mac: { label: '⌘⌫', key: 'Backspace', metaKey: true },
@@ -232,7 +233,7 @@ export const sidebarCommandDefinitions: readonly SidebarCommandDefinition[] = [
     visible: (ctx) =>
       ctx.menuKind === 'folder' &&
       (ctx.locationKind === 'managed' || ctx.locationKind === 'linked'),
-    disabledReason: offlineReason,
+    disabledReason: (ctx) => ctx.locationKind === 'linked' ? null : offlineReason(ctx),
     run: (ctx) => {
       if (ctx.locationKind === 'managed') {
         ctx.actions.trashManagedFolder(ctx.subjectId, ctx.subjectName);

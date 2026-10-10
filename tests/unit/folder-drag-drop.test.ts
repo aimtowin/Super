@@ -39,6 +39,22 @@ describe("resolveDraggedFolderIdsForTrash", () => {
 });
 
 describe("resolveFolderOntoFolderDrop", () => {
+  it("promotes direct children only for sidebar parent drops", () => {
+    for (const [source, target, expected] of [["a", "root-child", null], ["b", "a", "root-child"], ["c", "b", "a"]] as const) {
+      expect(resolveFolderOntoFolderDrop({ targetFolderId: target, draggedFolderIds: [source], folders, promoteOnParentDrop: true }))
+        .toEqual({ kind: "move", folderIds: [source], targetParentFolderId: expected });
+    }
+    expect(resolveFolderOntoFolderDrop({ targetFolderId: null, draggedFolderIds: ["root-child"], folders, promoteOnParentDrop: true }))
+      .toEqual({ kind: "reject", reason: "same-parent" });
+  });
+  it("never promotes a partial mixed-parent selection and rejects stale IDs", () => {
+    expect(resolveFolderOntoFolderDrop({ targetFolderId: "root-child", draggedFolderIds: ["a", "c"], folders, promoteOnParentDrop: true }))
+      .toEqual({ kind: "move", folderIds: ["a", "c"], targetParentFolderId: "root-child" });
+    expect(resolveFolderOntoFolderDrop({ targetFolderId: "gone", draggedFolderIds: ["a"], folders }))
+      .toEqual({ kind: "reject", reason: "unknown-folder" });
+    expect(resolveFolderOntoFolderDrop({ targetFolderId: null, draggedFolderIds: ["gone"], folders }))
+      .toEqual({ kind: "reject", reason: "unknown-folder" });
+  });
   it("rejects moving into the same parent", () => {
     expect(
       resolveFolderOntoFolderDrop({
@@ -83,6 +99,9 @@ describe("resolveFolderOntoFolderDrop", () => {
 });
 
 describe("isFolderDescendantOf", () => {
+  it("terminates on corrupt cycles", () => {
+    expect(isFolderDescendantOf([{ folderId: "x", parentFolderId: "y" }, { folderId: "y", parentFolderId: "x" }], "absent", "x")).toBe(false);
+  });
   it("detects ancestor relationships", () => {
     expect(isFolderDescendantOf(folders, "a", "c")).toBe(true);
     expect(isFolderDescendantOf(folders, "c", "a")).toBe(false);

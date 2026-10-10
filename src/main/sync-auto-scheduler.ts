@@ -83,7 +83,7 @@ export class SyncAutoScheduler {
   start(): void {
     if (this.#pollTimer !== undefined) return;
     this.#unsubscribeAssetsChanged = this.#options.workerClient.onAssetsChanged((event) => {
-      this.#scheduleLocalSync(event.libraryId);
+      if (event.source !== 'sync') this.#scheduleLocalSync(event.libraryId);
     });
     // 内部 tick 驱动每库独立间隔：轮询到期检查放在 tick 里，
     // 每库间隔取 binding.pollIntervalMs ?? 默认值。

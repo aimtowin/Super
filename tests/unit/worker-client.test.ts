@@ -41,6 +41,26 @@ describe('Worker origin and actual-terminal ownership', () => {
   function reply(child: FakeUtilityProcess, requestId: string) {
     child.emit('message', { requestId, result: { ok: true, type: 'library.closed', libraryId: 'library' } });
   }
+  it('retains budget through timeouts, keeps cancellation available, and frees it on real terminals', async () => {
+    const {client, child} = harness(); await ready(client, child);
+    const pending = Array.from({length: 256}, () => client.request({type: 'library.close', libraryId: 'library'}).catch(error => error));
+    // close uses the control lane; use ordinary read requests for the saturation check.
+    await Promise.all(pending.slice(16)); // excess control calls reject immediately
+    const active = child.postMessage.mock.calls.slice();
+    for (const call of active) reply(child, call[0].requestId);
+    await Promise.all(pending);
+    const reads = Array.from({length: 256}, () => client.request({type: 'folder.list', libraryId: 'library'}).catch(error => error));
+    await expect(client.request({type: 'folder.list', libraryId: 'library'})).rejects.toMatchObject({code: 'WORKER_REQUEST_BACKPRESSURE'});
+    await vi.advanceTimersByTimeAsync(15_000); await Promise.all(reads);
+    await expect(client.request({type: 'folder.list', libraryId: 'library'})).rejects.toMatchObject({code: 'WORKER_REQUEST_BACKPRESSURE'});
+    const cancel = client.request({type: 'library.close', libraryId: 'library'});
+    reply(child, child.postMessage.mock.calls.at(-1)![0].requestId); await cancel;
+    for (const call of child.postMessage.mock.calls.slice(16, 272)) reply(child, call[0].requestId);
+    const next = client.request({type: 'folder.list', libraryId: 'library'});
+    reply(child, child.postMessage.mock.calls.at(-1)![0].requestId); await next;
+    expect(child.kill).not.toHaveBeenCalled();
+  });
+
   it('forwards a notification-suppressed watcher domain event through the real worker message handler without killing the child', async () => {
     const { client, child, logger } = harness(); await ready(client, child);
     const assetChanged = vi.fn(); const libraryChanged = vi.fn();

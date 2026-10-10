@@ -8,6 +8,7 @@ import {
 import { LibraryServiceError } from './library-service';
 import { LibraryWriteCoordinatorError } from './library-write-coordinator';
 import { HistoryTransitionError } from './operation-history';
+import { SyncMetadataConflict } from './sync/sync-metadata';
 import { RemoteStorageError } from './sync/remote-storage';
 
 /** Super-033e: SQLite rejected a write because the file or connection is read-only. */
@@ -78,6 +79,7 @@ export function publicErrorForWorkerFailure(error: unknown): PublicError {
   if (error instanceof HistoryTransitionError) {
     return createPublicError(error.code);
   }
+  if (error instanceof SyncMetadataConflict) return createPublicError('SYNC_CONNECTION_FAILED', 'SYNC_CONFLICT');
   if (error instanceof RemoteStorageError) {
     // Super-fatf: URL 无法解析/协议不受支持 → SYNC_CONNECTION_FAILED
     // + SYNC_INVALID_URL reason（可读提示），而不是落到 INTERNAL_ERROR。

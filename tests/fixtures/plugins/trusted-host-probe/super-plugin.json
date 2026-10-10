@@ -7,7 +7,7 @@
   "author": "Super",
   "license": "MIT",
   "engines": {
-    "super": ">=0.1.0 <1.0.0",
+    "super": ">=0.1.0 <3.0.0",
     "pluginApi": 1
   },
   "runtime": {

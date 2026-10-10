@@ -25,6 +25,10 @@ import {
   shouldContinuePreviewPolling,
 } from "./preview-poll";
 import { waitForMediaArtifactRetry } from "./media-retry";
+import { useWorkspacePreviewSession } from "./workspace-preview-session";
+import { GifViewerSurface } from "./GifViewerSurface";
+import { FontViewerSurface } from "./FontViewerSurface";
+import { fontMimeForExtension } from "../shared/font-media";
 import { Icon } from "./Icons";
 import type { ViewerChromeActivitySource } from "./viewer-chrome-idle";
 import { resolveViewerPrimarySurface } from "./viewer-preview-policy";
@@ -39,7 +43,7 @@ import { PdfViewerSurface } from "./PdfViewerSurface";
 import { HtmlViewerSurface } from "./HtmlViewerSurface";
 import { useViewerVolume } from "./use-viewer-volume";
 import { ZoomableImage } from "./zoomable-preview-image";
-import { detectPbrTextureChannel } from "./pbr-texture-channel";
+import { resolveImagePreviewChannel } from "./pbr-texture-channel";
 import { useViewerChromeContrast } from "./use-viewer-chrome-contrast";
 import { VIEWER_CHROME_TAB_INDEX } from "./viewer-focus-policy";
 import { ImageSequencePlayer } from "./ImageSequencePlayer";
@@ -80,6 +84,7 @@ interface AssetPreviewModalProps {
 }
 
 export type AssetPreviewModalHandle = {
+  flushBeforeSwitch: () => Promise<boolean>;
   /** Flush text edits (and create a revision if the session changed) then close. */
   requestClose: () => Promise<void>;
 };
@@ -208,8 +213,10 @@ export const AssetPreviewModal = forwardRef<
   const [proxyFallbackState, setProxyFallbackState] = useState<
     "idle" | "generating" | "loading" | "failed"
   >("idle");
+  const previewSession = useWorkspacePreviewSession();
   const [displayTransform, setDisplayTransform] =
-    useState<ViewerDisplayTransform>(IDENTITY_VIEWER_DISPLAY_TRANSFORM);
+    useState<ViewerDisplayTransform>(previewSession?.transform ?? IDENTITY_VIEWER_DISPLAY_TRANSFORM);
+  useEffect(() => { if (previewSession) previewSession.transform = displayTransform; }, [displayTransform, previewSession]);
   const [viewerContextMenu, setViewerContextMenu] =
     useState<ViewerContextMenuPosition | null>(null);
   const [fitRequestToken, setFitRequestToken] = useState(0);
@@ -353,7 +360,7 @@ export const AssetPreviewModal = forwardRef<
     runGuard.invalidate();
     setSelectedExrPlane(0);
     setSelectedColorSpace(undefined);
-    setDisplayTransform(IDENTITY_VIEWER_DISPLAY_TRANSFORM);
+    setDisplayTransform(previewSession?.transform ?? IDENTITY_VIEWER_DISPLAY_TRANSFORM);
     playbackErrorRef.current = null;
     requestedProxyFallbackRef.current = null;
     setProxyNoticeAvailable(false);
@@ -363,7 +370,7 @@ export const AssetPreviewModal = forwardRef<
     return () => {
       runGuard.invalidate();
     };
-  }, [asset.assetId]);
+  }, [asset.assetId, previewSession]);
 
   const ensureProxyFallback = useCallback(
     async (errorCode: string) => {
@@ -753,7 +760,7 @@ export const AssetPreviewModal = forwardRef<
   const imageSrc = resolution?.url ?? placeholderUrl;
   const pbrChannel =
     asset.mediaType === "image"
-      ? detectPbrTextureChannel(asset.displayName)
+      ? resolveImagePreviewChannel(asset.displayName)
       : null;
   const showImage =
     asset.mediaType === "image" &&
@@ -803,7 +810,7 @@ export const AssetPreviewModal = forwardRef<
     onClose();
   }, [onClose]);
 
-  useImperativeHandle(ref, () => ({ requestClose }), [requestClose]);
+  useImperativeHandle(ref, () => ({ requestClose, flushBeforeSwitch: () => textViewerRef.current?.flushBeforeClose() ?? Promise.resolve(true) }), [requestClose]);
 
   useEffect(() => {
     if (!isTextViewer) return;
@@ -985,6 +992,7 @@ export const AssetPreviewModal = forwardRef<
               src={resolution.url}
               volume={viewerVolume}
               waveformUrl={resolution.posterUrl}
+              coverUrl={placeholderUrl ?? undefined}
             />
           ) : ready && resolution?.mediaType === "model" && resolution.url ? (
             // Slice C (Super-qvc6): the 3D viewport surface. Keyed so a
@@ -1001,7 +1009,7 @@ export const AssetPreviewModal = forwardRef<
               sourceUrl={resolution.url}
             />
           ) : ready && resolution?.mediaType === "document" && resolution.url ? (
-            resolution.sourceMimeType === "application/pdf" ? (
+            fontMimeForExtension(asset.displayName) ? <FontViewerSurface sourceUrl={resolution.url} /> : resolution.sourceMimeType === "application/pdf" ? (
               <PdfViewerSurface
                 api={api}
                 assetId={asset.assetId}
@@ -1037,9 +1045,12 @@ export const AssetPreviewModal = forwardRef<
               api={api}
               assetId={asset.assetId}
               libraryId={libraryId}
+              allowConvert={asset.locationKind === "managed"}
               onClose={onClose}
               onSaved={() => setDirectApproved(true)}
             />
+          ) : showImage && imageSrc && resolution?.playbackMode === "source" && /\.gif$/iu.test(asset.displayName) ? (
+            <GifViewerSurface key={`${asset.assetId}:${imageSrc}`} src={imageSrc} alt={asset.displayName} displayTransform={displayTransform} onFullscreen={() => void toggleFullscreen()} onSwipeNext={onNext} onSwipePrevious={onPrevious} fitRequestToken={fitRequestToken} />
           ) : showImage && imageSrc ? (
             <ZoomableImage
               alt={asset.displayName}
@@ -1223,6 +1234,15 @@ export const AssetPreviewModal = forwardRef<
             onFlipVertical={flipViewerVertical}
             onFullscreen={() => void toggleFullscreen()}
             onRotate={rotateViewer}
+            onWriteImage={asset.mediaType === 'image' && asset.locationKind === 'managed' && asset.currentRevisionId && (displayTransform.quarterTurns % 4 !== 0 || displayTransform.flipHorizontal || displayTransform.flipVertical) && /\.(png|jpe?g|jfif|webp|avif|tiff?)$/iu.test(asset.displayName) ? () => {
+              if (!window.confirm(t("localUpgrade.writeImageConfirm"))) return;
+              void api.transformImageAsset({ libraryId, assetId: asset.assetId, expectedRevisionId: asset.currentRevisionId!, quarterTurns: ((displayTransform.quarterTurns % 4) + 4) % 4, flipHorizontal: displayTransform.flipHorizontal, flipVertical: displayTransform.flipVertical }).then(result => {
+                if (!result.ok) { onInfoNotice?.(result.error.message); return; }
+                setDisplayTransform(IDENTITY_VIEWER_DISPLAY_TRANSFORM);
+                void resolvePreview(true);
+              }).catch(error => onInfoNotice?.(error instanceof Error ? error.message : String(error)));
+            } : undefined}
+            onRotateBack={() => setDisplayTransform(current => applyViewerDisplayTransformAction(current, "rotate-counterclockwise"))}
             position={viewerContextMenu}
             transformable={viewerTransformable}
           />

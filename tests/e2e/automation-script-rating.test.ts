@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -41,6 +42,7 @@ test('runs the default Desktop Console script and rates only its matching assets
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole('button', { name: '创建资源库' }).click();
     await window.getByRole('textbox', { name: '名称' }).fill(libraryName);
     await window.getByRole('button', { name: '创建', exact: true }).click();
@@ -70,7 +72,7 @@ test('runs the default Desktop Console script and rates only its matching assets
     expect(readFileSync(savedScript, 'utf8')).toContain('superApi.assets.setRating');
     await dialog.getByRole('textbox', { name: '脚本' }).fill('return { changed: true };');
     await dialog.getByRole('button', { name: '打开脚本' }).click();
-    await expect(dialog.getByRole('textbox', { name: '脚本' })).toHaveValue(/super\.assets\.setRating/);
+    await expect(dialog.getByRole('textbox', { name: '脚本' })).toHaveValue(/superApi\.assets\.setRating/);
     await expect(dialog).not.toContainText(temporaryRoot);
     await dialog.getByRole('button', { name: '运行', exact: true }).click();
     await expect(dialog.getByText('返回结果', { exact: true })).toBeVisible();

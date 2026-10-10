@@ -13,6 +13,7 @@ import {
   VIDEO_EXTENSIONS,
   DOCUMENT_EXTENSIONS,
 } from "../shared/media-formats";
+import { FONT_EXTENSIONS } from "../shared/font-media";
 import { AUDIO_EXTENSION_NAMES } from "../shared/audio-media";
 
 export interface FormatFilterGroup {
@@ -30,10 +31,11 @@ function dotless(extensions: readonly string[]): string[] {
 export const OTHER_FORMAT_EXTENSIONS = ["html", "hdf", "htm"] as const;
 const otherFormatExtensionSet = new Set<string>(OTHER_FORMAT_EXTENSIONS);
 const documentFilterExtensions = dotless(DOCUMENT_EXTENSIONS).filter(
-  (extension) => !otherFormatExtensionSet.has(extension),
+  (extension) => !otherFormatExtensionSet.has(extension) && !FONT_EXTENSIONS.some(font => font.slice(1) === extension),
 );
 
 export const FORMAT_FILTER_GROUPS: readonly FormatFilterGroup[] = [
+  { labelKey: "localUpgrade.fonts", extensions: dotless(FONT_EXTENSIONS) },
   {
     labelKey: "filter.formatGroupImage",
     extensions: dotless(IMAGE_EXTENSIONS),

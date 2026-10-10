@@ -1,5 +1,9 @@
 # Super Lib：确认仍未修复的问题清单（2026-10-09）
 
+> 后续实施状态见[软件本体补齐结果](../reference/completion-results-2026-10-10.md)。本页历史复现/上游固定版本事实保留，不因修复反向改写。
+
+> **后续状态更新**：下文保留修复前的审计快照，不再代表当前工作区的未修复数量。U01–U08 已完成源码修复与专项自动化，尚未发布；当前结果、剩余限制与阶段计划见[阶段 1 修复结果](../reference/followup-phase1-results-2026-10-09.md)。已发行的 2.3.17 仍按下文安全提醒处理。
+
 > **8 项；本轮只诊断、复现、记录，不修改产品行为。** 基线为 Super Lib 2.3.17，源码提交 `fcf074d6e771fb69394f30dcdb79d531848a51c7`。这些是本次测试实际失败的独立问题，不是把上游发行说明直接复制成待办。
 
 关联：[上游发行逐项对照与验证边界](../reference/serpent-followup-audit-2026-10-09.md) · [Super Lib 差异化能力](../reference/superlib-differentiators-2026-10-09.md) · [历史决策](../POST_DEVELOPMENT_DECISIONS.md)。

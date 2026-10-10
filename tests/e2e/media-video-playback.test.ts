@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -314,6 +315,7 @@ test("plays a direct MP4 and a generated WebM fallback through the asset viewer"
       },
     });
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();

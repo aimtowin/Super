@@ -1,0 +1,141 @@
+{
+  "date": "2026-10-10",
+  "baseline": "6dc9ab07eed3b6a0e58c3481397c9823d2bd7bc2",
+  "applicationVersion": "2.3.17",
+  "schemaVersion": 50,
+  "released": false,
+  "scope": {
+    "F01": "implemented-and-tested",
+    "F08": "partial:appearance-and-hierarchy",
+    "remaining": "F02-F14 not fully implemented",
+    "F15": "paused by user"
+  },
+  "reports": [
+    {
+      "name": "regression",
+      "passed": 256,
+      "failed": 0,
+      "skipped": 0,
+      "files": 14,
+      "success": true,
+      "startTime": "2026-10-10T01:43:02.036Z",
+      "reportPath": "tmp/local-upgrades-regression-serial-20261010.json",
+      "reportSha256": "ff59f9b26e4c110252fc0aebafdf1cf31c0e1a98b447b669d80eed265a5c8f3b",
+      "testFiles": [
+        "tests/worker/folder-organize.test.ts",
+        "tests/worker/followup-safety.test.ts",
+        "tests/worker/followup-sync-plan.test.ts",
+        "tests/worker/local-upgrades.test.ts",
+        "tests/worker/operation-history.integration.test.ts",
+        "tests/worker/thumbnails.test.ts",
+        "tests/worker/video-exr.test.ts",
+        "tests/unit/collection-drag-drop.test.ts",
+        "tests/unit/folder-drag-drop.test.ts",
+        "tests/unit/followup-presentation.test.ts",
+        "tests/unit/format-filter-presets.test.ts",
+        "tests/unit/media-formats.test.ts",
+        "tests/unit/sidebar-appearance.test.ts",
+        "tests/unit/sidebar-emoji-preferences.test.ts"
+      ]
+    },
+    {
+      "name": "audit",
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "files": 1,
+      "success": true,
+      "startTime": "2026-10-10T01:40:06.224Z",
+      "reportPath": "tmp/local-upgrades-audit-20261010.json",
+      "reportSha256": "fba4da74b0eeb2a1aca957aa1027909dc8b01f941a53618fade5f0b24ff4af51",
+      "testFiles": [
+        "tests/audit/serpent-followup.test.ts"
+      ]
+    }
+  ],
+  "e2e": {
+    "passed": 3,
+    "failed": 0,
+    "command": "npx playwright test tests/e2e/local-media-formats.test.ts tests/e2e/sidebar-hierarchy.test.ts tests/e2e/sidebar-emoji.test.ts --workers=1",
+    "lastRun": {
+      "status": "passed",
+      "failedTests": []
+    },
+    "durationSeconds": 15.8
+  },
+  "checks": {
+    "typecheck": true,
+    "changedTypeScriptEslint": true,
+    "diffWhitespace": true,
+    "docsAuditTestsPassed": 5,
+    "documentation": {
+      "markdownFiles": 148,
+      "localReferences": 617,
+      "referencedImages": 69,
+      "broken": 0
+    }
+  },
+  "limits": [
+    "No package, install, Git commit/push, Release or ECS action",
+    "No live WebDAV, NAS, AI provider, macOS or matched Serpent benchmark",
+    "Native JSON repeat assertions passed but teardown exited 1 with PostQueuedCompletionStatus(6); final serial repeat exited 0"
+  ],
+  "sourceSha256": {
+    "src/renderer/sidebar-appearance-catalog.ts": "59bbbf0dd920063f2133fcba1a955b434e710d254ddbbd8937d3726256723b51",
+    "src/renderer/sidebar-appearance-preferences.ts": "7393a291686d34005952a6dd357e141ba6b396ee52fab741b49b65e9598188ca",
+    "src/renderer/SidebarEmojiDialog.tsx": "84909b4f735dae45fa0a92cca82548dfc23419f411a12a11b8e8340ab093201c",
+    "src/renderer/use-sidebar-emoji.ts": "6c5c6886046e4c115fd6d6a67e0f6f38117d49b915ecd7da557d6049b14c8e74",
+    "src/renderer/NavigationSidebar.tsx": "4e3f57d3df79028e8009733a30e28e9a4380d2205d2ae265484360a1205829bc",
+    "src/renderer/sidebar-emoji.css": "785ec87e9dd0de95641b32cfd38f348952ee52e1e76ad594f0db46887a09a61b",
+    "src/renderer/collection-drag-drop.ts": "42afae4895c6aba020e42b6e7595484d63e8e30227dbcd15c3ec2759e77cf21b",
+    "src/renderer/folder-drag-drop.ts": "44206a43a45b90825790e5a444429e1800933ab022465946f0368fdfbae9e28a",
+    "src/renderer/use-folder-drag-drop-handlers.ts": "1291fe0d67e798d6b36cc2173585d3612d239e390e65e11ad134940f793262ae",
+    "src/renderer/App.tsx": "33f2ae4e5fda07958bdc3269cc4656003b4a5d3ad0047eadd455845b45a213db",
+    "src/renderer/i18n/catalogs/zh-CN.ts": "267c9d638ae8ffd9cee97c31ef44c31d6ce16cf9c347c667e989e5264874a449",
+    "src/renderer/i18n/catalogs/en.ts": "7fef68388359cf39c436874680a0447f8414c45c52ab3fad9e7fa470345b9b59",
+    "src/shared/library-api.ts": "454e7e7bc36d98a57a39ede768a63fda9f3523d72b6ee01bf0f64ba32d9e138b",
+    "src/shared/media-formats.ts": "6a4696d101679a8fb6aa3a20bf50c009c77550a870262711d0db93e9a4b3493b",
+    "src/preload/index.ts": "609d0c773c9132609022eadc501d50f4d6266caf50715b2cfaf3383b25e2fe0c",
+    "src/main/index.ts": "5f2f18859994dc69898066b2bebf6c1bde8b36ad53b6ecb57aca2976553e7511",
+    "src/worker/library-service.ts": "03e108a78345df37548d4c0ce757e8eb1cb9ee44a4cc852a20add1cb675c3d9c",
+    "tests/unit/sidebar-appearance.test.ts": "b3c6ca05701906aaf599659e1894836bd898eef20b3d562706f8772e9d434064",
+    "tests/unit/sidebar-emoji-preferences.test.ts": "9a946a841cc9fd4e7b19cc6d46e6a4ebcaa8836d86b8689bc484a0453f46a3c5",
+    "tests/unit/collection-drag-drop.test.ts": "68bc695fc61f22c555569ec1be884cf09f61eb78354d38d1fe2db6fe0135388e",
+    "tests/unit/folder-drag-drop.test.ts": "b5e04fb65a103e92f05fc13f5383170af49e97a4df941db56053a16b8f6105aa",
+    "tests/unit/media-formats.test.ts": "d12c2ade8ec88c5b51a25185364d359ba0fc2442a2c9370e4cae40fb830dbf9c",
+    "tests/worker/local-upgrades.test.ts": "1b94c548d3d220d2fc76ad057ed3896eaf3eba9bd263f06ddf47fa72a8b673fe",
+    "tests/worker/video-exr.test.ts": "9b3e52de4649e5a8969e82e637feeedc4a5a12dd01651927cd5edce15734976a",
+    "tests/e2e/sidebar-emoji.test.ts": "1ebc188681ea170f1812555ae5b930696e9f8575662d751314a29a413bfcec1d",
+    "tests/e2e/sidebar-hierarchy.test.ts": "eaa32185fb43a54dcc4013c95ab7fb1c153117b1b5593a69520befa17234ed2b",
+    "tests/e2e/local-media-formats.test.ts": "692a277f5b75fc0864653b6a8c1a5915247851795f6fa57ad8026eb6e2480dc3"
+  },
+  "builtGraphSha256": {
+    ".vite/build/main.js": "ee98557ca86a56dbda713a8d3d1d3042aed1974d681e1a3d43f34d0c16bb772b",
+    ".vite/build/index.js": "2a4a45c28517b9ac9bf1984b1e096fb03769ff4ab276e84be9f0cc01a573b84f",
+    ".vite/build/library_worker.js": "107b74d306c562648adadd5f2bf29d84cbadefb067373893de9da86526f78d38",
+    ".vite/renderer/main_window/assets/main_window-CtXhbAFM.js": "d232111947ca2ea5da25e97c56ece7b72006684aa096445a8c9baa0248c3728f"
+  },
+  "screenshots": [
+    {
+      "file": "docs/assets/ui/local-upgrades-20261010/emoji-dark.png",
+      "bytes": 131800,
+      "sha256": "ef24e13a7ef0440a07950afe0ea73fc4ef3a12f1a2d67f21bcc33ccdfa53fbcb"
+    },
+    {
+      "file": "docs/assets/ui/local-upgrades-20261010/emoji-light.png",
+      "bytes": 149014,
+      "sha256": "73bdbe7a8e67728e77ca8dd8549e66b2cb857110f9b62286b86d2b13a8b48cf9"
+    },
+    {
+      "file": "docs/assets/ui/local-upgrades-20261010/sidebar-promoted.png",
+      "bytes": 79568,
+      "sha256": "cdcfc38db2d124546d554e844ccb1dc104cc81852f8556ff4af773828fb6bcae"
+    }
+  ],
+  "commands": {
+    "regression": "node scripts/run-vitest-with-electron.mjs tests/worker/folder-organize.test.ts tests/worker/followup-safety.test.ts tests/worker/followup-sync-plan.test.ts tests/worker/local-upgrades.test.ts tests/worker/operation-history.integration.test.ts tests/worker/thumbnails.test.ts tests/worker/video-exr.test.ts tests/unit/collection-drag-drop.test.ts tests/unit/folder-drag-drop.test.ts tests/unit/followup-presentation.test.ts tests/unit/format-filter-presets.test.ts tests/unit/media-formats.test.ts tests/unit/sidebar-appearance.test.ts tests/unit/sidebar-emoji-preferences.test.ts --maxWorkers=1 --reporter=json --outputFile=tmp/local-upgrades-regression-serial-20261010.json",
+    "audit": "node scripts/run-vitest-with-electron.mjs --config vitest.serpent-audit.config.ts tests/audit/serpent-followup.test.ts --reporter=json --outputFile=tmp/local-upgrades-audit-20261010.json",
+    "typecheck": "npm run typecheck",
+    "documentationTests": "node --test scripts/docs/audit-docs.test.mjs"
+  }
+}

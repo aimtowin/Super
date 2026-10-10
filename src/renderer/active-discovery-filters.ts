@@ -25,6 +25,7 @@ export type DiscoveryFilterSnapshot = {
   sourceUrlFilter: "any" | "yes" | "no";
   availabilityFilter: "any" | "available" | "missing";
   excludeAvailabilityFilter: boolean;
+  generationStatusFilter?: "any" | "marked" | "unmarked";
   analysisStatusFilter?: "any" | "analyzed" | "unanalyzed";
   widthRange: { min: string; max: string; exclude: boolean };
   heightRange: { min: string; max: string; exclude: boolean };
@@ -148,6 +149,8 @@ export function buildActiveFilterChips(
     });
   }
 
+  if (snapshot.generationStatusFilter && snapshot.generationStatusFilter !== "any") chips.push({id: "generation_status", labelKey: snapshot.generationStatusFilter === "marked" ? "localUpgrade.generationMarked" : "localUpgrade.generationUnmarked"});
+
   const aspectRanges =
     snapshot.aspectRatioRanges && snapshot.aspectRatioRanges.length > 0
       ? snapshot.aspectRatioRanges
@@ -217,6 +220,7 @@ export type ClearableFilterId =
   | "source_url"
   | "availability"
   | "analysis_status"
+  | "generation_status"
   | "aspect_ratio"
   | "long_edge"
   | "width"

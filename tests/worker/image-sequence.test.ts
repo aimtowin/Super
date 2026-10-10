@@ -348,7 +348,7 @@ describe("image sequence persistence", () => {
     )).toEqual([[1, 2, 3], [5, 6, 7]]);
   });
 
-  it("groups linked frames that arrive across separate refreshes", () => {
+  it("keeps linked frames independent when they arrive across background refreshes", () => {
     const { library, root, service } = fixture();
     const linkedRoot = path.join(root, "linked-sequence");
     mkdirSync(linkedRoot, { recursive: true });
@@ -366,9 +366,8 @@ describe("image sequence persistence", () => {
       libraryId: library.libraryId,
       recursive: true,
     });
-    expect(assets).toHaveLength(1);
-    expect(assets[0]!.sequence?.frames.map((frame) => frame.frameNumber))
-      .toEqual([0, 1, 2]);
+    expect(assets).toHaveLength(3);
+    expect(assets.every((asset) => asset.sequence === null)).toBe(true);
   });
 
   it("keeps large image-sequence summaries below SQLite binding limits", () => {

@@ -995,6 +995,25 @@ const library: SuperLibraryApi = Object.freeze({
     return { ok: true as const, value: result.paths };
   },
 
+  async getEmbeddedGeneration(input: {libraryId: string; assetId: string}) {
+    const result = await request({type: 'asset.embedded-generation.request', ...input});
+    if (!result.ok) return failure(result);
+    if (result.type !== 'asset.embedded-generation') throw new Error('Unexpected generation info response');
+    return {ok: true as const, value: result.value};
+  },
+  async inspectFolder(input: { libraryId: string; folderId: string }) {
+    const result = await request({type: 'folder.inspect.request', ...input});
+    if (!result.ok) return failure(result);
+    if (result.type !== 'folder.inspected') throw new Error('Unexpected folder inspection response');
+    return {ok: true as const, value: result.value};
+  },
+  async previewIgnoreRules(input: { libraryId: string; content: string }) {
+    const result = await request({type: 'ignore.preview.request', ...input});
+    if (!result.ok) return failure(result);
+    if (result.type !== 'ignore.preview') throw new Error('Unexpected ignore preview response');
+    return {ok: true as const, value: result.value};
+  },
+
   async getGitignore({ libraryId }: { libraryId: string }) {
     const result = await request({ type: 'ignore.gitignore.get.request', libraryId });
     if (!result.ok) return failure(result);
@@ -1114,8 +1133,8 @@ const library: SuperLibraryApi = Object.freeze({
     return { ok: true, value: { ...result.collection, ...(result.historyEntryId ? { historyEntryId: result.historyEntryId } : {}) } };
   },
 
-  async updateCollection({ libraryId, collectionId, name, description, coverAssetId, position }: { libraryId: string; collectionId: string; name?: string; description?: string | null; coverAssetId?: string | null; position?: number }): Promise<LibraryApiResult<CollectionSummary & { historyEntryId?: string }>> {
-    const result = await request({ type: 'collection.update.request', libraryId, collectionId, name, description, coverAssetId, position });
+  async updateCollection({ libraryId, collectionId, name, parentId, description, coverAssetId, position }: { libraryId: string; collectionId: string; name?: string; parentId?: string | null; description?: string | null; coverAssetId?: string | null; position?: number }): Promise<LibraryApiResult<CollectionSummary & { historyEntryId?: string }>> {
+    const result = await request({ type: 'collection.update.request', libraryId, collectionId, name, parentId, description, coverAssetId, position });
     if (!result.ok) return failure(result);
     if (result.type !== 'collection.updated') throw new Error('Unexpected update-collection response.');
     return { ok: true, value: { ...result.collection, ...(result.historyEntryId ? { historyEntryId: result.historyEntryId } : {}) } };
@@ -1397,6 +1416,12 @@ const library: SuperLibraryApi = Object.freeze({
     };
   },
 
+  async transformImageAsset(input: { libraryId: string; assetId: string; expectedRevisionId: string; quarterTurns: number; flipHorizontal: boolean; flipVertical: boolean }) {
+    const result = await request({ type: 'asset.image.transform.request', ...input });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'asset.content.replaced') throw new Error('Unexpected image transform response.');
+    return { ok: true as const, value: { assetId: result.assetId, revisionId: result.revisionId, byteSize: result.byteSize } };
+  },
   async readTextAsset({ libraryId, assetId, maxBytes }: { libraryId: string; assetId: string; maxBytes?: number }) {
     const result = await request({ type: 'asset.text.read.request', libraryId, assetId, maxBytes });
     if (!result.ok) return failure(result);
@@ -1404,6 +1429,7 @@ const library: SuperLibraryApi = Object.freeze({
     return {
       ok: true as const,
       value: {
+        encoding: result.encoding,
         assetId: result.assetId,
         revisionId: result.revisionId,
         content: result.content,
@@ -1416,8 +1442,8 @@ const library: SuperLibraryApi = Object.freeze({
     };
   },
 
-  async saveTextAsset({ libraryId, assetId, content, expectedRevisionId, createRevision }: { libraryId: string; assetId: string; content: string; expectedRevisionId?: string; createRevision?: boolean }) {
-    const result = await request({ type: 'asset.text.save.request', libraryId, assetId, content, expectedRevisionId, createRevision });
+  async saveTextAsset({ libraryId, assetId, content, expectedRevisionId, createRevision, convertToUtf8 }: { libraryId: string; assetId: string; content: string; expectedRevisionId?: string; createRevision?: boolean; convertToUtf8?: boolean }) {
+    const result = await request({ type: 'asset.text.save.request', libraryId, assetId, content, expectedRevisionId, createRevision, convertToUtf8 });
     if (!result.ok) return failure(result);
     if (result.type !== 'asset.text.saved') throw new Error('Unexpected text-save response.');
     return {
@@ -1920,6 +1946,12 @@ const library: SuperLibraryApi = Object.freeze({
     if (!result.ok) return failure(result);
     if (result.type !== 'sync.previewed') throw new Error('Unexpected sync preview response.');
     return { ok: true, value: result.report };
+  },
+  async cancelSync(input: {libraryId:string}): Promise<LibraryApiResult<void>> {
+    const result = await request({type:'sync.cancel.request',...input});
+    if (!result.ok) return failure(result);
+    if (result.type !== 'sync.cancelled') throw Error('Unexpected sync cancellation response');
+    return {ok:true,value:undefined};
   },
   async syncRun({ libraryId, serverId, directoryName }: { libraryId: string; serverId: string; directoryName?: string }): Promise<LibraryApiResult<{ report: SyncReport; conflicts: Array<{ syncId: string; conflictCopyPath: string }> }>> {
     const result = await request({ type: 'sync.run.request', libraryId, serverId, directoryName });

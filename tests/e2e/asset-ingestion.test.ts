@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import {
   chmodSync,
   existsSync,
@@ -68,6 +69,7 @@ test('imports files and a directory hierarchy, then reconciles external changes'
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole('button', { name: '创建资源库' }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole('button', { name: '创建', exact: true }).click();
@@ -204,6 +206,7 @@ test('shows a specific safe import reason and persists the complete Worker error
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole('button', { name: '创建资源库' }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole('button', { name: '创建', exact: true }).click();
@@ -250,6 +253,7 @@ test('maps a real filesystem permission failure and logs its complete cause chai
     const logPath = resolveSessionLogPath(logsPath);
     const logOffset = existsSync(logPath) ? readFileSync(logPath).length : 0;
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole('button', { name: '创建资源库' }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole('button', { name: '创建', exact: true }).click();

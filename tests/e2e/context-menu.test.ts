@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { _electron as electron, expect, test, type Page } from "@playwright/test";
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -52,6 +53,7 @@ test("context menu closes on outside click, Escape, scroll, and window resize", 
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
 
     // Create library
     await window.getByRole("button", { name: "创建资源库" }).click();
@@ -129,6 +131,7 @@ test("context menu clamps at viewport edges", async () => {
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
 
     // Create library
     await window.getByRole("button", { name: "创建资源库" }).click();
@@ -217,6 +220,7 @@ test("single-menu enforcement — opening new context menu closes existing one",
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
 
     // Create library
     await window.getByRole("button", { name: "创建资源库" }).click();
@@ -285,6 +289,7 @@ test("context menu has accessible name and keyboard Escape", async () => {
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
 
     // Create library
     await window.getByRole("button", { name: "创建资源库" }).click();
@@ -329,6 +334,7 @@ test("window blur closes the context menu", async () => {
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
 
     // Create library
     await window.getByRole("button", { name: "创建资源库" }).click();
@@ -369,6 +375,7 @@ test("context menu clamps within viewport at all four corners", async () => {
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
 
     // Create library
     await window.getByRole("button", { name: "创建资源库" }).click();
@@ -464,6 +471,7 @@ test("scope change closes the context menu", async () => {
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
 
     // Create library
     await window.getByRole("button", { name: "创建资源库" }).click();
@@ -498,6 +506,7 @@ test("pointer hover stays subtle in the context menu", async () => {
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill("CM Highlight Test");
     await window.getByRole("button", { name: "创建", exact: true }).click();
@@ -603,6 +612,7 @@ test("multi-asset menu shows a visible count and mixed-selection skip reasons", 
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill("CM Mixed Test");
     await window.getByRole("button", { name: "创建", exact: true }).click();
@@ -618,6 +628,7 @@ test("multi-asset menu shows a visible count and mixed-selection skip reasons", 
     await window.getByRole("button", { name: "主菜单" }).click();
     await window.getByRole("menuitem", { name: "文件", exact: true }).hover();
     await window.getByRole("menuitem", { name: "导入链接文件夹" }).click();
+    await window.getByRole('button', {name:'关闭后台任务',exact:true}).click();
     await window.getByRole("button", { name: "所有资产" }).click();
 
     const managedCard = window.locator(
@@ -671,6 +682,7 @@ test("tag picker searches, survives in-menu scroll, has no back button, and clos
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
 
     // Create library and import one asset
     await window.getByRole("button", { name: "创建资源库" }).click();

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { RendererLibrarySummary, SyncProgressEvent } from "../shared/protocol/responses";
-import type { SyncCapabilities, SyncReport } from "../shared/library-api";
+import type { IgnorePreview } from "../shared/local-upgrade-results";
+import type { SuperLibraryApi, SyncCapabilities, SyncReport } from "../shared/library-api";
 import { Icon } from "./Icons";
 import { iconActionAttrs } from "./icon-action-attrs";
 import { useT } from "./i18n";
@@ -38,12 +39,14 @@ function SyncStatusDot({
 }
 
 function SyncSettingsSection({
+  api,
   library,
   callbacks,
   syncProgress,
 }: {
   library: RendererLibrarySummary;
   callbacks: SyncSettingsCallbacks;
+  api?: SuperLibraryApi | null;
   /** 当前同步传输进度（自动或手动），用于进度条与速度显示。 */
   syncProgress: SyncProgressEvent | null;
 }): ReactNode {
@@ -279,6 +282,7 @@ function SyncSettingsSection({
           <button className="primary-button" disabled={busy !== null || !serverId || connectionState !== "connected"} onClick={() => void runSync()} type="button">
             {busy === "run" ? t("common.saving") : t("settings.sync.run")}
           </button>
+          {busy === "run" && api && <button className="primary-button" type="button" onClick={() => void api.cancelSync({libraryId:library.libraryId}).then(result => {if (!result.ok) setError(result.error.message);})}>{t("common.cancel")}</button>}
         </div>
         {preview ? (
           <p className="library-settings-gitignore-help">
@@ -288,6 +292,8 @@ function SyncSettingsSection({
               conflicts: preview.conflicts,
               remoteDeletes: preview.remoteDeletes,
               localRecycles: preview.localRecycles,
+              remoteMoves: preview.remoteMoves ?? 0,
+              localMoves: preview.localMoves ?? 0,
             })}
           </p>
         ) : null}
@@ -329,6 +335,7 @@ function SyncSettingsSection({
 }
 
 export function LibrarySettingsDialog({
+  api,
   library,
   gitignoreContent,
   open,
@@ -339,6 +346,7 @@ export function LibrarySettingsDialog({
   syncCallbacks,
   syncProgress,
 }: {
+  api?: SuperLibraryApi | null;
   library: RendererLibrarySummary | null;
   gitignoreContent: string;
   open: boolean;
@@ -356,6 +364,10 @@ export function LibrarySettingsDialog({
   const [savingName, setSavingName] = useState(false);
   const [savingIgnore, setSavingIgnore] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [ignorePreview, setIgnorePreview] = useState<IgnorePreview | null>(null);
+  const [previewError, setPreviewError] = useState("");
+  const [previewing, setPreviewing] = useState(false);
+  const previewGeneration = useRef(0);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -492,21 +504,36 @@ export function LibrarySettingsDialog({
                   <textarea
                     aria-label={t("settings.gitignoreFile")}
                     className="library-settings-gitignore-editor"
-                    onChange={(event) => setGitignoreDraft(event.target.value)}
-                    onBlur={() => void saveGitignore()}
+                    onChange={(event) => { setGitignoreDraft(event.target.value); setIgnorePreview(null); setPreviewError(""); previewGeneration.current++; }}
                     spellCheck={false}
                     value={gitignoreDraft}
                   />
                   <div className="library-settings-gitignore-actions">
-                    <span>{t("settings.gitignoreSaveHint")}</span>
+                    <span>{t("localUpgrade.ignorePreviewHint")}</span>
+                    <button type="button" disabled={!api || previewing || savingIgnore} onClick={async () => {
+                      if (!api) return;
+                      const generation = ++previewGeneration.current;
+                      setPreviewing(true); setPreviewError("");
+                      try {
+                        const result = await api.previewIgnoreRules({libraryId: library.libraryId, content: gitignoreDraft});
+                        if (generation !== previewGeneration.current) return;
+                        if (result.ok) setIgnorePreview(result.value); else setPreviewError(result.error.message);
+                      } catch (error) { if (generation === previewGeneration.current) setPreviewError(String(error)); }
+                      finally { setPreviewing(false); }
+                    }}>{previewing ? t("common.loading") : t("localUpgrade.ignorePreview")}</button>
                     <button className="primary-button" disabled={savingIgnore} onClick={() => void saveGitignore()} type="button">
                       {savingIgnore ? t("common.saving") : t("common.save")}
                     </button>
                   </div>
+                  {previewError && <p role="alert">{previewError}</p>}
+                  {ignorePreview && <div className="ignore-preview-result" role="status">
+                    <p>{t("localUpgrade.ignoreMatches", {assets: ignorePreview.matchedAssets, folders: ignorePreview.matchedFolders})}</p>
+                    <ul>{ignorePreview.paths.map(item => <li key={item.kind + item.relativePath}>{item.relativePath}</li>)}</ul>
+                  </div>}
                 </section>
               </>
             ) : (
-              <SyncSettingsSection library={library} callbacks={syncCallbacks} syncProgress={syncProgress} />
+              <SyncSettingsSection api={api} library={library} callbacks={syncCallbacks} syncProgress={syncProgress} />
             )}
           </main>
         </div>

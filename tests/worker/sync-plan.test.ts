@@ -125,6 +125,7 @@ describe('planSyncActions (Super-xffq)', () => {
       localManifest,
       remoteManifest,
       remoteTombstones: new Set(),
+      localDeleted: new Set(['a1']),
     });
     expect(actions).toEqual([
       expect.objectContaining({ type: 'delete-remote', assetId: 'a1' }),

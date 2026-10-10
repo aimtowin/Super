@@ -42,6 +42,8 @@ import {
 import type { ImportCompletion } from '../../src/shared/protocol/responses';
 import { importNoConflict as sharedImportNoConflict } from './import-no-conflict';
 
+import { seedLegacyMissingAssets } from './legacy-missing-fixture';
+
 const temporaryRoots: string[] = [];
 const services: LibraryService[] = [];
 
@@ -107,7 +109,7 @@ function missingManagedAssetFixture(label: string): {
   const assetId = imported.assets[0]!.assetId;
   const managedPath = path.join(created.libraryPath, 'Assets', 'orig.jpg');
   rmSync(managedPath);
-  service.refreshManagedAssets(created.libraryId);
+  seedLegacyMissingAssets(service, created.libraryId, created.libraryPath);
   service.closeAll();
   const replacementPath = path.join(root, 'replacement.jpg');
   writeFileSync(replacementPath, 'replacement bytes');
@@ -144,7 +146,7 @@ describe('relinkAsset recovery on reopen', () => {
 
     // Make it missing
     rmSync(path.join(created.libraryPath, 'Assets', 'orig.jpg'));
-    setup.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(setup, created.libraryId, created.libraryPath);
     expect(setup.listAssets({ libraryId: created.libraryId, recursive: true })[0]!.availability)
       .toBe('missing');
     setup.closeAll();
@@ -408,7 +410,7 @@ describe('relinkBatchApply recovery on reopen', () => {
     rmSync(path.join(created.libraryPath, 'Assets', 'alpha-one.jpg'));
     rmSync(path.join(created.libraryPath, 'Assets', 'sub'), { recursive: true });
     rmSync(path.join(created.libraryPath, 'Assets', 'deep'), { recursive: true });
-    setup.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(setup, created.libraryId, created.libraryPath);
     const allAssets = setup.listAssets({ libraryId: created.libraryId, recursive: true });
     expect(allAssets.every((a) => a.availability === 'missing')).toBe(true);
     setup.closeAll();
@@ -537,7 +539,7 @@ describe('relinkBatchApply recovery on reopen', () => {
 
     // Make it missing
     rmSync(path.join(created.libraryPath, 'Assets', 'orig.jpg'));
-    setup.refreshManagedAssets(created.libraryId);
+    seedLegacyMissingAssets(setup, created.libraryId, created.libraryPath);
     expect(setup.listAssets({ libraryId: created.libraryId, recursive: true })[0]!.availability)
       .toBe('missing');
     setup.closeAll();

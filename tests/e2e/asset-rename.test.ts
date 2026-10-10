@@ -1,3 +1,4 @@
+import { dismissQuickStart } from './electron-test-helpers';
 import { _electron as electron, expect, test, type Page } from "@playwright/test";
 
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -81,6 +82,7 @@ test("renames an asset file from the context menu and renames the real file on d
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await createLibraryAndImport(window, libraryName);
 
     const { card, input } = await openInlineRename(window, "hero.png");
@@ -128,6 +130,7 @@ test("keeps the inline rename open with a conflict error and allows retry after 
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await createLibraryAndImport(window, libraryName);
     // Importing auto-selects every imported asset (reveal); reset to a single
     // target so the right-click below opens the single-asset menu with 重命名….
@@ -177,6 +180,7 @@ test("shows an inline invalid-name error for illegal characters and closes on Es
 
   try {
     const window = await application.firstWindow();
+    await dismissQuickStart(window);
     await createLibraryAndImport(window, libraryName);
 
     const { card, input } = await openInlineRename(window, "hero.png");
