@@ -65,4 +65,10 @@
 
 ## 发布范围
 
-计划新版本 2.3.18：GitHub `aimtowin/Super` Release 与用户确认的旧 ECS 自动更新源。旧 ECS 已只读核验身份/更新目录/约 4.8 GiB 可用空间；本页建立时尚未发布。最终附件、哈希、门禁、推送及公网验证以独立版本记录为准。
+**2.3.18 已正式发布**：[GitHub Release](https://github.com/aimtowin/Super/releases/tag/v2.3.18)
+及用户确认的[旧 ECS 更新源](https://liuyangyang.me/downloads/super/latest.json)。
+46 个 GitHub 附件的名称、大小和服务端 SHA-256 全部匹配；20 个增量覆盖
+2.2.7、2.2.8、2.3.0–2.3.17，最近版本增量约 3.4 MiB。ECS staging 全部校验后
+提升，公网完整包和最近版本增量实际下载哈希通过。源码、文档、基线已推送，
+未强推或覆盖旧标签；原子提升前保留旧清单，按五版策略清理两份旧更新目录，
+未动其它业务。最终附件、哈希、门禁与回滚范围见[独立版本记录](../releases/v2.3.18-validation.md)。
