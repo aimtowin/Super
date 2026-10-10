@@ -12,6 +12,7 @@ import {
 import { createPortal, flushSync } from "react-dom";
 
 import { Icon, type IconName } from "./Icons";
+import { resolvePreviewKeyboardAsset } from "./preview-keyboard";
 import { iconActionAttrs } from "./icon-action-attrs";
 import { Progress } from "./ui/primitives";
 import { EditTextContextMenuHost } from "./edit-text-context-menu";
@@ -8656,7 +8657,10 @@ function AppInner() {
     pasteOsClipboardFiles,
   ]);
 
-  useEffect(() => {
+  // Keyboard ownership must change in the same commit as the visible viewer.
+  // A passive listener can still see the just-closed preview when a new card
+  // receives Space, swallowing its open action before passive effects run.
+  useLayoutEffect(() => {
     if (
       dialog ||
       conflicts ||
@@ -8719,14 +8723,12 @@ function AppInner() {
       )
         return;
       if ((event.key !== "Enter" && event.key !== " ") || event.repeat) return;
-      if (
-        !selectedAsset ||
-        selectedAsset.availability !== "available" ||
-        selectedAsset.deletedAt
-      )
-        return;
+      const focusedAssetId = target instanceof HTMLElement
+        ? target.closest<HTMLElement>(".asset-card[data-asset-id]")?.dataset.assetId : undefined;
+      const keyboardAsset = resolvePreviewKeyboardAsset(focusedAssetId, selectedAsset, visibleAssets);
+      if (!keyboardAsset) return;
       event.preventDefault();
-      openAssetPreview(selectedAsset);
+      openAssetPreview(keyboardAsset);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);

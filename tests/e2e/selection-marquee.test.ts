@@ -294,10 +294,17 @@ test("marquee keeps its viewport range aligned after the canvas is scrolled", as
       await gridButton.click();
     }
 
-    const geometry = await window.evaluate(() => {
+    // Scroll publishes a new virtual range asynchronously. Measure only after
+    // its layout commit, not the transient old cards at the new scroll offset.
+    await window.evaluate(async () => {
       const canvas = document.querySelector<HTMLElement>(".workspace-canvas");
       if (!canvas) throw new Error("workspace-canvas is not visible");
       canvas.scrollTop = Math.min(360, canvas.scrollHeight - canvas.clientHeight);
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    });
+    const geometry = await window.evaluate(() => {
+      const canvas = document.querySelector<HTMLElement>(".workspace-canvas");
+      if (!canvas) throw new Error("workspace-canvas is not visible");
       const canvasRect = canvas.getBoundingClientRect();
       const cards = Array.from(
         canvas.querySelectorAll<HTMLElement>(".asset-card[data-asset-id]"),
@@ -366,12 +373,11 @@ test("marquee keeps its viewport range aligned after the canvas is scrolled", as
     expect(marqueeBox!.height).toBeCloseTo(geometry.end.y - geometry.start.y, 0);
 
     await window.mouse.up();
-    const selectedIds = await window.evaluate(() =>
+    await expect.poll(() => window.evaluate(() =>
       Array.from(document.querySelectorAll<HTMLElement>(".asset-card.is-selected"))
         .map((card) => card.dataset.assetId ?? "")
-        .filter(Boolean),
-    );
-    expect(selectedIds.sort()).toEqual([...geometry.expected].sort());
+        .filter(Boolean).sort(),
+    )).toEqual([...geometry.expected].sort());
   } finally {
     await application.close();
     rmSync(temporaryRoot, { force: true, recursive: true });
