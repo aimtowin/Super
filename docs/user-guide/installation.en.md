@@ -1,8 +1,8 @@
 # Installation
 
-> Reviewed for Super Lib v2.3.17 (2026-10-09); package availability follows release attachments.
+> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
 
-Super Lib is free. Download it from the [latest Super Release](https://github.com/aimtowin/Super/releases/latest). A private GitHub repository requires an authorized signed-in account to download release assets. New users can follow the [quick start](quick-start.en.md).
+Super Lib is free. Download it from the [latest Super Release](https://github.com/aimtowin/Super/releases/latest). The repository and the 2.3.18 release are public; installer downloads are publicly available. Source remains MIT licensed; external AI providers may charge separately. New users can follow the [quick start](quick-start.en.md).
 
 ## Requirements
 
@@ -13,7 +13,7 @@ Use [Super Releases](https://github.com/aimtowin/Super/releases) for the current
 
 ## Other platforms
 
-The current `v2.3.17` release provides a Windows x64 installer. Check the actual release attachments for availability on other platforms.
+The current `v2.3.18` release provides a Windows x64 installer. Check the actual release attachments for availability on other platforms.
 
 ## Windows
 
@@ -27,3 +27,7 @@ Unsigned development builds may trigger SmartScreen. Verify the source, then cho
 Download through the in-app update prompt or run a newer `SuperSetup.exe` over the existing installation. In-app updates prefer an available delta matching your installed version and otherwise use the full package. Once downloaded and prepared, confirm installation. The separate updater shows completion briefly, automatically launches Super Lib and closes. If launch fails, it retains an error and a manual retry option.
 
 Libraries and user configuration live outside the installation directory; back up your library before upgrading. Full update ZIPs, delta ZIPs, and SHA-256 files are update and verification attachments; a first installation does not require downloading each one.
+
+## Library versions and downgrade
+
+2.3.18 includes database schema migrations 50/51. Fully quit and back up the whole library before its first upgrade. An older app may not read the upgraded library. Downgrade using a separate pre-upgrade copy, then check assets and metadata; do not point the old app at your only upgraded library.

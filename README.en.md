@@ -87,6 +87,8 @@ See [local completion and verification](docs/reference/completion-results-2026-1
 
 | Document | Content |
 | --- | --- |
+| [Current comparison](docs/reference/comparison-2.3.18-serpent-0.2.10.md) · [Performance evidence](docs/reference/performance-evidence.md) | Fixed-version capabilities, measurements and gaps |
+| [Known issues](docs/reference/known-issues-2.3.18.md) · [Documentation review](docs/reference/documentation-review-2.3.18.md) | Packaged Console failure and acceptance gaps |
 | [Illustrated feature catalogue (Chinese)](docs/user-guide/features.md) | Real screenshots, entry points, instructions and limits for each user feature |
 | [Post-development decisions and milestones (Chinese)](docs/POST_DEVELOPMENT_DECISIONS.md) | Decisions, 52 version milestones, 349 conversation entries, and outstanding work |
 | [Phase 1 fixes (Chinese)](docs/reference/followup-phase1-results-2026-10-09.md) · [Phased upgrades](docs/plans/2026-10-09-followup-upgrades.md) | Historical checkpoint for eight reproduced fixes; current delivery status is in the completion results and release validation |
@@ -103,9 +105,9 @@ License notices for third-party components, media runtimes, and assets are in [T
 
 ## Comparison with Serpent
 
-Super Lib was developed from **Serpent 0.1.4**. This comparison uses the reviewed **0.2.9 source snapshot `f58701a6`**, not future releases. **These additions target 2.3.18; historical 2.3.17 does not contain them. Packaging and publication are recorded separately.** Evidence: [upstream audit](docs/reference/serpent-followup-audit-2026-10-09.md), [distinct capabilities](docs/reference/superlib-differentiators-2026-10-09.md), [HTML-derived decisions](docs/POST_DEVELOPMENT_DECISIONS.md), and [current completion results](docs/reference/completion-results-2026-10-10.md).
+Super Lib was developed from **Serpent 0.1.4**. This table compares reviewed **0.2.10 source `782d4e5b`** with published **Super 2.3.18**. See the [current detailed comparison](docs/reference/comparison-2.3.18-serpent-0.2.10.md), [known issues](docs/reference/known-issues-2.3.18.md), and [real decisions](docs/POST_DEVELOPMENT_DECISIONS.md).
 
-| Area | Serpent 0.2.9 | Super Lib current source | Scope |
+| Area | Serpent 0.2.10 | Super Lib 2.3.18 | Scope |
 | --- | --- | --- | --- |
 | Local libraries, WebDAV, basic AI/smart collections, plugins/MCP, 3D/PDF | Built in | Inherited and extended | Shared foundations, not exclusive features |
 | Sidebar appearance | Categorized emoji, decorative glyphs/colors and workspace appearance | This batch adds 11 categories/200 emoji, 24 existing icons, 8 colors, category search and legacy preference compatibility | Local folder/collection/smart-collection preferences; not full upstream glyph/tab parity |
@@ -122,13 +124,16 @@ Super Lib was developed from **Serpent 0.1.4**. This comparison uses the reviewe
 | Workspace/directory/search | Corresponding enhancements | Up to 6 session workspaces, cached folder Inspector, sidebar filter/sort, search history, PNG generation markers and partial batch folders | Workspaces are session-only; markers are not an AI-origin detector |
 | Metadata/image writes/content budgets | Corresponding later directions | Manual/AI three-way metadata merge and cancellation, explicit image write-back with exact undo, 1 MiB reads and RPC budgets | Mock two-device and real local pipelines verified; live WebDAV multi-writer/NAS remain separate acceptance. F15 accounts/catalog and ECS migration stay paused |
 
+| Markdown / ZIP members / custom image folder cover | Added in 0.2.10 | No complete equivalent | G01–G03 capability gaps |
+| Missing-linked visibility / picker memory / 25% video posters / proximity controls | Enhanced in 0.2.10 | Partial features without full parity | G04–G07; fullscreen navigation remains a separate check |
+
 Historical measurements compare **Super against its own earlier implementation**, not against Serpent:
 
 | Measurement | Recorded result | Evidence and limit |
 | --- | --- | --- |
 | Result hydration after a single import in a 20,001-row fixture | 69.7 ms full-library median → 13.7 ms scoped read; whole import 273.7 ms | [Performance record](docs/plans/2026-10-07-performance-first-pass.md); not 5× whole-import speed |
 | v2.3.7→v2.3.8 installer size | 229.83→190.15 MiB, -17.26%; program files reduced by about 45.63 MiB | [Build evidence](docs/releases/v2.3.8-validation.md); not today's upstream size/RSS comparison |
-| One exact-source delta, 2.3.14→2.3.15 | 3,409,609 bytes vs 198,736,394-byte full ZIP, calculated about 1.72% | [Release evidence](docs/releases/v2.3.15-validation.md); unmatched sources still need a full package |
+| One exact-source delta, 2.3.17→2.3.18 | 3,527,895 bytes vs 198,779,769-byte full ZIP, about 1.775% | [Release evidence](docs/releases/v2.3.18-validation.md); unmatched sources still need a full package |
 | Virtualization/visible thumbnails/on-demand proxies | Both projects have relevant optimizations | No matched FPS, RSS, NAS or whole-import benchmark; no universal superiority claim |
 
 Acknowledgement: Super Lib builds upon the original open-source project [dolag233/Serpent](https://github.com/dolag233/Serpent); we thank its authors and contributors and continue to release Super Lib under the [MIT License](LICENSE).

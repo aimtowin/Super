@@ -1,6 +1,6 @@
 # 快速上手
 
-> 核对版本：Super Lib v2.3.17（2026-10-09）；安装包可用性以发行附件为准。
+> 核对版本：Super Lib v2.3.18（2026-10-10）；配图保留实际拍摄版本，外部服务需另行验收。
 
 [English](quick-start.en.md) · [使用手册](README.md) · [下载最新版](https://github.com/aimtowin/Super/releases/latest)
 

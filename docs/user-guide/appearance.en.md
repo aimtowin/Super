@@ -1,6 +1,6 @@
 # Appearance
 
-> Reviewed for Super Lib v2.3.17 (2026-10-09); package availability follows release attachments.
+> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
 
 [简体中文](appearance.md) · [User guide](README.en.md)
 

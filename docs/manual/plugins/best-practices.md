@@ -1,10 +1,10 @@
 # 插件开发最佳实践
 
-> 核对版本：2.3.17（2026-10-09）。插件中可使用 `context.super.*`，或先 `const superApi = context.super` 再调用 `superApi.*`；不可声明名为 `super` 的变量。
+> 核对版本：2.3.18（2026-10-10）。插件中可使用 `context.super.*`，或先 `const superApi = context.super` 再调用 `superApi.*`；不可声明名为 `super` 的变量。
 
 本文是 [插件开发指南](development.md) 的操作补充：不重复字段表，只写容易在真实插件里踩到的边界。契约以当前仓库的 Manifest schema 和 Host 实现为准。
 
-完整走通过「无限制运行时 + 原生二进制 + 后台 Job + 内容写回 + GitHub 平台包」这条路径的参考实现：
+以下既有参考实现用于说明「无限制运行时 + 原生二进制 + 后台 Job + 内容写回 + GitHub 平台包」的结构；它未随本仓库交付，本轮也没有安装验证：
 
 - 参考实现：由项目团队单独提供的 Super-Plugin-ImageUpscaler 成品包与源码
 - 插件 ID：`com.dolag.super.image-upscaler`
@@ -71,7 +71,7 @@ Manifest 先声明 Job，`recovery` 只能是 `idempotent` 或 `checkpoint`。ha
 
 ## 5. 内容读取、分块 staging 与一次确认
 
-读：`assets.readContent(assetId, { maxBytes })`。写回资产：`stageContent` + `replaceContentBatch`（或单资产 `replaceContent`），支持托管资产与链接资产。写回走 Execution Plan，用户确认一次。
+读：小文件可用 `assets.readContent(assetId, { maxBytes })`；大文件按 offset 分块并绑定 revision/sourceToken，逐块消费，见[内容读取契约](../scripts/api-reference.md#content-read)。写回资产：`stageContent` + `replaceContentBatch`（或单资产 `replaceContent`），支持托管资产与链接资产。写回走 Execution Plan，用户确认一次。
 
 分块上限针对的是**每次调用解码后的二进制**，当前为 `1,048,576` 字节（1 MiB），不是整张图的大小。IPC 用 Base64，因此：
 

@@ -1,12 +1,10 @@
 # Product
 
-## Register
-
-product
+This is a product/design brief, not a release feature checklist. Current behavior is documented in the [user guide](docs/user-guide/README.en.md), [2.3.18 acceptance](docs/releases/v2.3.18-validation.md) and [known issues](docs/reference/known-issues-2.3.18.md).
 
 ## Users
 
-Creative professionals organising local images, video, audio and models in a desktop workspace. See README.md and docs/product-brief.md.
+Creative professionals organising local images, video, audio and models in a desktop workspace. See [README](README.en.md); the [early product brief](docs/product-brief.md) preserves historical planning.
 
 ## Product Purpose
 

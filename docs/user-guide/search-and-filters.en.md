@@ -1,6 +1,6 @@
 # Search and filters
 
-> Reviewed for Super Lib v2.3.17 (2026-10-09); package availability follows release attachments.
+> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
 
 Click **Color** above the asset canvas to open the palette. Shift-click selects multiple colors; **Exclude** excludes the selected colors.
 
@@ -66,3 +66,9 @@ Sort by name, modified time, created time, file size, resolution, duration, rati
 ## Exclusion versus selection inversion
 
 Include/exclude applies to the selected values of one filter dimension. Different dimensions combine with AND; values inside a dimension use OR. The active-condition summary shows exclusions and allows individual removal or clearing all. Asset selection inversion (`Ctrl+I` on Windows) changes selection in the current browse scope, not filter mode. See the [illustrated examples](features.md#包含--排除条件摘要与清空).
+
+## Custom colors, history and generation metadata
+
+Enter a HEX color and adjust tolerance from 0–100, with include/exclude modes. Matching uses extracted swatches and periodic HSL, handling neutral colors separately; tolerance is not a calibrated perceptual color-distance measure. Filter exclusion and `Ctrl+I` asset-selection inversion remain independent.
+
+History retains at most 20 terms of up to 512 characters. Comma-separated batch tags accept English/Chinese commas and at most 32 tags; check the split list before saving. Supported embedded SD/ComfyUI metadata in PNG can display generation markers and parameters. These are separate from AI-analysis status; an absent marker does not prove human authorship.

@@ -1,6 +1,6 @@
 # AI analysis
 
-> Reviewed for Super Lib v2.3.17 (2026-10-09); package availability follows release attachments.
+> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
 
 Super’s AI analysis connects to a cloud AI service that you provide. Prepare a provider account, API key, a vision-capable model, and check the provider’s pricing first.
 
@@ -82,5 +82,7 @@ Open `Window → Background jobs` to see queued, running, paused, failed, and co
 If a video contact sheet or thumbnail is not ready, retry media generation from Background jobs before retrying AI. Failure messages include a short reason.
 
 ## Privacy and cost
+
+Embedded SD/ComfyUI metadata in PNG is separate from AI analysis. Its marker neither starts an analysis job nor reliably determines authorship; see [generation markers and filtering](search-and-filters.en.md#custom-colors-history-and-generation-metadata).
 
 Super Lib itself is free; third-party AI services may charge. Analysis sends images or previews of supported assets. AI search sends your query and the context needed to build a search plan to the selected provider, then performs filtering locally. It does not upload the entire library as part of a search. Review the provider's privacy terms and pricing before enabling AI.

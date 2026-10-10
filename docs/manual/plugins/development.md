@@ -1,6 +1,6 @@
 # Super 插件开发与发布指南
 
-> 核对版本：2.3.17（2026-10-09）。插件中可使用 `context.super.*`，或先 `const superApi = context.super` 再调用 `superApi.*`；不可声明名为 `super` 的变量。
+> 核对版本：2.3.18（2026-10-10）。插件中可使用 `context.super.*`，或先 `const superApi = context.super` 再调用 `superApi.*`；不可声明名为 `super` 的变量。第三方插件需单独验收，官方目录/账号服务仍暂停。
 
 本文面向准备实际开发、联调和发布 Super 插件的人类开发者。文档以当前仓库的
 `plugin-manifest.ts`、`plugin-sdk.ts`、Plugin Manager API 和测试 fixture 为准；当前平台仍处于开发态，
@@ -392,7 +392,7 @@ secrets、net、clipboard 等。实际可调用能力由权限决定；结果不
 
 需要调用统一撤回/重做的插件必须声明 `history.write` 与 `library.read`。该权限直接复用 Automation Registry 的同名 capability；只声明 `library.read` 的调用会在 Gateway 被拒绝，不会进入 Worker。
 
-内容读取使用 `assets.readContent(assetId, { maxBytes })`，得到受限 base64、revision、大小、MIME 和 `truncated`。内容写回使用
+小内容读取使用 `assets.readContent(assetId, { maxBytes })`，得到受限 base64、revision、大小、MIME 和 `truncated`；大内容显式传 offset，每块最多 1 MiB，后续携带首块 revision/sourceToken，逐块处理，见[分块读取](../scripts/api-reference.md#content-read)。内容写回使用
 `replaceContent` 或 `stageContent`/`replaceContentBatch`，须使用可用资产（managed 或 linked）、权限和 expected revision；写入经过 Execution Plan/确认，
 大文件不放在单一 IPC payload。批量替换先统一校验 revision，再提交 staging；不能宣称文件系统原子性。
 

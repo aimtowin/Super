@@ -1,6 +1,6 @@
 # Super media binary bundles
 
-This directory contains only trust metadata. Large executables are never copied
+This directory contains trust metadata and bundled license notices. Large executables are never copied
 from a developer's `PATH` and are intentionally ignored by Git.
 
 Supported release bundle keys are `darwin-arm64` and `win32-x64`. A prepared
@@ -55,9 +55,11 @@ resources/
    provenance, executable, version, license and FFmpeg configuration checks
    against every packaged output.
 
-`bundle-lock.json` deliberately remains `build-required` until such artifacts
-exist. This is a release blocker, not an invitation to substitute Homebrew,
-Chocolatey, `ffmpeg-static`, or an unverified binary download.
+As reviewed on 2026-10-10, both `darwin-arm64` and `win32-x64` entries in
+`bundle-lock.json` are `ready`, with immutable URLs and ZIP/manifest hashes.
+This records promoted inputs, not completed macOS application acceptance.
+A new or unpromoted bundle marked `build-required` still blocks release; do not
+substitute Homebrew, Chocolatey, `ffmpeg-static`, or an unverified download.
 
 ## Build constraints
 

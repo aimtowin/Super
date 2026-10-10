@@ -2,7 +2,7 @@
 
 本文面向在 Super Desktop 的“自动化脚本”Console 中编写实际脚本的开发者。脚本是一次性、受控的 JavaScript/TypeScript 批处理；它通过注入的 `superApi` 领域 API 调用 Automation Command Gateway，不是 Node 程序，也不是通用命令行。
 
-> 核对源码版本：2.3.17（2026-10-09）。成品运行发现缺少 `typescript`，见[当前限制](../../reference/documentation-review-2.3.17.md#发现的当前成品问题)。API 签名核对不等于成品脚本执行已通过。
+> 核对源码版本：2.3.18（2026-10-10）。当前成品复核仍缺少 `typescript`，见[当前 K01](../../reference/known-issues-2.3.18.md)。API 签名核对不等于成品脚本执行已通过。
 
 API 版本：`AUTOMATION_API_VERSION = 1`。本文以当前 Console 实际注入的 `src/scripting/super-guest-api.ts`、Registry 和 E2E 行为为准。逐项签名见 [脚本 API 参考](api-reference.md)。公共 guest 投影见 [`src/scripting/super-guest-api.ts`](../../../src/scripting/super-guest-api.ts)，Registry 命令目录比 Console 公开面更宽，不能直接当作脚本 API，见“实现差异”。
 

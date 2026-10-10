@@ -1,6 +1,6 @@
 # Plugin features
 
-> Reviewed for Super Lib v2.3.17 (2026-10-09); package availability follows release attachments.
+> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
 
 Plugins add tools, menus, or workflows to Super. They are not ordinary library assets and can be enabled or disabled at any time.
 

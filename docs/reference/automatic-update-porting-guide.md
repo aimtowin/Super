@@ -2,7 +2,7 @@
 
 > 适用对象：需要把 Super Lib 当前的 Windows 自动更新能力迁移到另一个 Electron/Node.js 应用的开发者或 AI 智能体。
 >
-> 当前核对版本：Super Lib `v2.3.17`（2026-10-09）。本文以当前源码为准；不要把历史计划文档当作运行时配置。
+> 当前核对版本：Super Lib `v2.3.18`（2026-10-10）。本文以当前源码为准；不要把历史计划文档当作运行时配置。
 
 ## 1. 模块目标与边界
 
@@ -28,7 +28,7 @@
 - 完整包永远存在；增量包只是优化。增量包下载、校验或解压准备失败时，自动回退一次完整包；安装器已经接管后的失败需另行诊断，不能承诺后台自动重新下载。
 - 下载成功不等于安装：安装器先持久化到用户目录，用户再决定何时重启安装。
 - 更新 UI 属于 Inno Setup 进程而不是 Electron 进程，因此应用退出后仍能持续显示真实安装进度。
-- 发布时先上传到服务器 staging 目录；只有所有文件上传成功后才原子替换 `latest.json`，防止客户端看到半成品版本。
+- 发布时先上传到服务器 staging 目录；只有附件集合、大小及每个远端 SHA-256 核对通过后才原子替换 `latest.json`，防止客户端看到半成品版本。
 
 当前仅完整支持 Windows x64 的“已安装发行版”增量更新；macOS/便携版可沿用完整包路径，但没有 Windows 的 Inno 安装交接和 delta 支持。
 
@@ -82,7 +82,7 @@
 
 服务器地址、SSH 身份、私钥路径及实际目录属于部署环境配置，不能从本文继承授权。每个新的部署任务必须由用户明确授权目标和范围。仓库清理、截图或文档维护均不授权登录 ECS、修改网站、Nginx、Docker、证书或账户。本次审查没有连接服务器。
 
-下文版本数字为协议/迁移示例，不是当前 Latest 的实时查询。正式发布状态见[2.3.17 验证记录](../releases/v2.3.17-validation.md)。
+下文版本数字为协议/迁移示例，不是当前 Latest 的实时查询。正式发布状态见[2.3.18 验证记录](../releases/v2.3.18-validation.md)。
 
 ## 4. 服务端协议
 
@@ -455,3 +455,7 @@ Web 服务进程需要对该目录有只读权限，发布 SSH 用户需要读�
 - 前台 Inno 更新器与 relay：`assets/inno/silent-update-ui.iss`。
 - 完整/增量安装器的接线：`assets/inno/supersetup.iss`、`scripts/release/build-inno-delta.mjs`。
 - 原子 ECS 发布：`scripts/release/publish-ecs-update.mjs`。
+
+## 当前发布门禁补充
+
+迁移发布脚本时还需保留 `scripts/release/build-provenance.mjs`、`scripts/release/build-with-provenance.mjs`、`scripts/release/artifact-manifest.mjs` 及其实际依赖（以源码 import 为准）。冻结输入、最终 package receipt、artifact manifest 及附件集合需一致，上传成功不是完整验收。当前 ECS 发布器先 staging，逐文件核对 SHA 后再 promote；已有正式目标目录拒绝直接覆盖，避免改写已发行同版本字节。GitHub Release 的附件状态、名称、大小和摘要也需核对。历史版本示例不代表应重新发布对应版本。

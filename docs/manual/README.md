@@ -2,7 +2,7 @@
 
 这组手册面向希望为 Super 编写插件、自动化脚本或 MCP 客户端的用户和开发者。它描述的是当前仓库已经提供的开发态接口；实现尚未发布为独立 SDK，示例应在 Super 仓库根目录、Node.js 24 环境中运行。
 
-`docs/manual/` 是面向扩展作者发布的用户手册目录；架构决策、实施规格、开发日志和 QA 记录仍分别位于 `docs/internal/adr/`、`docs/internal/implementation/`、`docs/internal/development/` 和 `docs/internal/qa/`。
+`docs/manual/` 面向扩展作者；当前仓库的[架构与仓库导航](../REPOSITORY_GUIDE.md)、[开发计划](../plans/README.md)、[真实决策记录](../POST_DEVELOPMENT_DECISIONS.md)及[发行验收](../releases/v2.3.18-validation.md)各自保留对应证据。不存在的 `docs/internal/` 目录不作为导航入口。
 
 ## 从哪里开始
 
@@ -46,3 +46,7 @@
 ## 文档状态
 
 这些页面是随 Super 源码版本控制的发布文档，不代表已经完成所有平台验收。涉及打包、Windows、完整退出重启或真实桌面操作的声明，必须同时查看项目状态和 QA 文档中的当次证据。
+
+## 2.3.18 成品执行状态
+
+Windows 成品 Console 的运行依赖仍缺 `typescript`，已实测只读脚本失败，见[当前 K01](../reference/known-issues-2.3.18.md)。本手册 API 对照源码，不意味着 Console 已可在当前安装包执行。MCP、插件与 Console 是不同运行路径，不将此失败自动扩展为所有扩展路径失败。

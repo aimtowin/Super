@@ -1,6 +1,6 @@
 # Super Chromium 扩展
 
-该扩展可将 Chrome、Edge 等 Chromium 浏览器中的网页图片和视频保存到正在运行的 Super 桌面应用。
+这是内部开发态 Chromium 扩展源码，目标是在 Chrome/Edge 中将网页媒体送入本机 Super。当前 2.3.18 的 46 个发行附件不包含可直接安装的浏览器扩展包，也没有在本轮验证商店分发与完整网页捕获。用户操作状态见[浏览器扩展指南](../docs/user-guide/browser-extension.md)。
 
 媒体由浏览器下载后上传到本机 Super；扩展仅连接本机回环地址，桌面应用需保持运行并已打开资源库。
 

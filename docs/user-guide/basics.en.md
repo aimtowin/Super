@@ -1,6 +1,6 @@
 # Basics
 
-> Reviewed for Super Lib v2.3.17 (2026-10-09); current captures use an isolated fixture library. Package availability follows release attachments.
+> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
 
 [简体中文](basics.md) · [User guide](README.en.md) · [Floating image preview](#floating-image-preview) · [Corner hint bubble](#hover-hints)
 
@@ -40,10 +40,10 @@ Drop one or more files, folders, or a mixed selection into Super, or use **Impor
 
 The current product registry includes:
 
-- Images: PNG, JPG/JPEG, GIF, TIFF/TIF, WebP, SVG, BMP, ICO, PSD, EXR, TGA
+- Images: PNG, JPG/JPEG, JFIF, AVIF, GIF, TIFF/TIF, WebP, SVG, BMP, ICO, PSD, EXR, TGA
 - Camera RAW: RAW, DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2
-- Video: MP4, MOV, AVI, WMV, WebM, MKV, M4V
-- Audio: WAV, MP3, OGG/OGA, M4A, AAC, FLAC, Opus (waveform cover plus playback)
+- Video: MP4, MOV, AVI, WMV, WebM, MKV, M4V, FLV
+- Audio: WAV, MP3, OGG/OGA, M4A, AAC, FLAC, Opus (embedded artwork when available, waveform fallback and playback)
 - 3D: FBX, OBJ, GLTF, GLB, STL (FBX is converted to a viewable GLB)
 - Text: TXT, Markdown, JSON, CSV, XML, YAML, and common source/config formats
 - Documents: PDF and HTML/HTM; preview behavior depends on document type
@@ -132,7 +132,7 @@ Super can sync a library across machines over WebDAV: configure servers globally
 
 ### Custom icons
 
-Folders, collections and smart collections support custom Emoji icons through their context-menu icon settings. Saving/restoring an icon does not change disk names or membership. See the [illustrated guide](features.md).
+Folders, collections and smart collections offer icon settings with 11 categories/200+ emoji, 24 glyphs and 8 colors. Search, save or restore the default. These local preferences do not rename files, change membership or sync with a WebDAV library. See the [illustrated guide](features.md).
 
 ## Shortcuts
 
@@ -149,3 +149,13 @@ Folders, collections and smart collections support custom Emoji icons through th
 | Fit viewer | Numpad `.` | Numpad `.` |
 
 See [Search and filters](search-and-filters.en.md) for query examples and [AI analysis](ai.en.md) for AI setup and jobs.
+
+## 2.3.18 organization and viewer additions
+
+Audio uses embedded artwork when available, with waveform fallback and a viewer waveform toggle. TTF/OTF/WOFF/WOFF2/TTC fonts load temporarily for sample preview without system installation; TTC previews its first face and uses a generic format card. GIF offers bounded pause/frame stepping; video speed spans 0.25×–4×. Text supports wrapping and decoding UTF-16/GB18030; convert to UTF-8 with a backup before editing legacy content. Markdown currently remains text, and ZIP has no built-in member browser.
+
+Use sidebar filtering to retain matching ancestors; sorting changes display order. Dropping a child onto its direct parent promotes it one level, or to the root for a top-level parent. Folder Inspector statistics and automatic cover candidates come from the library index. Batch folder creation allows up to 32 names and retains successful items when another name fails.
+
+Up to six session workspaces keep separate navigation, filters, selection, preview and scroll, while sharing background work. They are not persisted across restarts; switching libraries collapses the set.
+
+Display rotation/mirroring does not write files. Explicit write-back is limited to supported managed static images (32 MiB/16M pixels), confirms the change, backs up original bytes and supports undo. Linked-source deletion requires its explicit source-delete action; ordinary unlink/Trash keeps external source bytes. Read the confirmation before permanently deleting.

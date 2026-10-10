@@ -1,6 +1,6 @@
 # 使用手册
 
-面向最终用户的 Super Lib v2.3.17 使用指南，2026-10-09 对照发行源码与实际安装包审查。完整配图入口：[全功能图文介绍](features.md)。
+面向最终用户的 Super Lib v2.3.18 使用指南，2026-10-10 对照发行源码、附件与专项成品复核修订。完整配图入口：[全功能图文介绍](features.md)。
 
 常用入口：[快速上手](quick-start.md) · [外观设置](appearance.md) · [悬浮预览](basics.md#floating-image-preview) · [右下角提示气泡](basics.md#hover-hints) · [AI 分析与查找](ai.md) · [故障排查](troubleshooting.md)
 
@@ -53,3 +53,5 @@ flowchart LR
 本目录说明当前版本的用户功能。不同版本的界面和可用功能可能略有变化，请以最新安装包和发行说明为准。
 
 `live-2.3.17/` 的配图由实际安装包在独立演示库中拍摄；外部服务仅截取配置入口，原生更新使用安全预览。截图不证明全部编码、插件或服务均已通过端到端测试。旧记录仅为历史快照。
+
+当前状态：[2.3.18 验收](../releases/v2.3.18-validation.md) · [当前已知问题](../reference/known-issues-2.3.18.md) · [Serpent 0.2.10 对照](../reference/comparison-2.3.18-serpent-0.2.10.md)。图文指南还包含明确标注的 2.3.18 开发进程配图；当前自动化 Console 成品执行受阻，普通导入、浏览和预览无需该功能。

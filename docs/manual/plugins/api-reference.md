@@ -3,7 +3,7 @@
 本参考对应当前 Plugin API `1`、Manifest `1`。它描述可发布插件可依赖的 schema 和 Guest API；实现仍在开发态，
 未列出的字段和方法不应被插件使用。restricted 与 unrestricted 共享同一套 `superApi.*` API；后者只是额外拥有 Node 能力。
 
-> 核对版本：2.3.17（2026-10-09）。下文 `superApi` 指在 `setup(context)` 中通过 `const superApi = context.super` 取得的领域 API；不能把保留词 `super` 当作变量。Console 的全局 `superApi` 与插件上下文不能混用。
+> 核对版本：2.3.18（2026-10-10）。下文 `superApi` 指在 `setup(context)` 中通过 `const superApi = context.super` 取得的领域 API；不能把保留词 `super` 当作变量。Console 的全局 `superApi` 与插件上下文不能混用。
 
 ## 1. 入口上下文
 
@@ -264,9 +264,13 @@ interface PluginInvocationContext {
 
 ```ts
 superApi.assets.search({ query: string | null, limit?: number, offset?: number }): Promise<unknown>
-superApi.assets.readContent(assetId, { maxBytes?: number }): Promise<{
+superApi.assets.readContent(assetId, {
+  maxBytes?: number; offset?: number;
+  expectedRevisionId?: string; sourceToken?: string;
+}): Promise<{
   assetId: string; revisionId: string; byteSize: number; dataBase64: string;
   truncated: boolean; mimeType: string | null;
+  offset?: number; nextOffset?: number; sourceToken?: string;
 }>
 superApi.assets.replaceContent(assetId, dataBase64, options?): Promise<{
   assetId: string; revisionId: string; byteSize: number;
@@ -277,7 +281,7 @@ superApi.assets.stageContent(assetId, dataBase64, options?): Promise<{
 superApi.assets.replaceContentBatch(items): Promise<{ operationId: string; items: unknown[] }>
 ```
 
-`readContent` 有字节上限并可能返回 `truncated`；`replaceContent` 接受托管（managed）与链接（linked）可用资产，须 `content.write`，并经过计划确认。
+`readContent` 省略 offset 时最多 32 MiB；显式 offset 每块最多 1 MiB，非零 offset 需要首块返回的 `revisionId`（作为 `expectedRevisionId`）和 `sourceToken`。逐块消费、遇修订/源冲突停止并重读，完整示例见[脚本内容读取](../scripts/api-reference.md#content-read)。它可能返回 `truncated`；`replaceContent` 接受托管（managed）与链接（linked）可用资产，须 `content.write`，并经过计划确认。
 批量替换使用 staging 和 `expectedRevisionId` 做统一预检，不能假定多文件系统原子性。
 
 通过 Automation Gateway 暴露的公共分页列表 API（包括 `folder.list`、`asset.list` 和资产搜索）的 `limit` 都是正整数，默认值由 API

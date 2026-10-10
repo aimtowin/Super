@@ -2,7 +2,7 @@
 
 本页是当前 Desktop Console 实际注入的 `superApi` API 逐项参考。方法调用均返回 Promise；输入会由 Automation Command Registry 严格校验。参数错误、资源不存在、权限/计划拒绝和并发冲突会以异常方式报告，脚本应使用 `try/catch` 处理并在需要时重新读取状态。
 
-> 核对源码版本：2.3.17（2026-10-09）。成品运行发现缺少 `typescript`，见[当前限制](../../reference/documentation-review-2.3.17.md#发现的当前成品问题)。API 签名核对不等于成品脚本执行已通过。Console 全局是 `superApi`，不是 JavaScript 保留词 `super`；插件的 `context.super` 是不同入口。
+> 核对源码版本：2.3.18（2026-10-10）。成品复核仍缺少 `typescript`，见[当前 K01](../../reference/known-issues-2.3.18.md)。API 签名核对不等于成品脚本执行已通过。Console 全局是 `superApi`，不是 JavaScript 保留词 `super`；插件的 `context.super` 是不同入口。
 
 ## 通用类型
 
@@ -213,16 +213,45 @@ superApi.assets.setMetadata({
 
 ## `assets`：文件内容与位置
 
+<a id="content-read"></a>
+
 ### `assets.readContent(assetId, options?)`
 
 ```ts
-superApi.assets.readContent(assetId, { maxBytes?: number }): Promise<{
+superApi.assets.readContent(assetId, {
+  maxBytes?: number; offset?: number;
+  expectedRevisionId?: string; sourceToken?: string;
+}): Promise<{
   assetId: string; revisionId: string; byteSize: number;
   dataBase64: string; truncated: boolean; mimeType: string | null;
+  offset?: number; nextOffset?: number; sourceToken?: string;
 }>
 ```
 
-这是受限的 Base64 读取，不是任意 filesystem 读取；默认/最大字节预算由内容 Registry 常量限制，`truncated` 为 true 时不能当作完整文件。
+这是受限的 Base64 读取，不是任意 filesystem 读取。省略 `offset` 时保留小文件接口，最多 32 MiB；`truncated=true` 表示不是完整文件。显式传入 `offset: 0` 启用分块，每块最多 1 MiB，返回 `offset`、`nextOffset` 与源指纹 `sourceToken`。后续非零 offset 必须同时带第一次返回的 `revisionId`（作为 `expectedRevisionId`）及 `sourceToken`，防止把不同修订或复制时变化的源拼接起来。`VERSION_CONFLICT` 时停止处理并重新获取首块，不重复追加旧片段。每块立即处理，避免在内存拼成整文件。
+
+```ts
+const assetId = "<真实资产 ID>";
+let chunk = await superApi.assets.readContent(assetId, { offset: 0, maxBytes: 1048576 });
+const revisionId = chunk.revisionId;
+const sourceToken = chunk.sourceToken;
+let processedBytes = 0;
+for (;;) {
+  // 在此逐块处理 chunk.dataBase64；不要累积整份 Base64。
+  processedBytes = chunk.nextOffset ?? 0;
+  if (!chunk.truncated) break;
+  if (!sourceToken || !chunk.nextOffset || chunk.nextOffset <= (chunk.offset ?? 0)) {
+    throw new Error("Invalid chunk response");
+  }
+  chunk = await superApi.assets.readContent(assetId, {
+    offset: chunk.nextOffset, maxBytes: 1048576,
+    expectedRevisionId: revisionId, sourceToken,
+  });
+}
+return { processedBytes };
+```
+
+示例是源码契约；2.3.18 Console 成品目前仍受 [K01](../../reference/known-issues-2.3.18.md)影响。不要将此内容读取接口自动写成 MCP 公开工具；MCP 是否公开以 Registry 和 `tools/list` 为准。
 
 ### `assets.replaceContent(assetId, dataBase64, options?)`
 

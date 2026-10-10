@@ -1,6 +1,6 @@
 # WebDAV Cloud Sync
 
-> Reviewed for Super Lib v2.3.17 (2026-10-09); package availability follows release attachments.
+> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
 
 Super Lib can sync a library across machines over WebDAV. Configure servers globally, bind each library individually, and Super syncs both ways automatically: local changes upload, remote changes pull.
 
@@ -54,3 +54,11 @@ Open **Library settings** → **Sync**:
 The server must provide WebDAV operations including PROPFIND, MKCOL, GET, PUT, and DELETE. Connection testing also checks capabilities such as MOVE. A plain HTTP download address is not a WebDAV server.
 
 ![Menu entry for opening a synced library; configure a server first](../assets/ui/live-2.3.17/21-library-menu.png)
+
+## 2.3.18 metadata, missing sources and cancellation
+
+Manual metadata and AI results have independent versions, using a common base/local/remote three-way merge and a version check at commit. Cancellation stops subsequent cancellable work; server writes already committed are not automatically rolled back.
+
+Linked paths and metadata participate in sync, but external linked source bytes do not become fully managed uploads. Another device needs accessible source folders and appropriate relinking. Temporarily missing/offline sources are distinct from explicit persistent deletion intent; explicit managed deletion still propagates.
+
+Back up first and test A→B import/download, concurrent manual/AI edits, cancellation/retry, offline sources and explicit deletion with a small library. Local/mock-device tests do not cover all live WebDAV/NAS multi-writer cases; see [acceptance gaps](../reference/known-issues-2.3.18.md).
