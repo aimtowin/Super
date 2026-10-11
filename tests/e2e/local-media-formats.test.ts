@@ -35,8 +35,6 @@ test("real JFIF/AVIF sources decode and real FLV falls back to a playable proxy 
     // may already be painted while the completion reload is still pending.
     await expect(page.locator(".asset-card.is-selected")).toHaveCount(3);
     await expect(page.locator(".activity-strip")).toHaveCount(0);
-    await page.keyboard.press("Escape");
-    await expect(page.locator(".asset-card.is-selected")).toHaveCount(0);
     for (const name of ["sample.jfif", "sample.avif", "clip.flv"]) {
       const card = assetCard(page, name);
       await expect(card).toBeVisible({ timeout: 20_000 });

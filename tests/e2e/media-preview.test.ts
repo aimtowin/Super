@@ -243,6 +243,12 @@ test("generates a decoded thumbnail and keeps asset viewer context coherent", as
       .first()
       .click();
 
+    // Import reveal intentionally selects the batch and scrolls it into view.
+    // Wait for completion, then explicitly choose one asset. That deliberate
+    // click must itself cancel the delayed reveal (no Escape workaround).
+    await expect(window.locator(".asset-card.is-selected")).toHaveCount(3);
+    await expect(window.locator(".activity-strip")).toHaveCount(0);
+
     const assetCard = window
       .locator(".asset-card")
       .filter({ hasText: "automatic.png" })
@@ -255,6 +261,7 @@ test("generates a decoded thumbnail and keeps asset viewer context coherent", as
 
     await assetCard.click();
     await expect(assetCard).toHaveAttribute("aria-pressed", "true");
+    await expect(window.locator(".asset-card.is-selected")).toHaveCount(1);
     const inspectorThumbnail = window.locator(
       '.inspector-hero-preview img[alt="automatic.png"]',
     );

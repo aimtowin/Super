@@ -7,6 +7,15 @@ export type PendingAssetReveal = {
   readonly focusAssetId: string;
 };
 
+/** A deliberate browse interaction supersedes delayed import selection/focus. */
+export function cancelPendingAssetReveal(refs: {
+  pendingRevealRef: { current: PendingAssetReveal | null };
+  pendingRestoredFocusRef: { current: string | null };
+}): void {
+  refs.pendingRevealRef.current = null;
+  refs.pendingRestoredFocusRef.current = null;
+}
+
 /** Build a reveal request from imported/saved assets (empty → null). */
 export function pendingRevealFromAssets(
   assets: readonly AssetSummary[],

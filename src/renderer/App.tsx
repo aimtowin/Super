@@ -255,6 +255,7 @@ import { useExtensionActiveContext } from "./use-extension-active-context";
 import { useExtensionSaveReveal } from "./use-extension-save-reveal";
 import { usePendingAssetReveal } from "./use-pending-asset-reveal";
 import {
+  cancelPendingAssetReveal,
   currentScopeShowsRevealAssets,
   pendingRevealFromAssets,
   sharedBrowseScopeForAssets,
@@ -1807,6 +1808,9 @@ function AppInner() {
   // 筛选与排序面板：外点 / Esc 自动关闭（现代浮层语义），summary 切换不变。
   const pendingRestoredFocusRef = useRef<string | null>(null);
   const pendingRevealRef = useRef<PendingAssetReveal | null>(null);
+  const cancelPendingReveal = useCallback(() => {
+    cancelPendingAssetReveal({ pendingRevealRef, pendingRestoredFocusRef });
+  }, []);
   const chooseFolderRef = useRef<(scope: AssetScope) => Promise<void>>(
     async () => undefined,
   );
@@ -2495,8 +2499,7 @@ function AppInner() {
       // content refresh settles. A deliberate blank-canvas click must cancel
       // that pending action, otherwise a just-imported sequence is impossible
       // to deselect for the next 280 ms.
-      pendingRevealRef.current = null;
-      pendingRestoredFocusRef.current = null;
+      cancelPendingReveal();
     },
   });
   const selectedFolderIdSet = useMemo(
@@ -11335,6 +11338,7 @@ function AppInner() {
                       }}
                       onClick={(event) => {
                         if (renamingThisAsset) return;
+                        cancelPendingReveal();
                         handleCardClick(asset.assetId, event);
                       }}
                       onKeyDown={(event) => {
@@ -11450,6 +11454,7 @@ function AppInner() {
                       }}
                       onContextMenu={(e) => {
                         e.preventDefault();
+                        cancelPendingReveal();
                         const intent = resolveBrowseContextMenuIntent(
                           { kind: "asset", id: asset.assetId },
                           {

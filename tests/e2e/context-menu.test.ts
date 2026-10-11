@@ -387,12 +387,10 @@ test("context menu clamps within viewport at all four corners", async () => {
     const assetCard = window.locator('[data-asset-id]').first();
     await expect(assetCard).toBeVisible({ timeout: 15_000 });
 
-    // Finish import reveal/scroll before testing viewport clamping. Otherwise
-    // its delayed focus scroll correctly dismisses a freshly opened menu.
+    // Finish import before testing clamping; opening the menu itself must
+    // cancel any remaining delayed reveal (no Escape workaround).
     await expect(window.locator(".asset-card.is-selected")).toHaveCount(1);
     await expect(window.locator(".activity-strip")).toHaveCount(0);
-    await window.keyboard.press("Escape");
-    await expect(window.locator(".asset-card.is-selected")).toHaveCount(0);
 
     const viewport = await getViewportSize(window);
 
