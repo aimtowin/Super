@@ -11021,7 +11021,7 @@ function AppInner() {
           onDragOver={handleExternalDragOver}
           onDragOverCapture={handleExternalDragOver}
           onDrop={handleExternalDrop}
-          onMouseDown={handleCanvasMouseDown}
+          onMouseDown={showTagManagement || showPluginSidebarView ? undefined : handleCanvasMouseDown}
           onContextMenu={(event) => {
             const target = event.target;
             if (!(target instanceof Element)) return;

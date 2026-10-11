@@ -403,7 +403,7 @@ export function useAssetSelection({
       const target = e.target as HTMLElement;
       if (
         target.closest(
-          ".asset-card, .folder-card, .external-drop-overlay, .asset-loading-more",
+          ".asset-card, .folder-card, .external-drop-overlay, .asset-loading-more, .tag-management, button, input, textarea, select, a, [role='button'], [role='menuitem']",
         )
       )
         return;
@@ -743,6 +743,8 @@ export function useAssetSelection({
       marqueePointerClientRef.current = { x: e.clientX, y: e.clientY };
       updateMarquee(marqueePointerClientRef.current);
       marqueeActiveRef.current = false;
+      // A click-sized gesture also ends marquee styling before its early return.
+      document.body.classList.remove("is-marquee-active");
       autoScrollRef.current = { direction: 0, speed: 0 };
       if (autoScrollRafRef.current !== null) {
         cancelAnimationFrame(autoScrollRafRef.current);

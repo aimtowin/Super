@@ -107,6 +107,10 @@ test("tag management chip grid: create, sort, select, menu, merge, delete", asyn
     await expect(chips.first()).toContainText("beta");
 
     // Plain click selects exactly one chip; Ctrl+click adds to the selection.
+    await chips.filter({ hasText: "alpha" }).hover();
+    await window.mouse.down();
+    await expect(window.locator('body')).not.toHaveClass(/is-marquee-active/);
+    await window.mouse.up();
     await chips.filter({ hasText: "alpha" }).click();
     const selectionIndicator = workspace.getByText(/已选 \d+ 个标签/);
     await expect(selectionIndicator).toHaveText("已选 1 个标签");
