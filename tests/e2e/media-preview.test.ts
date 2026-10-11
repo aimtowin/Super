@@ -169,7 +169,13 @@ test("opens a PDF in the floating preview window", async () => {
       floatingWindow!.locator(".floating-preview-document .pdf-viewer canvas").first(),
     ).toBeVisible({ timeout: 20_000 });
 
-    await floatingWindow!.getByRole("button", { name: "关闭悬浮预览" }).click();
+    // Closing destroys the page during click's post-action acknowledgement.
+    // Await the actual close; ignore only that expected destroyed-page case.
+    const floatingClosed = floatingWindow!.waitForEvent('close');
+    await floatingWindow!.getByRole("button", { name: "关闭悬浮预览" }).click().catch(error => {
+      if (!floatingWindow!.isClosed()) throw error;
+    });
+    await floatingClosed;
     await expect.poll(() => application.windows().length).toBe(1);
   } finally {
     await application.close();
