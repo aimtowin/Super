@@ -11,7 +11,7 @@
 | [当前已知问题](reference/known-issues-2.3.18.md) · [文档审查](reference/documentation-review-2.3.18.md) | 成品 Console 实际失败、验证缺口与修订依据 |
 | [2.3.19 更新说明](releases/v2.3.19.md) · [验收记录](releases/v2.3.19-validation.md) | 最新查看器／资源组织升级；当前发布状态以验收记录为准 |
 | [2.3.18 更新说明](releases/v2.3.18.md) · [验收记录](releases/v2.3.18-validation.md) | 前轮本体补齐及正式发行证据 |
-| [完整图文功能指南](user-guide/features.md) | 2.3.17 安装版实拍与 2.3.18 源码补齐章节，入口、步骤及真实限制 |
+| [完整图文功能指南](user-guide/features.md) | 2.3.17 安装版实拍、2.3.18 源码补齐及 2.3.19 实际成品新查看器，入口、步骤及真实限制 |
 | [后续开发决策与优化里程碑](POST_DEVELOPMENT_DECISIONS.md) | 真实决策演变、逐版修复、对话索引、验证限制及待办边界 |
 | [阶段 1 历史检查点](reference/followup-phase1-results-2026-10-09.md) · [分阶段升级计划](plans/2026-10-09-followup-upgrades.md) | 当时 8 项修复及验证限制；当前交付事实以顶部补齐结果和发行记录为准 |
 | [软件本体升级首批](reference/local-upgrades-results-2026-10-10.md) · [本轮计划](plans/2026-10-10-local-upgrades.md) | 分类 Emoji/图形颜色、父项拖拽提升、合集撤销修正及 JFIF/AVIF/FLV；历史首批检查点；后续补齐见页面顶部当前结果，账号/目录/迁移继续暂停 |

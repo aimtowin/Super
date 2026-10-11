@@ -1,6 +1,6 @@
 # Basics
 
-> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
+> Reviewed for Super Lib v2.3.19 (2026-10-11). Screenshots retain their recorded versions; external integrations require separate acceptance.
 
 [简体中文](basics.md) · [User guide](README.en.md) · [Floating image preview](#floating-image-preview) · [Corner hint bubble](#hover-hints)
 
@@ -48,7 +48,7 @@ The current product registry includes:
 - Text: TXT, Markdown, JSON, CSV, XML, YAML, and common source/config formats
 - Documents: PDF and HTML/HTM; preview behavior depends on document type
 
-Formats without a built-in image preview, such as ZIP and EXE, display extension thumbnails that follow the active theme. Such a thumbnail does not itself indicate a corrupt file.
+ZIP and EXE cards display themed extension thumbnails; this does not itself indicate a corrupt file. In 2.3.19, double-click a ZIP to browse members and use bounded read-only previews.
 
 Super copies managed files into the library and assigns a stable asset ID. Name or content duplicates open a conflict dialog. Thumbnails and technical metadata are generated in the background. Automatic AI analysis only runs when configured and enabled; you can browse while background work continues.
 
@@ -89,7 +89,7 @@ The viewer supports pan, wheel zoom, fit-to-view (numpad `.`), fullscreen, and r
 
 Keep a reference image or PDF visible while working in another application:
 
-1. Double-click an image or PDF to open the viewer. Move the pointer into the preview to reveal its controls.
+1. Double-click an image or PDF to open the viewer. Move the pointer near its controls or a window edge to reveal them.
 2. Click **Float preview** in the controls. Once the floating window appears, the Super Lib main window minimizes automatically.
 3. Drag the floating window's top area to move it. Drag an edge or corner to resize it. Images fit proportionally without stretching; PDFs retain page scrolling, zoom, fit, and drag-to-pan controls.
 4. Move the pointer into the floating window to reveal its close button at the upper right. Click it, or press `Esc` while the floating window has focus, to restore the main window and continue browsing and previewing.
@@ -152,10 +152,22 @@ See [Search and filters](search-and-filters.en.md) for query examples and [AI an
 
 ## 2.3.18 organization and viewer additions
 
-Audio uses embedded artwork when available, with waveform fallback and a viewer waveform toggle. TTF/OTF/WOFF/WOFF2/TTC fonts load temporarily for sample preview without system installation; TTC previews its first face and uses a generic format card. GIF offers bounded pause/frame stepping; video speed spans 0.25×–4×. Text supports wrapping and decoding UTF-16/GB18030; convert to UTF-8 with a backup before editing legacy content. Markdown currently remains text, and ZIP has no built-in member browser.
+Audio uses embedded artwork when available, with waveform fallback and a viewer waveform toggle. TTF/OTF/WOFF/WOFF2/TTC fonts load temporarily for sample preview without system installation; TTC previews its first face and uses a generic format card. GIF offers bounded pause/frame stepping; video speed spans 0.25×–4×. Text supports wrapping and decoding UTF-16/GB18030; convert to UTF-8 with a backup before editing legacy content. The new Markdown and ZIP viewers are described below.
 
 Use sidebar filtering to retain matching ancestors; sorting changes display order. Dropping a child onto its direct parent promotes it one level, or to the root for a top-level parent. Folder Inspector statistics and automatic cover candidates come from the library index. Batch folder creation allows up to 32 names and retains successful items when another name fails.
 
 Up to six session workspaces keep separate navigation, filters, selection, preview and scroll, while sharing background work. They are not persisted across restarts; switching libraries collapses the set.
 
 Display rotation/mirroring does not write files. Explicit write-back is limited to supported managed static images (32 MiB/16M pixels), confirms the change, backs up original bytes and supports undo. Linked-source deletion requires its explicit source-delete action; ordinary unlink/Trash keeps external source bytes. Read the confirmation before permanently deleting.
+
+## 2.3.19 viewers and organization
+
+- Markdown switches between source and rendered GFM, including tables, tasks and code. Drafts and save/conflict checks remain intact. Raw HTML and implicit remote images are disabled; cards and Inspector show bounded structural previews.
+- ZIP browsing filters member paths and previews text, Markdown and images without extracting files to disk or executing them. Unsafe paths, encryption, symlinks, duplicate members, corruption and budget overruns are rejected. Limits include 5,000 entries, 8 GiB declared content, 1 MiB text and 8 MiB images, with additional compression-ratio and decoded-pixel checks.
+- Use a folder's picture-cover context action to select a library image, save or restore the default. Deleted or unavailable images fall back automatically. Covers live in the library database, do not alter image bytes, and are not included in asset-level WebDAV metadata sync.
+- **Settings → Browse** offers reversible hiding of missing linked assets/folders (off by default). It changes display, not index records or ignore rules.
+- The same settings page offers proximity, idle and always-visible viewer controls. Proximity is the default; keyboard/focus access is preserved. Previous/next navigation keeps the fullscreen host; closing still exits fullscreen.
+- Viewer `Delete` targets only the current asset. Managed `Shift+Delete` retains confirmation; linked assets do not expose that permanent-delete key. Text input and unsaved drafts stay protected.
+- Native open/import/save dialogs remember the most recent successful directory, respect explicit paths and do not update on cancel. Newly generated video posters prefer the 25% frame, with bounded fallback; existing posters are not regenerated in bulk.
+
+Back up the complete library before upgrading: this release adds schema migration 52. Do not write the upgraded database with an older app. See [release notes](../releases/v2.3.19.md) and [packaged screenshots](features.md#2319-查看器与资源组织).

@@ -14,8 +14,8 @@
 
 Super Lib is a free local asset manager for creative work. Browse images, videos, audio, and models in one workspace, organize them with folders, tags, color filters, and collections, and optionally add AI analysis and a custom appearance.
 
-> **[Illustrated feature catalogue — real 2.3.17 screenshots (Chinese)](docs/user-guide/features.md)**
-> Each user-facing feature includes an entry point, instructions and limitations. Captured from the released Windows x64 app using an isolated demo library. English task guides remain available below.
+> **[Illustrated feature catalogue (Chinese)](docs/user-guide/features.md)**
+> Each user-facing feature includes an entry point, instructions and limitations. Captures are labeled: released 2.3.17, isolated 2.3.18 development, or actual 2.3.19 package, all using fixture libraries. English task guides remain available below.
 
 [Download for Windows](https://github.com/aimtowin/Super/releases/latest/download/SuperSetup.exe) · [Releases and other downloads](https://github.com/aimtowin/Super/releases/latest) · [Quick start](docs/user-guide/quick-start.en.md) · [Report a bug](https://github.com/aimtowin/Super/issues)
 
@@ -36,6 +36,7 @@ Super Lib itself is free. Optional third-party AI services may charge according 
 - **Organization and discovery**: folders, tags, ratings, favorites, descriptions, palettes, collections, filters, sorting, and full-text search within the current scope.
 - **Local first**: managed imports copy assets into a library, while linked folders reference an external directory in place. Library data stays local and can be synchronized between devices through WebDAV when needed.
 - **Browsing and preview**: thumbnails, video previews, metadata, the viewer, and background derivative work are designed not to block browsing.
+- **Structure and personalization**: Markdown source/render switching, read-only ZIP member browsing and library-image folder covers; proximity viewer controls, fullscreen navigation and reversible hiding of missing links. See the [2.3.19 guide](docs/user-guide/basics.en.md#2319-viewers-and-organization).
 - **Floating references**: keep the current image or PDF in a movable, resizable, always-on-top window while the main window minimizes. See [Floating preview](docs/user-guide/basics.en.md#floating-image-preview).
 - **One hover-hint location**: control and asset-name hints appear in the lower-right bubble without duplicate near-pointer tooltips. See [Corner hint bubble](docs/user-guide/basics.en.md#hover-hints).
 - **Readable filters and custom icons**: include/exclude modes with condition summaries, plus Emoji icons for folders, linked folders, collections and smart collections.
@@ -46,9 +47,9 @@ Super Lib itself is free. Optional third-party AI services may charge according 
 
 ## Install and use
 
-The current source targets `v2.3.19`; verified Windows x64 release attachments are listed on the release page. Download `SuperSetup.exe` for a first installation. Full update ZIPs and delta packages are update-delivery artifacts. Availability on other platforms depends on the files actually attached to a release.
+The current source targets `v2.3.20`; verified Windows x64 release attachments are listed on the release page. Download `SuperSetup.exe` for a first installation. Full update ZIPs and delta packages are update-delivery artifacts. Availability on other platforms depends on the files actually attached to a release.
 
-See the [2.3.19 release notes](docs/releases/v2.3.19.md) and [validation record](docs/releases/v2.3.19-validation.md) for the latest viewer and library-organization upgrades.
+See the [2.3.20 release notes](docs/releases/v2.3.20.md) and [validation record](docs/releases/v2.3.20-validation.md) for the sidebar loading fix. The [2.3.19 notes](docs/releases/v2.3.19.md) describe the inherited viewer and library-organization upgrades.
 
 Libraries live at the location you choose. Importing copies assets into the library; linking references files at their existing location, which must remain accessible. See the [quick start](docs/user-guide/quick-start.en.md).
 

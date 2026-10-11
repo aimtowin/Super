@@ -4,7 +4,7 @@
 
 </div>
 
-# Super Lib v2.3.19
+# Super Lib v2.3.20
 
 <div align="center">
 
@@ -15,7 +15,7 @@
 Super Lib 是一款完全免费的本地素材管理应用。把图片、视频、音频和模型放进一个工作区，用文件夹、标签、颜色筛选与合集整理素材，也可以按需配置 AI 分析和自己的界面外观。
 
 > **[完整图文功能指南：从导入、整理到 AI、插件与自动化](docs/user-guide/features.md)**
-> 每项功能配真实运行截图、入口、操作步骤和限制；原功能配图基于 Windows x64 **2.3.17**，新增能力配图来自 **2.3.18 源码隔离进程**；不混用为生产验收。
+> 每项功能配真实运行截图、入口、操作步骤和限制；原功能配图基于 Windows x64 **2.3.17**，补齐章节来自 **2.3.18 源码隔离进程**，新查看器配图来自 **2.3.19 实际成品**；拍摄版本与验收范围分别标注。
 
 [下载 Windows 安装包](https://github.com/aimtowin/Super/releases/latest/download/SuperSetup.exe) · [查看版本与其他下载文件](https://github.com/aimtowin/Super/releases/latest) · [快速上手](docs/user-guide/quick-start.md) · [反馈问题](https://github.com/aimtowin/Super/issues)
 
@@ -36,6 +36,7 @@ Super Lib 是一款完全免费的本地素材管理应用。把图片、视频�
 - **组织与发现**：文件夹、标签、评分、喜欢、描述、色卡、合集、过滤、排序和范围内全文检索。
 - **本地优先**：托管导入会复制素材进入资源库；链接文件夹则原位引用外部目录。资源库数据保存在本机，可按需使用 WebDAV 在设备间同步。
 - **浏览与预览**：缩略图、视频预览、资源信息、查看器和后台派生任务均以不阻塞浏览为原则。
+- **结构与个性化**：Markdown 源码／渲染切换、ZIP 只读成员浏览、库内图片自选文件夹封面；查看器近边显示工具栏、全屏切图与可逆缺失链接隐藏，详见 [2.3.19 图文说明](docs/user-guide/features.md#2319-查看器与资源组织)。
 - **悬浮参考内容**：将当前图片或 PDF 放入可移动、可缩放的置顶浮窗，同时自动最小化主窗口；详见[悬浮预览](docs/user-guide/basics.md#floating-image-preview)。
 - **统一悬浮说明**：按钮、侧栏和素材名称等提示统一显示在右下角，避免重复浮层遮挡操作，详见[提示气泡](docs/user-guide/basics.md#hover-hints)。
 - **可读的筛选与图标**：颜色、标签、形状等筛选支持包含/排除和条件摘要；文件夹、链接目录、合集和智能合集可设置 Emoji 图标。
@@ -46,7 +47,7 @@ Super Lib 是一款完全免费的本地素材管理应用。把图片、视频�
 
 ## 安装与使用
 
-本次源码版本为 `v2.3.19`，Windows x64 已发行附件以 Release 页为准。首次安装请下载 `SuperSetup.exe`；发布页上的完整更新 ZIP 和 delta 增量包用于更新交付，不是首次安装的首选入口。其他平台的安装包以发布页实际附件为准。
+本次源码版本为 `v2.3.20`，Windows x64 已发行附件以 Release 页为准。首次安装请下载 `SuperSetup.exe`；发布页上的完整更新 ZIP 和 delta 增量包用于更新交付，不是首次安装的首选入口。其他平台的安装包以发布页实际附件为准。
 
 资产库保存在创建时选择的位置。导入会复制素材进入库；链接文件夹会引用原位置的文件，原目录需要保持可访问。详情见[快速上手](docs/user-guide/quick-start.md)。
 
@@ -83,7 +84,7 @@ npm run make:inno
 
 ## 文档
 
-最新查看器与资源组织升级见[2.3.19 更新说明](docs/releases/v2.3.19.md)与[验收记录](docs/releases/v2.3.19-validation.md)。前轮[软件本体补齐结果](docs/reference/completion-results-2026-10-10.md)及首批结果保留历史语境。
+最新侧栏加载修复见[2.3.20 更新说明](docs/releases/v2.3.20.md)与[验收记录](docs/releases/v2.3.20-validation.md)。查看器与资源组织升级见[2.3.19 更新说明](docs/releases/v2.3.19.md)。前轮[软件本体补齐结果](docs/reference/completion-results-2026-10-10.md)及首批结果保留历史语境。
 
 | 文档 | 内容 |
 | --- | --- |
