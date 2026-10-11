@@ -54,4 +54,4 @@ This directory describes the current user-facing product. Screens and available 
 
 The `live-2.3.17/` images are real captures in an isolated fixture library. External services were not connected; native update images are safe previews. These are not proof that every codec or external integration passes end-to-end testing. Older records remain historical snapshots.
 
-Current evidence: [2.3.18 acceptance](../releases/v2.3.18-validation.md), [known issues](../reference/known-issues-2.3.18.md), [Serpent 0.2.10 comparison](../reference/comparison-2.3.18-serpent-0.2.10.md). The catalogue labels 2.3.18 development captures separately. Packaged Console execution is currently blocked; ordinary import, browsing and viewing do not require it.
+Current evidence: [2.3.18 acceptance](../releases/v2.3.18-validation.md), [known issues](../reference/known-issues-2.3.18.md). The catalogue labels 2.3.18 development captures separately. Packaged Console execution is currently blocked; ordinary import, browsing and viewing do not require it.

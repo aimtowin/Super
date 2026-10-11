@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     testTimeout: 120_000,
-    include: ['tests/audit/serpent-followup.test.ts'],
+    include: ['tests/audit/library-safety-audit.test.ts'],
     fileParallelism: false,
   },
 });

@@ -4,7 +4,7 @@
 
 用户决定：全部可借鉴能力纳入计划，分阶段实施。此页记录第一阶段的实际源码改动与自动化验收，不是新版本发行说明。
 
-基线提交：`6dc9ab07eed3b6a0e58c3481397c9823d2bd7bc2`。应用版本仍为 **2.3.17**；以下修改在工作区，**未打包、未安装、未推送、未更新 GitHub Release 或 ECS**。MIT 与 Serpent 0.1.4 借鉴署名保留。未操作真实图库、运行版或真实 WebDAV 数据。
+基线提交：`6dc9ab07eed3b6a0e58c3481397c9823d2bd7bc2`。应用版本仍为 **2.3.17**；以下修改在工作区，**未打包、未安装、未推送、未更新 GitHub Release 或 ECS**。MIT 与必要版权署名保留。未操作真实图库、运行版或真实 WebDAV 数据。
 
 ## 1. 已修复的八项确定性缺陷
 
@@ -45,9 +45,9 @@ v49→v50 的已回收资产补记、重开持久化、迁移失败/只读/降�
 
 两项跳过分别为 Windows 不能建立 POSIX 非法 NTFS 名字的夹具、Windows 下不可用的不可写父目录夹具。均保留原平台条件，**不计 PASS**。另一次 76 项边界重跑与这些用例重叠，不加到总数。
 
-最终结果索引及源文件校验：[机器可读阶段证据](followup-phase1-evidence-2026-10-09.json)。完整本机 Vitest JSON 位于被忽略的 `tmp/followup-final-{audit,regression,adjacent,compat}.json`，不是仓库交付依赖。
+最终结果索引及原时点源文件校验已集中归档。完整本机 Vitest JSON 位于被忽略的 `tmp/followup-final-{audit,regression,adjacent,compat}.json`，不是仓库交付依赖。
 
-`npm run typecheck`、修改源码/测试 ESLint、`git diff --check` 与文档引用检查通过。原审计的 **8 FAIL / 2 PASS** 保留在[历史审计证据](serpent-followup-audit-evidence-2026-10-09.json)，不覆盖当时结果。本轮 U07 断言改为检查实际默认显示策略，分类器和明确材质显示保留各自断言；旧“默认删链接源”和“刷新自动成组”测试更新为新安全契约，而不是接受错误行为来造绿灯。
+`npm run typecheck`、修改源码/测试 ESLint、`git diff --check` 与文档引用检查通过。原审计的 **8 FAIL / 2 PASS** 保留在原时点审计记录中，不覆盖当时结果。本轮 U07 断言改为检查实际默认显示策略，分类器和明确材质显示保留各自断言；旧“默认删链接源”和“刷新自动成组”测试更新为新安全契约，而不是接受错误行为来造绿灯。
 
 ## 5. 真实未完成项与后续阶段
 

@@ -28,7 +28,7 @@
 每项先保留/补充失败断言，再实施，执行相关 Worker/unit 回归；阶段末运行独立审计、typecheck、修改文件 ESLint、迁移纪律和文档检查。
 
 ```powershell
-node scripts/run-vitest-with-electron.mjs run --config vitest.serpent-audit.config.ts
+node scripts/run-vitest-with-electron.mjs run --config vitest.history-audit.config.ts
 node scripts/run-vitest-with-electron.mjs run --config vitest.config.ts tests/worker/sync-plan.test.ts tests/worker/sync-runner.test.ts tests/worker/sync-engine.test.ts tests/worker/sync-library-integration.test.ts tests/worker/schema-compatibility.test.ts tests/worker/migration-discipline.test.ts
 npm run typecheck
 ```

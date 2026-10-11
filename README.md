@@ -87,13 +87,11 @@ npm run make:inno
 
 | 文档 | 内容 |
 | --- | --- |
-| [当前 Super 2.3.18 / Serpent 0.2.10 对比](docs/reference/comparison-2.3.18-serpent-0.2.10.md) · [性能证据](docs/reference/performance-evidence.md) | 固定版本能力、真实测量与差距 |
 | [当前已知问题](docs/reference/known-issues-2.3.18.md) · [文档审查](docs/reference/documentation-review-2.3.18.md) | 成品 Console 故障及验收缺口 |
 | [完整图文功能指南](docs/user-guide/features.md) | 每项用户功能的真实截图、入口、用法与边界 |
 | [后续开发决策与优化里程碑](docs/POST_DEVELOPMENT_DECISIONS.md) | 接力开发的真实决策、52 个版本节点、349 条对话索引及未完成事项 |
 | [审计后修复进度](docs/reference/followup-phase1-results-2026-10-09.md) · [分阶段升级计划](docs/plans/2026-10-09-followup-upgrades.md) | 历史第一阶段检查点；当前补齐及发布状态见本页上方最新结果 |
 | [修复前缺陷快照](docs/plans/confirmed-unfixed-2026-10-09.md) | 保留隔离复现和已发行 2.3.17 的数据安全提醒 |
-| [上游修复审计 / 差异化能力](docs/reference/serpent-followup-audit-2026-10-09.md) · [能力清单](docs/reference/superlib-differentiators-2026-10-09.md) | 0.1.4→0.2.9 的真实对照、通过/待验收边界与非宣传式优势 |
 | [快速上手](docs/user-guide/quick-start.md) | 从下载安装到创建资产库、可选配置和第一次导入 |
 | [外观设置](docs/user-guide/appearance.md) | 深浅主题、自定义背景、字体大小与实际界面配图 |
 | [使用手册](docs/user-guide/README.md) | 安装、导入、浏览、搜索、标签、合集、同步、AI、插件与故障排查 |
@@ -105,39 +103,6 @@ npm run make:inno
 
 维护者可运行 `node --test scripts/docs/audit-docs.test.mjs` 与 `node scripts/docs/audit-docs.mjs` 检查本地文档引用。仓库分类与清理边界见[仓库指南](docs/REPOSITORY_GUIDE.md)，本次修订证据见[文档审查报告](docs/reference/documentation-review-2.3.18.md)。
 
-## 与 Serpent 的功能及性能对照
+借鉴与开源许可：Super Lib 在开源基础上持续独立开发，感谢原作者及贡献者；保留必要版权声明，并继续以 [MIT 许可证](LICENSE) 开源。
 
-本软件从 Serpent **0.1.4** 接力开发；本表对照已审阅的 **0.2.10 固定源码 `782d4e5b`** 与已正式发行的 **Super 2.3.18**。完整功能证据、新差距及边界见[当前详细对照](docs/reference/comparison-2.3.18-serpent-0.2.10.md)、[当前已知问题](docs/reference/known-issues-2.3.18.md)及[真实开发决策](docs/POST_DEVELOPMENT_DECISIONS.md)。
-
-| 对比维度 | Serpent 0.2.10 | Super Lib 2.3.18 | 结论与边界 |
-| --- | --- | --- | --- |
-| 本地库、WebDAV、基础 AI/智能合集、插件/MCP、3D/PDF | 已有内置能力 | 保留并独立扩展 | 共同基础，不列为 Super 独有 |
-| Emoji 与图标外观 | 分类 Emoji、装饰图形、颜色及更多工作区外观 | 本轮借鉴 11 类/200 个 Emoji，24 个内置图形、8 色、分类搜索；兼容旧 Emoji 偏好 | 文件夹/合集/智能合集可用；仅本机偏好，不宣称与上游完整图形/标签页能力等价 |
-| 子项拖到直接父项 | 有侧栏层级管理，本轮未同操作运行对照 | 子项提升一级；顶层父项对应根目录；合集同级重排、跨级移动及撤销保留 | 按用户需求修正，不把未经复测的上游行为列作缺陷 |
-| JFIF / AVIF / FLV | 已有对应格式路径 | 本轮补导入、格式筛选、真实缩略图与预览路径 | JFIF/AVIF 原图；FLV 保留按需 FFmpeg 代理回退，不承诺原生播放所有编码 |
-| 链接源保护与同步路径 | 默认解除引用、区分缺失与删除，支持路径动作 | 上一阶段 U01/U02/U05 修正默认保留外部源、持久删除意图及路径移动 | 同步不是备份；真实 WebDAV、多写者事务仍未完整验收 |
-| 悬浮参考窗 | 无对应内置独立参考窗管线 | 图片/PDF 独立置顶窗口，成功显示后最小化主窗 | Super 的明确差异，非所有媒体都支持 |
-| 更新下载 | GitHub 完整包选择 | 精确来源版本 delta，保留 20 个来源，失败回退完整包 | Super 交付增强；下载收益取决于来源版本与改动 |
-| 更新结束体验 | 标准安装器 Run 入口 | 完成态提示、自动打开软件、失败可重试、延期包启动复核 | Super 针对本对话更新需求的闭环 |
-| AI 使用范围及结果审核 | 自动分析/搜索与任务进度 | 目录粒度自动分析开关、批次结果审核、重分析新旧结果取舍 | 不称上游缺少 AI；真实供应商调用本轮未测试 |
-| SolidWorks | 无对应专门内置分类路径 | SLDPRT/SLDASM/SLDDRW 分类/筛选与格式缩略图策略 | 识别而非原生 CAD 几何解码，仍需外部软件 |
-| 构建/发布可追溯性 | 发布 pipeline、校验和 | 额外输入快照、最终包 receipt、附件集合门禁 | 工程增强，不等于代码签名或安全审计全通过 |
-| 任意取色、音频封面与波形、GIF 控制、字体预览 | 发布源码已有相应增强 | 任意 HEX/容差包含排除；嵌入封面/波形开关；GIF 暂停逐帧；字体样例与卸载 | 有界解码；字体用通用卡片图标，不宣称生成字体缩略图；损坏/超限降级 |
-| 工作区、目录与检索 | 已有工作区/目录/检索增强 | 最多 6 个独立会话工作区；目录索引 Inspector、侧栏过滤排序、搜索历史、PNG 内嵌生成信息与批量建目录 | 会话工作区不跨重启持久化；生成标记不等于判断图片是否 AI 生成 |
-| AI 元数据同步、明确图片写回、大内容分块/队列预算 | 已有对应后续方向 | 人工/AI 分层元数据三路合并与取消；明确图片写回、原字节撤销；1 MiB 分块与 RPC 队列预算 | Mock 双设备/真实本地管线已验收；真实多写者 WebDAV/NAS 仍待专项；F15 账号/官方目录及 ECS 迁移继续暂停 |
-
-| Markdown 渲染、ZIP 成员预览、自选目录图片封面 | 0.2.10 新增 | 暂无完整等价入口 | 已确认差距 G01–G03 |
-| 缺失链接统一隐藏、选择器记忆、25% 视频取帧、近边控件 | 0.2.10 增强 | 相近功能尚未完整等价 | G04–G07；全屏切图等另列待验证 |
-
-### 有证据的优化收益，而非未经实测的“全面超越”
-
-| 测量对象 | 已记录的 Super 自身优化 | 与 Serpent 的结论 |
-| --- | --- | --- |
-| 20,001 行库中单项导入后的结果读取 | 历史同机夹具：全库结果管线中位数 **69.7 ms → 局部读取 13.7 ms**；整次导入仍为 273.7 ms | [原始测量及范围](docs/plans/2026-10-07-performance-first-pass.md)；没有同机 Serpent 数据，不推出整次导入五倍提速 |
-| 安装器与程序文件体积 | v2.3.7→v2.3.8：安装器 **229.83→190.15 MiB（-17.26%）**，程序文件少约 45.63 MiB | [历史成品证据](docs/releases/v2.3.8-validation.md)；不是当前版本对上游的包体/RSS基准 |
-| 一次精确版本增量下载 | v2.3.17→v2.3.18 delta ZIP **3,527,895 字节**，完整 ZIP 198,779,769 字节（约 1.775%） | [发布附件证据](docs/releases/v2.3.18-validation.md)；是这一次交付的数据，来源不匹配仍用完整包 |
-| 虚拟列表、可见缩略图、原图优先/按需代理 | 双方都有相关优化；本轮新增格式沿用 Super 现有有界队列，不全量预转码 | 尚无同机同库 FPS、峰值 RSS、慢盘/NAS 或完整导入对照；不声称性能全面超越 |
-
-测量范围与同条件对照方案见[性能证据文档](docs/reference/performance-evidence.md)。
-
-借鉴说明：Super Lib 基于原开源项目 [dolag233/Serpent](https://github.com/dolag233/Serpent) v0.1.4进行借鉴与后续开发，感谢原作者及贡献者，并继续以 [MIT 许可证](LICENSE) 开源。
+[项目来源与历史技术记录](docs/reference/ORIGINS_AND_TECHNICAL_HISTORY.md)

@@ -12,7 +12,7 @@
 
 ## 0. 范围与执行约束
 
-审查版本2.3.16，HEAD `67298c17d792070b09adc05d5a3af3cac722ff4f`，发行源码 `ac4c244edd3074b2fc643ddeedf19ab4714fbe65`。所有路径相对 **C:/Users/Administrator/Desktop/Super-main**；用户环境曾指向失效的 Serpent-main，不复用旧cwd。
+审查版本2.3.16，HEAD `67298c17d792070b09adc05d5a3af3cac722ff4f`，发行源码 `ac4c244edd3074b2fc643ddeedf19ab4714fbe65`。所有路径相对 **C:/Users/Administrator/Desktop/Super-main**；用户环境曾指向失效的 旧工作区目录，不复用旧cwd。
 
 必读：
 

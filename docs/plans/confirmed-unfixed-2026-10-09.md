@@ -1,34 +1,34 @@
 # Super Lib：确认仍未修复的问题清单（2026-10-09）
 
-> 后续实施状态见[软件本体补齐结果](../reference/completion-results-2026-10-10.md)。本页历史复现/上游固定版本事实保留，不因修复反向改写。
+> 后续实施状态见[软件本体补齐结果](../reference/completion-results-2026-10-10.md)。本页历史复现事实保留，不因修复反向改写。
 
 > **后续状态更新（2026-10-10）**：下文保留 2.3.17 修复前快照。U01–U08 的后续修复已随 [2.3.18 发行](../releases/v2.3.18-validation.md)交付；原复现结果不反向改写。当前真实失败及验收缺口见[2.3.18 已知问题](../reference/known-issues-2.3.18.md)。仍使用旧 2.3.17 的用户按下文安全提醒处理。
 
-> **8 项；本轮只诊断、复现、记录，不修改产品行为。** 基线为 Super Lib 2.3.17，源码提交 `fcf074d6e771fb69394f30dcdb79d531848a51c7`。这些是本次测试实际失败的独立问题，不是把上游发行说明直接复制成待办。
+> **8 项；本轮只诊断、复现、记录，不修改产品行为。** 基线为 Super Lib 2.3.17，源码提交 `fcf074d6e771fb69394f30dcdb79d531848a51c7`。这些是本次测试实际失败的独立问题，不将未复现的猜测算作缺陷。
 
-关联：[上游发行逐项对照与验证边界](../reference/serpent-followup-audit-2026-10-09.md) · [Super Lib 差异化能力](../reference/superlib-differentiators-2026-10-09.md) · [历史决策](../POST_DEVELOPMENT_DECISIONS.md)。
+关联：[历史决策](../POST_DEVELOPMENT_DECISIONS.md)。
 
 ## 先看结论与使用提醒
 
-| ID | 优先级 | 确认的问题 | 本次实际结果 | 上游对应节点 |
-| --- | --- | --- | --- | --- |
-| U01 | P0 | 链接文件夹的“移入回收站”仍会移动外部源文件和目录 | 临时源目录消失；模拟系统回收站接口被调用 3 次 | [0.2.4](https://github.com/dolag233/Serpent/releases/tag/v0.2.4) |
-| U02 | P0 | 同步把暂时缺失的本地文件当成删除 | 第二轮同步删除内存远端的文件，`remoteDeletes=1`，并写墓碑 | [0.2.4](https://github.com/dolag233/Serpent/releases/tag/v0.2.4) |
-| U03 | P2 | 红色筛选误包含零饱和度灰色 | 真实 SQL 返回 `gray` 和 `red`，而不只是 `red` | [0.2.6](https://github.com/dolag233/Serpent/releases/tag/v0.2.6) |
-| U04 | P1 | 非整数的正数 EXIF 尺寸能污染资产列表响应 | 返回 `1.5×2.5`，`assetSummarySchema` 校验失败 | [0.2.8](https://github.com/dolag233/Serpent/releases/tag/v0.2.8)，同类尺寸防护遗漏，不是原始照片一比一复现 |
-| U05 | P1 | 只改路径、不改内容的资产不会生成同步路径动作 | `old.txt → new.txt` 且哈希不变，计划返回空数组 | [0.2.1](https://github.com/dolag233/Serpent/releases/tag/v0.2.1)，[0.2.3](https://github.com/dolag233/Serpent/releases/tag/v0.2.3) |
-| U06 | P2 | GBK 中文文本预览乱码 | `D6 D0 CE C4` 经真实文本读取返回 4 个替换字符，而非“中文” | [0.2.6](https://github.com/dolag233/Serpent/releases/tag/v0.2.6) |
-| U07 | P2 | 仅凭文件名给普通图片加灰度/反相显示 | `photo_roughness.png` 被推断为标量贴图，产生 `grayscale(1)` | [0.2.5](https://github.com/dolag233/Serpent/releases/tag/v0.2.5) |
-| U08 | P2 | 磁盘对账仍会自动合并连号图片 | 未经过显式导入确认的 3 张新增图片，被列表投影为一项 3 帧序列 | [0.2.6](https://github.com/dolag233/Serpent/releases/tag/v0.2.6) |
+| ID | 优先级 | 确认的问题 | 本次实际结果 |
+| --- | --- | --- | --- |
+| U01 | P0 | 链接文件夹的“移入回收站”仍会移动外部源文件和目录 | 临时源目录消失；模拟系统回收站接口被调用 3 次 |
+| U02 | P0 | 同步把暂时缺失的本地文件当成删除 | 第二轮同步删除内存远端的文件，`remoteDeletes=1`，并写墓碑 |
+| U03 | P2 | 红色筛选误包含零饱和度灰色 | 真实 SQL 返回 `gray` 和 `red`，而不只是 `red` |
+| U04 | P1 | 非整数的正数 EXIF 尺寸能污染资产列表响应 | 返回 `1.5×2.5`，`assetSummarySchema` 校验失败 |
+| U05 | P1 | 只改路径、不改内容的资产不会生成同步路径动作 | `old.txt → new.txt` 且哈希不变，计划返回空数组 |
+| U06 | P2 | GBK 中文文本预览乱码 | `D6 D0 CE C4` 经真实文本读取返回 4 个替换字符，而非“中文” |
+| U07 | P2 | 仅凭文件名给普通图片加灰度/反相显示 | `photo_roughness.png` 被推断为标量贴图，产生 `grayscale(1)` |
+| U08 | P2 | 磁盘对账仍会自动合并连号图片 | 未经过显式导入确认的 3 张新增图片，被列表投影为一项 3 帧序列 |
 
 优先级是本次维护建议：P0 表示应先处理的数据安全路径，并非已证明用户发生真实数据损失。**现在不要对真实链接目录使用“移入回收站”作试验；仅取消引用请用“从库中移除”。未解决 U02 前，不要在本地文件缺失、磁盘离线或库路径搬移过程中强行执行同步。** 手工备份应独立于可能传播删除的同步目标。
 
 ## 复现方法与安全边界
 
-[独立审计用例](../../tests/audit/serpent-followup.test.ts)使用真实本地产品模块；[独立配置](../../vitest.serpent-audit.config.ts)不匹配日常 `vitest.config.ts` 的 `tests/{unit,worker}`。
+[独立审计用例](../../tests/audit/library-safety-audit.test.ts)使用真实本地产品模块；[独立配置](../../vitest.history-audit.config.ts)不匹配日常 `vitest.config.ts` 的 `tests/{unit,worker}`。
 
 ```powershell
-node scripts/run-vitest-with-electron.mjs run --config vitest.serpent-audit.config.ts --reporter=verbose
+node scripts/run-vitest-with-electron.mjs run --config vitest.history-audit.config.ts --reporter=verbose
 ```
 
 当前结果：**10 个用例，8 失败、2 通过，退出码 1**。这是缺陷清单对应的真实红灯，不是构建/发布成功报告。修复后应让正确行为断言通过，而不是把断言改成接受错误结果。
@@ -70,21 +70,21 @@ node scripts/run-vitest-with-electron.mjs run --config vitest.serpent-audit.conf
 
 - **触发步骤**：EXIF 解析器返回宽高 `1.5,2.5`，源帧头合法 `1×1`；生成 RAW 缩略图后读取资产列表。
 - **执行证据**：[normalizeRawImageMetadata](../../src/worker/raw-image-metadata.ts) 接受有限非整数；[persistRawImageMetadata](../../src/worker/library-service.ts)用 `metadata.width ?? headerSize.width` 存库；`assetSummaryFromRow` 仅 `>0`；[协议](../../src/shared/asset-types.ts)要求 `.int().positive()`。
-- **实际**：列表响应带小数，整个数组校验失败。上游最新 `usablePixelDimension` 和 `resolvedExtractedPixelSize` 对尺寸采取正整数及整对帧头回退。
-- **已经防住的部分**：本轮另一次零尺寸探测返回 `null×null`，协议校验成功。**不能把上游“零 EXIF 导致目录打不开”原样当作 Super Lib 当前缺陷。** 零值仍可能遮掉真实帧头，但此清单的失败断言针对非整数响应污染。
+- **实际**：列表响应带小数，整个数组校验失败。验收要求是正整数及有效的成对帧头回退。
+- **已经防住的部分**：本轮另一次零尺寸探测返回 `null×null`，协议校验成功。**不能将未复现的零 EXIF 故障当作本轮已确认缺陷。** 零值仍可能遮掉真实帧头，但此清单的失败断言针对非整数响应污染。
 - **验收要求**：解析、持久化、投影统一正整数约束；无效成对尺寸使用有效源头回退。添加零、负数、小数、NaN、单边损坏与正常 RAW/TIFF/JPEG；以真实坏照片完成 UI 端补充验收。
 
 ## U05：同步只比较内容哈希，漏掉路径变化
 
 - **触发步骤**：上次两端条目均为 `old.txt`；本地当前改为 `new.txt`，内容哈希相同；调用真实 `planSyncActions`。
-- **实际**：空动作数组。规划器的双方已知分支只检查哈希，没有路径比较；执行器也没有 `move-remote/relocate-local` 动作类型。上游在 0.2.1 加入 MOVE，0.2.3 补同步移动后的目录与视图收口。
+- **实际**：空动作数组。规划器的双方已知分支只检查哈希，没有路径比较；执行器也没有 `move-remote/relocate-local` 动作类型。应补齐路径动作，并在执行后收口目录与视图状态。
 - **影响**：搬移整理无法正确反映到另一端。只修改内容与路径时也必须确认新路径写回，不能只补一个路径单元测试。
 - **验收要求**：本地/远端单侧改路径、双侧改路径、路径与内容同时变化、同名占用及远端空目录清理；远端不支持 MOVE 时有安全降级。本次证明漏规划，未对真实服务端执行 MOVE。
 
 ## U06：GBK 被无条件按 UTF-8 解码
 
 - **触发步骤**：导入 GBK 编码“中文”的四个字节，打开文本预览。
-- **执行证据**：[readTextAsset](../../src/worker/library-service.ts) `slice.toString('utf8')`，未走上游新增的编码识别。
+- **执行证据**：[readTextAsset](../../src/worker/library-service.ts) `slice.toString('utf8')`，缺少编码识别。
 - **实际**：出现替换字符；同一服务读取 UTF-8 中文正对照通过。
 - **验收要求**：UTF-8/BOM/GBK/GB18030/UTF-16 分别验证；二进制拒绝和截断边界正确。编辑保存必须明确编码策略，不能静默损坏源文本。当前已确认显示乱码，不宣称本轮实际发生保存损坏。
 
@@ -105,6 +105,6 @@ node scripts/run-vitest-with-electron.mjs run --config vitest.serpent-audit.conf
 ## 不混进这 8 项的内容
 
 - 旧 [follow-up-fixes](follow-up-fixes.md) 与发行记录中的历史失败不自动视为今天仍未修复；本轮没有重跑全量历史失败套件。需继续验证的路径见审查报告。
-- JFIF/AVIF/字体/FLV、任意取色相似度等上游新增能力，与“原功能损坏”不同，放在功能差异表，不通过改命名扩大缺陷数量。
+- JFIF/AVIF/字体/FLV、任意取色相似度等新增方向与“原功能损坏”不同，不计入本页八项已复现缺陷。
 - NAS 阻塞、长期写租约、Windows 原生对话框焦点、macOS 启动、第三方 AI/WebDAV/插件问题未全部实机复现；仍明确标为待验收，不能从 278 项专项通过推出全部已修复。
 - 本轮不提升版本号、不打包、不发布安装器、不更新 ECS；完成的是审计产物与既有 MIT/历史文档的 Git 同步。

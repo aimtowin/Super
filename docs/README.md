@@ -8,8 +8,6 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| [当前 Super 2.3.18 / Serpent 0.2.10 对照](reference/comparison-2.3.18-serpent-0.2.10.md) | 共同基础、增强、上游新差距与待验收项 |
-| [性能证据](reference/performance-evidence.md) | 自身测量与未测范围 |
 | [当前已知问题](reference/known-issues-2.3.18.md) · [文档审查](reference/documentation-review-2.3.18.md) | 成品 Console 实际失败、验证缺口与修订依据 |
 | [2.3.18 更新说明](releases/v2.3.18.md) · [验收记录](releases/v2.3.18-validation.md) | 本轮功能、关联修复、升级边界；已正式发行，保留候选检查点与最终上线证据 |
 | [完整图文功能指南](user-guide/features.md) | 2.3.17 安装版实拍与 2.3.18 源码补齐章节，入口、步骤及真实限制 |
@@ -17,8 +15,6 @@
 | [阶段 1 历史检查点](reference/followup-phase1-results-2026-10-09.md) · [分阶段升级计划](plans/2026-10-09-followup-upgrades.md) | 当时 8 项修复及验证限制；当前交付事实以顶部补齐结果和发行记录为准 |
 | [软件本体升级首批](reference/local-upgrades-results-2026-10-10.md) · [本轮计划](plans/2026-10-10-local-upgrades.md) | 分类 Emoji/图形颜色、父项拖拽提升、合集撤销修正及 JFIF/AVIF/FLV；历史首批检查点；后续补齐见页面顶部当前结果，账号/目录/迁移继续暂停 |
 | [修复前确认未修复清单](plans/confirmed-unfixed-2026-10-09.md) | 保留 8 项实际失败复现与已发行 2.3.17 安全提醒，不覆盖历史证据 |
-| [上游修复逐项审计](reference/serpent-followup-audit-2026-10-09.md) | Serpent 0.1.4 后十个公开发行节点，源码对照与验证边界 |
-| [Super Lib 差异化能力](reference/superlib-differentiators-2026-10-09.md) | 原 0.2.9 / 2.3.17 时点证据；当前结论见新版对照 |
 | [快速上手](user-guide/quick-start.md) | 下载安装、创建本地资产库、可选 AI 与外观配置 |
 | [外观设置](user-guide/appearance.md) | 深浅主题、背景图片、字体大小与实拍截图 |
 | [使用手册](user-guide/README.md) | 安装、导入、浏览、搜索与过滤、标签/合集、查看器、AI 分析、插件/MCP、故障排查（中英双语） |

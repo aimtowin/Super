@@ -1,4 +1,4 @@
-// Emoji grouping adapted from dolag233/Serpent v0.2.9 (MIT), f58701a6.
+// Adapted emoji grouping (MIT); original attribution is retained in project history and LICENSE.
 // Uses existing Super icon artwork; does not execute or embed remote SVG.
 import type { IconName } from "./Icons";
 export interface SidebarAppearanceGroup<T extends string = string> { readonly id: string; readonly labelKey: string; readonly items: readonly T[]; }

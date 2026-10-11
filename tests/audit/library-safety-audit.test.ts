@@ -23,7 +23,7 @@ const services: LibraryService[] = [];
 const initialOiioPath = process.env['SUPER_OIIO_PATH'];
 
 function fixture(options: ConstructorParameters<typeof LibraryService>[0] = {}) {
-  const root = mkdtempSync(path.join(tmpdir(), 'super-serpent-audit-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'super-library-safety-audit-'));
   ownedRoots.push(root);
   const service = new LibraryService(options);
   services.push(service);
@@ -47,7 +47,7 @@ afterEach(() => {
   else process.env['SUPER_OIIO_PATH'] = initialOiioPath;
   for (const root of ownedRoots.splice(0)) {
     // Only roots returned by our own mkdtemp, outside the repository/library.
-    if (path.dirname(root) !== path.resolve(tmpdir()) || !path.basename(root).startsWith('super-serpent-audit-')) {
+    if (path.dirname(root) !== path.resolve(tmpdir()) || !path.basename(root).startsWith('super-library-safety-audit-')) {
       throw new Error('Refusing to clean a non-owned audit fixture');
     }
     rmSync(root, { recursive: true, force: true });
@@ -74,7 +74,7 @@ class MemoryRemote implements RemoteStorageDriver {
   }
 }
 
-describe('Serpent post-0.1.4 audit — desired behaviour, known failures stay red', () => {
+describe('Library safety audit — desired behaviour and regression coverage', () => {
   it('U01 linked-folder trash must not move external sources', async () => {
     const calls: string[] = [];
     const { root, service, library } = fixture({ trashItem: async (source) => {

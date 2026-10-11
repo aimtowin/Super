@@ -1,5 +1,7 @@
 # 2.3.18 文档逐文件审查索引
 
+时点说明：以下数量与分类保留 2026-10-10 审查快照。2026-10-11 已将来源与技术比较资料集中归档，并移除其分散导航；本表不再列出已移出的四个专门说明。当前完整文件集以 Git 跟踪文件和文档检查工具输出为准。
+
 范围：GitHub `aimtowin/Super` 的 main Markdown，原始基线 `a4b18f4` 的 153 份，加本轮 6 份新说明，共 159 份。Markdown 原文与引用完整遍历；当前说明核对重点是入口、变更行为及关键 API，历史与第三方许可不作全产品重新验收或法律有效性判断。报告见[审查说明](documentation-review-2.3.18.md)。
 
 分类数量：当前说明 50；许可 6；历史证据 85；截图证据 6；测试说明 12。
@@ -78,7 +80,6 @@
 | [docs/plans/follow-up-fixes.md](../../docs/plans/follow-up-fixes.md) | 历史证据 | 保留；引用及用途检查 |
 | [docs/product-brief.md](../../docs/product-brief.md) | 历史证据 | 保留；引用及用途检查 |
 | [docs/reference/automatic-update-porting-guide.md](../../docs/reference/automatic-update-porting-guide.md) | 当前说明 | 修订 / 新建；引用检查 |
-| [docs/reference/comparison-2.3.18-serpent-0.2.10.md](../../docs/reference/comparison-2.3.18-serpent-0.2.10.md) | 当前说明 | 修订 / 新建；引用检查 |
 | [docs/reference/completion-results-2026-10-10.md](../../docs/reference/completion-results-2026-10-10.md) | 历史证据 | 保留；引用及用途检查 |
 | [docs/reference/documentation-inventory-2.3.18.md](../../docs/reference/documentation-inventory-2.3.18.md) | 当前说明 | 修订 / 新建；引用检查 |
 | [docs/reference/documentation-review-2.3.17.md](../../docs/reference/documentation-review-2.3.17.md) | 历史证据 | 保留；引用及用途检查 |
@@ -86,9 +87,6 @@
 | [docs/reference/followup-phase1-results-2026-10-09.md](../../docs/reference/followup-phase1-results-2026-10-09.md) | 历史证据 | 保留；引用及用途检查 |
 | [docs/reference/known-issues-2.3.18.md](../../docs/reference/known-issues-2.3.18.md) | 当前说明 | 修订 / 新建；引用检查 |
 | [docs/reference/local-upgrades-results-2026-10-10.md](../../docs/reference/local-upgrades-results-2026-10-10.md) | 历史证据 | 保留；引用及用途检查 |
-| [docs/reference/performance-evidence.md](../../docs/reference/performance-evidence.md) | 当前说明 | 修订 / 新建；引用检查 |
-| [docs/reference/serpent-followup-audit-2026-10-09.md](../../docs/reference/serpent-followup-audit-2026-10-09.md) | 历史证据 | 修订 / 新建；引用检查 |
-| [docs/reference/superlib-differentiators-2026-10-09.md](../../docs/reference/superlib-differentiators-2026-10-09.md) | 历史证据 | 修订 / 新建；引用检查 |
 | [docs/reference/user-guide-review-2.2.8.md](../../docs/reference/user-guide-review-2.2.8.md) | 历史证据 | 保留；引用及用途检查 |
 | [docs/releases/v2.3.0-validation.md](../../docs/releases/v2.3.0-validation.md) | 历史证据 | 保留；引用及用途检查 |
 | [docs/releases/v2.3.0.md](../../docs/releases/v2.3.0.md) | 历史证据 | 保留；引用及用途检查 |
