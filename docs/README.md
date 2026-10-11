@@ -9,7 +9,8 @@
 | 文档 | 内容 |
 | --- | --- |
 | [当前已知问题](reference/known-issues-2.3.18.md) · [文档审查](reference/documentation-review-2.3.18.md) | 成品 Console 实际失败、验证缺口与修订依据 |
-| [2.3.19 更新说明](releases/v2.3.19.md) · [验收记录](releases/v2.3.19-validation.md) | 最新查看器／资源组织升级；当前发布状态以验收记录为准 |
+| [2.3.20 更新说明](releases/v2.3.20.md) · [验收记录](releases/v2.3.20-validation.md) | 当前侧栏独立加载、恢复排序和全库计数修复；实际上线状态以验收记录为准 |
+| [2.3.19 更新说明](releases/v2.3.19.md) · [验收记录](releases/v2.3.19-validation.md) | 查看器／资源组织升级及原成品侧栏回归历史，不覆盖旧证据 |
 | [2.3.18 更新说明](releases/v2.3.18.md) · [验收记录](releases/v2.3.18-validation.md) | 前轮本体补齐及正式发行证据 |
 | [完整图文功能指南](user-guide/features.md) | 2.3.17 安装版实拍、2.3.18 源码补齐及 2.3.19 实际成品新查看器，入口、步骤及真实限制 |
 | [后续开发决策与优化里程碑](POST_DEVELOPMENT_DECISIONS.md) | 真实决策演变、逐版修复、对话索引、验证限制及待办边界 |
