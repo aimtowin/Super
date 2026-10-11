@@ -82,3 +82,7 @@ Worker 专项文件：`bounded-write-command`、`viewer-library-upgrades`、`vid
 真实进程最终运行前已通过 `scripts/run-e2e-isolated.mjs` 重建生产式 `.vite` 文件入口，再用相同入口执行最终 Playwright 回归。该入口不是已签名安装包。
 
 许可与独立品牌边界：未改动 README 底部唯一来源入口或 LICENSE 必要版权；新增 Markdown 组件 MIT 署名加入 `THIRD_PARTY_NOTICES.md`。未进行 Git 提交、推送、版本号变更、Release 或 ECS 操作。
+
+### 后续发布授权
+
+上述记录是源码升级完成时的历史状态。用户随后明确要求推送、打包、发布，并要求继续执行；本轮版本定为 2.3.19，发布范围包括 GitHub 和此前确认的旧 ECS 自动更新源，不恢复整机迁移或账号服务。发布前全量回归另外发现并修复旧库封面降级和标签导航竞态，完整结果统一追加至[2.3.19 发布验证](../releases/v2.3.19-validation.md)，不以准备状态冒充上线。

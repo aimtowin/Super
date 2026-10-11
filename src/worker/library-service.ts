@@ -13651,6 +13651,11 @@ export class LibraryService {
     const library = this.requireOpenLibrary(input.libraryId);
     const entries = this.listDefaultFolderBrowseEntries(input);
     if (!hasTable(library.connection, 'folder_covers') || entries.length === 0) return entries;
+    // Lenient/read-only libraries may retain covers but lack artifact state.
+    // Keep the existing fallback instead of making folder browsing fail.
+    const artifactColumns = columnsFor(library.connection, 'revision_artifacts');
+    if (!['revision_id', 'artifact_id', 'kind', 'status', 'invalidated_at', 'generated_at']
+      .every(column => artifactColumns.has(column))) return entries;
     // One bounded query, not a separate asset/thumbnail lookup for each folder.
     const custom = library.connection.prepare(`
       SELECT c.folder_id, a.asset_id, ar.artifact_id FROM folder_covers c

@@ -115,7 +115,7 @@ const closeFixtures: Array<() => Promise<void>> = [];
 function fixture(primaryDeferred = false) {
   const journal: string[] = [];
   const states = new Map<string, unknown>();
-  const bindings: Record<string, unknown> = {};
+  const bindings: Record<string, unknown> = { previewAsset: null };
   const initial: Record<string, unknown> = {
     setAssets: [], setTrashedAssets: [], setFolders: [], setLinkedFolders: [], setTags: [], setCollections: [], setSmartCollections: [], setTrashedFolders: [],
     setAllAssetCount: 0, setRootAssetCount: 0, setTrashedAssetCount: 0, setSearchTotal: null, setSearchOffset: 0,
@@ -215,6 +215,31 @@ afterEach(async () => {
 });
 
 describe("actual App navigation invalidates old background publication", () => {
+  it("chooseTag commits navigation without awaiting an absent preview", async () => {
+    const host = fixture();
+    const closing = deferred<void>();
+    host.bindings.closeAssetPreview = vi.fn(() => closing.promise);
+    const navigate = compileActual<(id: string) => Promise<unknown>>("chooseTag", host.bindings);
+    await navigate("tag");
+    expect(host.states.get("setShowTagManagement")).toBe(false);
+    expect(host.states.get("setActiveTagId")).toBe("tag");
+    closing.resolve();
+  });
+
+  it("chooseTag still waits for an open preview and rejects a superseded owner", async () => {
+    const host = fixture();
+    const closing = deferred<void>();
+    host.bindings.previewAsset = card("preview");
+    host.bindings.closeAssetPreview = vi.fn(() => closing.promise);
+    const navigate = compileActual<(id: string) => Promise<unknown>>("chooseTag", host.bindings);
+    const navigation = navigate("tag");
+    expect(host.states.get("setActiveTagId")).toBeNull();
+    host.metadataSessionRef.current = host.metadataController.activateSession(host.library);
+    closing.resolve();
+    await navigation;
+    expect(host.states.get("setActiveTagId")).toBeNull();
+  });
+
   it.each(["executeSearchDefinition", "chooseTag", "chooseCollection", "handleSearchTagsFromManagement"])("%s prevents a late old primary from replacing the new page", async (name) => {
     const host = fixture(true);
     const old = host.track(host.load(host.library, "all", { awaitHydration: true }));

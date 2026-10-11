@@ -20,10 +20,18 @@ test('real viewer: Markdown, readonly ZIP, custom covers, proximity chrome and f
   await sharp({ create: { width: 40, height: 30, channels: 3, background: '#227744' } }).png().toFile(path.join(linkedSource, 'live.png'));
   await sharp({ create: { width: 40, height: 30, channels: 3, background: '#aa2244' } }).png().toFile(path.join(linkedSource, 'gone', 'missing.png'));
   const applicationDirectory = process.env.SUPER_E2E_APP_DIRECTORY ?? process.cwd();
-  const application = await electron.launch({ executablePath: resolveElectronExecutablePath(), args: [applicationDirectory], cwd: applicationDirectory,
+  const packaged = process.env.SUPER_E2E_PACKAGED_EXECUTABLE;
+  const application = await electron.launch({ executablePath: packaged ?? resolveElectronExecutablePath(), args: packaged ? [] : [applicationDirectory], cwd: applicationDirectory,
     env: { ...process.env, SUPER_E2E: '1', SUPER_E2E_CREATE_PARENT_PATH: root,
       SUPER_E2E_USER_DATA_PATH: path.join(root, 'user-data'), SUPER_E2E_LINKED_SOURCE: linkedSource, SUPER_E2E_IMPORT_FILES: files.join(path.delimiter) } });
   try {
+    if (packaged) await application.evaluate(({ dialog }, paths) => {
+      dialog.showOpenDialog = async (...args: unknown[]) => {
+        const options = args.at(-1) as { title?: string; properties?: string[] };
+        const create = options.title === 'Create Library' || options.title === '创建资源库';
+        return { canceled: false, filePaths: create ? [paths.root] : options.properties?.includes('openDirectory') ? [paths.linkedSource] : paths.files };
+      };
+    }, { root, linkedSource, files });
     const page = await application.firstWindow();
     await dismissQuickStart(page);
     await page.getByRole('button', { name: '创建资源库', exact: true }).click();

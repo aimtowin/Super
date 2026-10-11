@@ -86,11 +86,15 @@ describe('explicit deletion vs index loss', () => {
     f.service.trashAssets({ libraryId: f.libraryId, assetIds: [asset.assetId] }); f.service.closeAll();
     const db = new Sqlite(path.join(f.library.libraryPath, '.super', 'library.db'));
     try {
-      db.exec(`DROP TABLE revision_generation_info;
-        DELETE FROM schema_migrations WHERE version = 51;
+      // Build a genuine v49 fixture. Leaving the v52 journal entry while
+      // forcing user_version=49 is an inconsistent database, which the
+      // production availability checks correctly refuse to open.
+      db.exec(`DROP TRIGGER folder_cover_managed_cleanup;
+        DROP TRIGGER folder_cover_linked_cleanup; DROP TABLE folder_covers;
+        DROP TABLE revision_generation_info;
         DROP TRIGGER sync_asset_trashed; DROP TRIGGER sync_asset_restored;
         DROP TABLE sync_deleted_assets; DROP TABLE sync_restored_assets;
-        DELETE FROM schema_migrations WHERE version = 50; PRAGMA user_version = 49;`);
+        DELETE FROM schema_migrations WHERE version >= 50; PRAGMA user_version = 49;`);
     } finally { db.close(); }
     f.service.openLibrary(f.library.libraryPath);
     expect(f.service.syncSnapshot(f.libraryId).deletedSyncIds).toContain(syncId);

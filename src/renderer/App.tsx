@@ -4616,7 +4616,10 @@ function AppInner() {
     const isCurrent = () => metadataController.isCurrent(owner)
       && generation === contentLoadGenerationRef.current;
     setContentLoading((current) => isCurrent() ? false : current);
-    await closeAssetPreview(false);
+    // Closing an absent preview is synchronous. Do not yield to a queued
+    // background hydration before committing this explicit navigation.
+    const closing = closeAssetPreview(false);
+    if (previewAsset) await closing;
     if (!isCurrent()) return;
     closeContextMenu();
     workspaceCanvasRef.current?.scrollTo({ top: 0, left: 0 });
