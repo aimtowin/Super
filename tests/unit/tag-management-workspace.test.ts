@@ -21,6 +21,38 @@ describe("TagManagementWorkspace create flow", () => {
     vi.restoreAllMocks();
   });
 
+  it("keeps the selection status slot mounted outside the wrapping toolbar", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(createElement(LocaleProvider, null, createElement(TagManagementWorkspace, {
+        busy: false,
+        onCreate: async () => true,
+        onDeleteMany: async () => true,
+        onMerge: async () => true,
+        onOpenTag: () => undefined,
+        onRename: async () => true,
+        onSearchTags: () => undefined,
+        tags: [{ tagId: "alpha", name: "alpha", assetCount: 0 }],
+      })));
+    });
+    const status = container.querySelector(".tag-management-selection");
+    expect(status?.getAttribute("aria-live")).toBe("polite");
+    expect(status?.closest(".tag-management-toolbar")).toBeNull();
+    expect(status?.querySelector("button")).toBeNull();
+    await act(async () => {
+      container?.querySelector<HTMLElement>(".tag-management-chip")?.click();
+    });
+    expect(container.querySelector(".tag-management-selection")).toBe(status);
+    expect(status?.querySelector("button")).not.toBeNull();
+    await act(async () => {
+      status?.querySelector<HTMLButtonElement>("button")?.click();
+    });
+    expect(container.querySelector(".tag-management-selection")).toBe(status);
+    expect(status?.querySelector("button")).toBeNull();
+  });
+
   it("does not clear a newer draft when an earlier create finishes", async () => {
     let resolveFirstCreate: ((result: boolean) => void) | undefined;
     const onCreate = vi.fn((name: string) => {

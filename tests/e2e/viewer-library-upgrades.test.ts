@@ -109,10 +109,14 @@ test('real viewer: Markdown, readonly ZIP, custom covers, proximity chrome and f
     // Current preview only, irrespective of any previous browse selection.
     await page.keyboard.press('Delete'); await expect(viewer).toHaveCount(0);
     expect(await page.evaluate(() => document.fullscreenElement === null)).toBe(true);
-    const remaining = await page.evaluate(async libraryId => {
+    // Preview teardown precedes the asynchronous Worker trash operation.
+    // Wait for the actual mutation, not just the viewer disappearing.
+    const readRemaining = () => page.evaluate(async libraryId => {
       const result = await (window as unknown as { super: { library: SuperLibraryApi } }).super.library.searchAssets({ libraryId });
       if (!result.ok) throw Error(result.error.message); return result.value.items.map(item => item.assetId);
     }, folder.libraryId);
+    await expect.poll(async () => (await readRemaining()).length).toBe(3);
+    const remaining = await readRemaining();
     expect(remaining).not.toContain(initialId); expect(remaining).toHaveLength(3);
     await page.evaluate(async libraryId => {
       const result = await (window as unknown as { super: { library: SuperLibraryApi } }).super.library.importFolderAsLinked({ libraryId });

@@ -321,8 +321,11 @@ export function TagManagementWorkspace({
           </button>
         </form>
 
-        {prunedSelectedIds.length > 0 && (
-          <div className="tag-management-selection">
+      </div>
+
+      <div aria-live="polite" className="tag-management-selection">
+        {prunedSelectedIds.length > 0 ? (
+          <>
             <span>
               {t("tagMgmt.selectedCount", {
                 count: prunedSelectedIds.length,
@@ -335,7 +338,9 @@ export function TagManagementWorkspace({
             >
               {t("tagMgmt.clearSelection")}
             </button>
-          </div>
+          </>
+        ) : (
+          <span>{t("tagMgmt.openHint")}</span>
         )}
       </div>
 

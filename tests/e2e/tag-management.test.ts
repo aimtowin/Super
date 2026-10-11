@@ -107,6 +107,7 @@ test("tag management chip grid: create, sort, select, menu, merge, delete", asyn
     await expect(chips.first()).toContainText("beta");
 
     // Plain click selects exactly one chip; Ctrl+click adds to the selection.
+    const unselectedChipBox = await chips.filter({ hasText: "alpha" }).boundingBox();
     await chips.filter({ hasText: "alpha" }).hover();
     await window.mouse.down();
     await expect(window.locator('body')).not.toHaveClass(/is-marquee-active/);
@@ -114,6 +115,10 @@ test("tag management chip grid: create, sort, select, menu, merge, delete", asyn
     await chips.filter({ hasText: "alpha" }).click();
     const selectionIndicator = workspace.getByText(/已选 \d+ 个标签/);
     await expect(selectionIndicator).toHaveText("已选 1 个标签");
+    const selectedChipBox = await chips.filter({ hasText: "alpha" }).boundingBox();
+    expect(unselectedChipBox).not.toBeNull();
+    expect(selectedChipBox).not.toBeNull();
+    expect(Math.abs(selectedChipBox!.y - unselectedChipBox!.y)).toBeLessThan(1);
     const additiveModifier = process.platform === "darwin" ? "Meta" : "Control";
     await chips
       .filter({ hasText: "beta" })

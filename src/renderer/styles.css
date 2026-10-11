@@ -3358,11 +3358,25 @@ input[type="range"] {
 
 .tag-management-selection {
   display: flex;
+  /* Selection must not insert a wrapped toolbar row between double-clicks. */
+  height: 32px;
+  flex-shrink: 0;
   align-items: center;
   gap: 8px;
   margin-left: auto;
   color: var(--secondary);
   font-size: calc(12px * var(--app-font-scale));
+}
+
+.tag-management-selection > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-management-selection > button {
+  flex-shrink: 0;
 }
 
 .tag-management-empty {
