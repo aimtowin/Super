@@ -170,6 +170,7 @@ function fixture(primaryDeferred = false) {
   Object.assign(bindings, {
     api, library, metadataController, metadataSession: metadataSessionRef.current, metadataSessionRef,
     contentLoadGenerationRef, searchRequestGenerationRef: { current: 0 }, backgroundContentRefreshRef,
+    sidebarLoadGenerationRef: { current: 0 }, libraryCountLoadGenerationRef: { current: 0 },
     folderRecursiveRef: { current: false }, folderBrowseScope, BROWSE_PAGE_SIZE, LibraryOperationError, assetSupportsThumbnail,
     registerBrowseSearchPage, beginBrowsePage, hydrateContent, showIgnoredItems: false,
     activeSmartCollectionId: null, smartCollections: [], hasConfiguredSmartCollectionQuery, hasMeaningfulSmartCollectionCondition,
@@ -258,7 +259,7 @@ describe("actual App navigation invalidates old background publication", () => {
     expect(host.errors).not.toHaveBeenCalled();
   });
 
-  it.each(["executeSearchDefinition", "chooseTag", "chooseCollection", "handleSearchTagsFromManagement"])("%s prevents late old hydration from publishing over the new view", async (name) => {
+  it.each(["executeSearchDefinition", "chooseTag", "chooseCollection", "handleSearchTagsFromManagement"])("%s protects the new canvas while allowing independent library hydration", async (name) => {
     const host = fixture();
     const old = host.track(host.load(host.library, "all", { awaitHydration: true }));
     await act(async () => undefined);
@@ -268,10 +269,13 @@ describe("actual App navigation invalidates old background publication", () => {
       : name === "handleSearchTagsFromManagement" ? [["Tag"], "all"] : [name === "chooseTag" ? "tag" : "collection"]));
     const before = [...host.journal];
     for (const item of host.raw) item.resolve(); await old;
-    expect(host.journal).toEqual(before);
+    expect(host.journal.slice(before.length)).toEqual([
+      "setCollections", "setSmartCollections", "setTags", "setFolders", "setTrashedFolders",
+      "setLinkedFolders", "setRootAssetCount", "setTrashedAssetCount",
+    ]);
     expect((host.states.get("setAssets") as AssetSummary[]).map(({ assetId }) => assetId)).toEqual(["new-page"]);
-    expect(host.states.get("setRootAssetCount")).toBe(0);
-    expect(host.states.get("setTrashedAssetCount")).toBe(0);
+    expect(host.states.get("setRootAssetCount")).toBe(901);
+    expect(host.states.get("setTrashedAssetCount")).toBe(901);
     expect(host.errors).not.toHaveBeenCalled();
   });
 });

@@ -1019,6 +1019,10 @@ function AppInner() {
   // generation that is no longer current so stale reads cannot cover the
   // undoable mutation receipt with a misleading error toast.
   const contentLoadGenerationRef = useRef(0);
+  // Library organization/counts outlive a foreground search or sort change.
+  // Separate epochs let count-only navigation preserve a pending sidebar load.
+  const sidebarLoadGenerationRef = useRef(0);
+  const libraryCountLoadGenerationRef = useRef(0);
   const reloadCurrentContentRef = useRef<(options?: { awaitHydration?: boolean }) => Promise<void>>(
     async () => undefined,
   );
@@ -3243,11 +3247,21 @@ function AppInner() {
       const generation = ++contentLoadGenerationRef.current;
       const isCurrent = () => metadataController.isCurrent(owner)
         && generation === contentLoadGenerationRef.current;
-      let hydration: Promise<void> | undefined;
-      setContentLoading(true);
-      try {
       const includeLibraryCounts =
         refreshSidebar || trashMode || scope === "all" || scope === "root";
+      const sidebarGeneration = refreshSidebar
+        ? ++sidebarLoadGenerationRef.current : sidebarLoadGenerationRef.current;
+      const countGeneration = includeLibraryCounts
+        ? ++libraryCountLoadGenerationRef.current : libraryCountLoadGenerationRef.current;
+      const isCurrentSidebar = () => metadataController.isCurrent(owner)
+        && sidebarGeneration === sidebarLoadGenerationRef.current;
+      const isCurrentCounts = () => metadataController.isCurrent(owner)
+        && countGeneration === libraryCountLoadGenerationRef.current;
+      let hydration: Promise<void> | undefined;
+      let scopeTotalAvailable = false;
+      let primaryCompleted = false;
+      setContentLoading(true);
+      try {
       // The Worker is a single synchronous SQLite owner. Keep its only
       // foreground request to the page the user can see; sidebar/count work
       // is deliberately posted after that page has painted below.
@@ -3269,6 +3283,7 @@ function AppInner() {
         if (!isCurrent()) return null;
         throw caught;
       });
+      primaryCompleted = assetResult?.ok === true;
       if (assetResult === null || !isCurrent()) {
         return;
       }
@@ -3291,11 +3306,16 @@ function AppInner() {
       });
       // The current scope's total comes with the foreground page and can be
       // painted now. Global/root/trash counters are non-critical hydration.
-      if (!trashMode && scope === "all" && assetResult.value.totalIsExact !== false) {
-        setAllAssetCount((current) => isCurrent() ? assetResult.value.total : current);
+      scopeTotalAvailable = !opts?.discovery?.search && !opts?.discovery?.filters?.length
+        && assetResult.value.totalIsExact !== false
+        && (scope === "all" ? browseScope === undefined
+          : scope === "root" && browseScope?.kind === "folder"
+            && browseScope.folderId === null && browseScope.recursive === false);
+      if (!trashMode && scope === "all" && scopeTotalAvailable) {
+        setAllAssetCount((current) => isCurrentCounts() ? assetResult.value.total : current);
       }
-      if (!trashMode && scope === "root" && assetResult.value.totalIsExact !== false) {
-        setRootAssetCount((current) => isCurrent() ? assetResult.value.total : current);
+      if (!trashMode && scope === "root" && scopeTotalAvailable) {
+        setRootAssetCount((current) => isCurrentCounts() ? assetResult.value.total : current);
       }
       setSearchTotal((current) => isCurrent() ? assetResult.value.total : current);
       setSearchOffset((current) => isCurrent() ? assetResult.value.offset : current);
@@ -3314,34 +3334,41 @@ function AppInner() {
         total: assetResult.value.total,
         offset: assetResult.value.offset,
       });
-      // Let cards become interactive before posting lower-priority count and
-      // sidebar work. All responses are session/generation guarded; a navigation in
-      // the meantime leaves its current sidebar untouched rather than showing
-      // stale folders or turning a successful browse into an error surface.
-      hydration = hydrateContent({
-        api, libraryId: activeLibrary.libraryId, scope, includeLibraryCounts,
-        refreshSidebar, trashMode, showIgnored: includeIgnored, isCurrent,
-        publish: (update) => {
-          if (!isCurrent()) return;
-          if (update.allAssetCount !== undefined) setAllAssetCount((current) => isCurrent() ? update.allAssetCount! : current);
-          if (update.rootAssetCount !== undefined) setRootAssetCount((current) => isCurrent() ? update.rootAssetCount! : current);
-          if (update.trashedAssetCount !== undefined) setTrashedAssetCount((current) => isCurrent() ? update.trashedAssetCount! : current);
-          if (update.folders !== undefined) setFolders((current) => isCurrent() ? update.folders! : current);
-          if (update.linkedFolders !== undefined) setLinkedFolders((current) => isCurrent() ? update.linkedFolders! : current);
-          if (update.tags !== undefined) setTags((current) => isCurrent() ? update.tags! : current);
-          if (update.collections !== undefined) setCollections((current) => isCurrent() ? update.collections! : current);
-          if (update.smartCollections !== undefined) setSmartCollections((current) => isCurrent() ? update.smartCollections! : current);
-          if (update.trashedFolders !== undefined) setTrashedFolders((current) => isCurrent() ? update.trashedFolders! : current);
-        },
-      }).catch(() => {
-        // Non-critical hydration must not blank an already usable asset page.
-      });
       return assetResult.value.items;
       } finally {
-        // A superseded request must not turn off the loading surface that
-        // belongs to the newer scope/library request.
+        // Foreground ownership still controls the canvas/loading surface.
         if (isCurrent()) {
           setContentLoading((current) => isCurrent() ? false : current);
+        }
+        // Even when a restored sort supersedes the first page, the initial
+        // library sidebar must finish loading. New category refreshes and library
+        // sessions still invalidate it; canvas-only navigation does not.
+        if (primaryCompleted && metadataController.isCurrent(owner) && (isCurrentSidebar() || isCurrentCounts())) {
+          hydration = hydrateContent({
+            api, libraryId: activeLibrary.libraryId, scope,
+            includeLibraryCounts: includeLibraryCounts && isCurrentCounts(),
+            refreshSidebar: refreshSidebar && isCurrentSidebar(),
+            trashMode, showIgnored: includeIgnored, scopeTotalAvailable,
+            isCurrent: () => metadataController.isCurrent(owner),
+            publish: (update) => {
+              if (!metadataController.isCurrent(owner)) return;
+              if (isCurrentCounts()) {
+                if (update.allAssetCount !== undefined) setAllAssetCount((current) => isCurrentCounts() ? update.allAssetCount! : current);
+                if (update.rootAssetCount !== undefined) setRootAssetCount((current) => isCurrentCounts() ? update.rootAssetCount! : current);
+                if (update.trashedAssetCount !== undefined) setTrashedAssetCount((current) => isCurrentCounts() ? update.trashedAssetCount! : current);
+              }
+              if (isCurrentSidebar()) {
+                if (update.folders !== undefined) setFolders((current) => isCurrentSidebar() ? update.folders! : current);
+                if (update.linkedFolders !== undefined) setLinkedFolders((current) => isCurrentSidebar() ? update.linkedFolders! : current);
+                if (update.tags !== undefined) setTags((current) => isCurrentSidebar() ? update.tags! : current);
+                if (update.collections !== undefined) setCollections((current) => isCurrentSidebar() ? update.collections! : current);
+                if (update.smartCollections !== undefined) setSmartCollections((current) => isCurrentSidebar() ? update.smartCollections! : current);
+                if (update.trashedFolders !== undefined) setTrashedFolders((current) => isCurrentSidebar() ? update.trashedFolders! : current);
+              }
+            },
+          }).catch(() => {
+            // Non-critical hydration must not blank an already usable asset page.
+          });
         }
         // Close the foreground loading surface first. Only the background
         // owner waits on this SAME helper lease, including failed raw siblings.
@@ -6240,8 +6267,8 @@ function AppInner() {
     if (!api || !library) return;
     const owner = metadataSessionRef.current;
     if (!metadataController.isCurrent(owner) || owner.libraryId !== library.libraryId) return;
-    // Direct discovery/tag/collection searches share browse generation with
-    // background hydration. A newer visible query owns all of its publications.
+    // Direct queries supersede canvas results, not independent library sidebar
+    // hydration. The captured session still isolates both from a library reopen.
     const generation = ++contentLoadGenerationRef.current;
     const isCurrent = () => metadataController.isCurrent(owner)
       && generation === contentLoadGenerationRef.current;

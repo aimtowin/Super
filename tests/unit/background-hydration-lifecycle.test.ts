@@ -6,10 +6,11 @@ import { createRoot, type Root } from "react-dom/client";
 import ts from "typescript";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AssetSummary, BrowseLayoutEntry, SearchScope } from "../../src/shared/asset-types";
+import type { AssetSummary, BrowseLayoutEntry, FilterClause, SearchQuery, SearchScope } from "../../src/shared/asset-types";
 import type { SuperLibraryApi } from "../../src/shared/library-api";
 import type { RendererLibrarySummary } from "../../src/shared/protocol/responses";
 import { createPublicError } from "../../src/shared/protocol/errors";
+import { parseSearchExpression } from "../../src/shared/search-expression";
 import { assetSupportsThumbnail } from "../../src/shared/thumbnail-support";
 import { createCoalescedRefresh } from "../../src/renderer/coalesced-refresh";
 import { hydrateContent, type ContentHydrationUpdate } from "../../src/renderer/content-hydration";
@@ -42,10 +43,12 @@ const bindingNames = [
   "setTrashedAssetCount", "setFolders", "setLinkedFolders", "setTags",
   "setCollections", "setSmartCollections", "setTrashedFolders",
   "metadataController", "metadataSessionRef", "hydrateContent",
+  "sidebarLoadGenerationRef", "libraryCountLoadGenerationRef",
 ] as const;
 type BindingName = typeof bindingNames[number];
 type LoadOptions = {
   trashMode?: boolean; searchScope?: SearchScope; showIgnored?: boolean;
+  discovery?: { search?: SearchQuery; filters?: FilterClause[] };
   refreshSidebar?: boolean; awaitHydration?: boolean;
 };
 type LoadContent = (
@@ -133,7 +136,7 @@ type RawRequest = {
   group: number; kind: string; promise: Promise<unknown>; settled: boolean;
   resolve: (replacement?: unknown) => void; reject: (error: unknown) => void;
 };
-function apiFixture() {
+function apiFixture(deferFirstPage = false) {
   const requests: RawRequest[] = [];
   let pageCalls = 0;
   let active = 0;
@@ -160,6 +163,7 @@ function apiFixture() {
     if (input.layoutOnly || input.idsOnly) throw new Error("Fixture must not dispatch pagination geometry/IDs for its complete one-card page.");
     if (input.limit === BROWSE_PAGE_SIZE && input.offset === 0) {
       pageCalls += 1;
+      if (deferFirstPage && pageCalls === 1) return raw("primary", { ok: true, value: { items: [asset()], total: 1, offset: 0 } });
       return Promise.resolve({ ok: true, value: { items: [asset()], total: 1, offset: 0 } });
     }
     if (input.limit !== 1) throw new Error(`Unexpected real source search limit: ${input.limit}.`);
@@ -197,8 +201,8 @@ const library: RendererLibrarySummary = {
 type OwnedHost = { root: Root; container: HTMLDivElement; mounted: boolean };
 const cleanup: Array<() => Promise<void>> = [];
 
-async function mountBoundary() {
-  const api = apiFixture();
+async function mountBoundary(deferFirstPage = false, queueHydrationUpdates = false) {
+  const api = apiFixture(deferFirstPage);
   const journal: string[] = [];
   const assets = cell<AssetSummary[]>([], "assets", journal);
   const trash = cell<AssetSummary[]>([], "trash", journal);
@@ -253,9 +257,10 @@ async function mountBoundary() {
   });
   await act(async () => owner.root.render(createElement(Host)));
   const beginBrowsePage = vi.fn<BeginBrowsePage>((definition, firstPage) => pagination.beginPage(definition, firstPage));
-  const load = actualLoadContent({
+  const bindings: Record<BindingName, unknown> = {
     api: api.api, showIgnoredItems: false, folderRecursiveRef: { current: false }, folderBrowseScope,
     contentLoadGenerationRef: generation, setContentLoading: loading.set, BROWSE_PAGE_SIZE,
+    sidebarLoadGenerationRef: { current: 0 }, libraryCountLoadGenerationRef: { current: 0 },
     LibraryOperationError, setThumbnailFailures: failures.set, assetSupportsThumbnail,
     setAllAssetCount: counts.all.set, setRootAssetCount: counts.root.set,
     setSearchTotal: total.set, setSearchOffset: offset.set, setSearchSnippets: snippets.set,
@@ -263,8 +268,17 @@ async function mountBoundary() {
     setFolders: sidebar.folders.set, setLinkedFolders: sidebar.linked.set, setTags: sidebar.tags.set,
     setCollections: sidebar.collections.set, setSmartCollections: sidebar.smart.set, setTrashedFolders: sidebar.trashed.set,
     metadataController, metadataSessionRef, hydrateContent,
-  });
-  return { api, load, track, drains, assets, loading, counts, failures, journal, beginBrowsePage, onLoadMoreFailed,
+  };
+  const queuedUpdates: Array<() => void> = [];
+  if (queueHydrationUpdates) {
+    for (const name of ["setAllAssetCount", "setRootAssetCount", "setTrashedAssetCount", "setFolders", "setLinkedFolders", "setTags", "setCollections", "setSmartCollections", "setTrashedFolders"] as const) {
+      const original = bindings[name] as (next: unknown) => void;
+      bindings[name] = (next: unknown) => queuedUpdates.push(() => original(next));
+    }
+  }
+  const load = actualLoadContent(bindings);
+  return { api, load, track, drains, assets, loading, counts, sidebar, failures, journal, beginBrowsePage, onLoadMoreFailed,
+    flushQueuedUpdates() { for (const update of queuedUpdates.splice(0)) update(); },
     reopenSameLibrary() { metadataSessionRef.current = metadataController.activateSession(library); },
     nextGeneration() { generation.current += 1; },
   };
@@ -278,7 +292,7 @@ afterEach(async () => {
 // These tests are the newly extracted production helper's contract (new TDD),
 // not additional claimed reproductions against the previous App source.
 describe("actual non-critical content hydration helper", () => {
-  const ordinarySidebar = ["listFolders", "listLinkedFolders", "listTags", "listCollections", "listSmartCollections"];
+  const ordinarySidebar = ["listCollections", "listSmartCollections", "listTags", "listFolders", "listLinkedFolders"];
   function helperFixture(options: {
     scope?: string; trashMode?: boolean; refreshSidebar?: boolean;
     includeLibraryCounts?: boolean; showIgnored?: boolean;
@@ -304,6 +318,27 @@ describe("actual non-critical content hydration helper", () => {
     };
   }
 
+  it("publishes ready folders without waiting for a slow unrelated root count", async () => {
+    const fixture = helperFixture();
+    const folders = [{ folderId: "ready-folder", name: "Ready folder" }];
+    await act(async () => fixture.api.requests.find(request => request.kind === "listFolders")!
+      .resolve({ ok: true, value: folders }));
+    expect(fixture.publish.mock.calls.map(([update]) => update.folders).filter(Boolean)).toEqual([folders]);
+    expect(fixture.settled).toBe(false);
+    expect(fixture.api.active).toBe(6);
+  });
+
+  it("publishes ready collections even when a count transport fails", async () => {
+    const fixture = helperFixture();
+    const collections = [{ collectionId: "ready-collection", name: "Ready collection" }];
+    await act(async () => {
+      fixture.api.requests.find(request => request.kind === "root-count")!.reject(new Error("count unavailable"));
+      fixture.api.requests.find(request => request.kind === "listCollections")!.resolve({ ok: true, value: collections });
+    });
+    expect(fixture.publish.mock.calls.map(([update]) => update.collections).filter(Boolean)).toEqual([collections]);
+    expect(fixture.settled).toBe(false);
+  });
+
   it.each([
     { scope: "all", trashMode: false, counts: ["root-count", "trash-count"] },
     { scope: "root", trashMode: false, counts: ["all-count", "trash-count"] },
@@ -312,13 +347,13 @@ describe("actual non-critical content hydration helper", () => {
   ])("keeps the exact raw call matrix for scope=$scope trashMode=$trashMode", async ({ scope, trashMode, counts }) => {
     const fixture = helperFixture({ scope, trashMode });
     expect(fixture.api.requests.map(({ kind }) => kind)).toEqual([
-      ...counts, ...ordinarySidebar, ...(trashMode ? ["listTrashedFolders"] : []),
+      ...ordinarySidebar, ...(trashMode ? ["listTrashedFolders"] : []), ...counts,
     ]);
     expect(fixture.publish).not.toHaveBeenCalled();
     fixture.api.release(); await fixture.task;
     expect(fixture.api.active).toBe(0);
-    expect(fixture.publish).toHaveBeenCalledOnce();
-    const update = fixture.publish.mock.calls[0]![0];
+    expect(fixture.publish).toHaveBeenCalledTimes(counts.length + ordinarySidebar.length + (trashMode ? 1 : 0));
+    const update = Object.assign({}, ...fixture.publish.mock.calls.map(([value]) => value));
     expect(update.allAssetCount).toBe(counts.includes("all-count") ? 10 : undefined);
     expect(update.rootAssetCount).toBe(counts.includes("root-count") ? 10 : undefined);
     expect(update.trashedAssetCount).toBe(10);
@@ -339,8 +374,8 @@ describe("actual non-critical content hydration helper", () => {
     fixture.api.release(); await fixture.task;
     if (counts.length === 0) expect(fixture.publish).not.toHaveBeenCalled();
     else {
-      expect(fixture.publish).toHaveBeenCalledOnce();
-      expect(Object.keys(fixture.publish.mock.calls[0]![0]).every((name) => name.endsWith("AssetCount"))).toBe(true);
+      expect(fixture.publish).toHaveBeenCalledTimes(counts.length);
+      expect(fixture.publish.mock.calls.every(([value]) => Object.keys(value).every(name => name.endsWith("AssetCount")))).toBe(true);
     }
   });
 
@@ -364,13 +399,13 @@ describe("actual non-critical content hydration helper", () => {
       fixture.api.requests.find((request) => request.kind === kind)!.resolve({ ok: false, error: createPublicError("CANCELLED") });
     }
     fixture.api.release(); await fixture.task;
-    expect(fixture.publish).toHaveBeenCalledOnce();
-    expect(fixture.publish.mock.calls[0]![0]).toEqual({
+    expect(fixture.publish).toHaveBeenCalledTimes(5);
+    expect(Object.assign({}, ...fixture.publish.mock.calls.map(([value]) => value))).toEqual({
       trashedAssetCount: 10, folders: [], linkedFolders: [], collections: [], smartCollections: [], trashedFolders: [],
     });
   });
 
-  it.each(["root-count", "listTags"])("drains every raw sibling after rejected %s and publishes nothing", async (kind) => {
+  it.each(["root-count", "listTags"])("drains every raw sibling after rejected %s and publishes the successful siblings", async (kind) => {
     const fixture = helperFixture();
     await act(async () => fixture.api.requests.find((request) => request.kind === kind)!.reject(new Error("controlled transport failure")));
     expect(fixture.api.active).toBe(6);
@@ -379,7 +414,7 @@ describe("actual non-critical content hydration helper", () => {
     fixture.api.release(); await fixture.task;
     expect(fixture.settled).toBe(true);
     expect(fixture.api.active).toBe(0);
-    expect(fixture.publish).not.toHaveBeenCalled();
+    expect(fixture.publish).toHaveBeenCalledTimes(6);
   });
 
   it.each(["session", "generation"] as const)("logical %s invalidation does not release raw IPC or publish late fields", async (kind) => {
@@ -418,11 +453,103 @@ describe("actual non-critical content hydration helper", () => {
     expect(settled).toBe(false);
     api.release(); await task;
     expect(api.active).toBe(0);
-    expect(publish).not.toHaveBeenCalled();
+    expect(publish).toHaveBeenCalledTimes(6);
   });
 });
 
 describe("actual App loadContent hydration lease boundary", () => {
+  it.each(["session", "refresh"] as const)("queued category state updaters recheck ownership after %s replacement", async replacement => {
+    const host = await mountBoundary(false, true);
+    await act(async () => { host.track(host.load(library, "all", { awaitHydration: true })); });
+    await act(async () => {
+      host.api.group(1).find(request => request.kind === "listFolders")!.resolve({ ok: true, value: [{ folderId: "old-queued-folder" }] });
+      host.api.release(1);
+    });
+    if (replacement === "session") host.reopenSameLibrary();
+    else await act(async () => { host.track(host.load(library, "all", { awaitHydration: true })); });
+    host.flushQueuedUpdates();
+    expect(host.sidebar.folders.state.current).toEqual([]);
+    expect(host.counts.root.state.current).toBe(0);
+    expect(host.counts.trash.state.current).toBe(0);
+    expect(host.counts.all.state.current).toBe(replacement === "session" ? 0 : 1);
+  });
+  it("finishes startup sidebar even if foreground search supersedes the initial primary before it resolves", async () => {
+    const host = await mountBoundary(true);
+    let result!: ReturnType<typeof host.track<AssetSummary[] | undefined>>;
+    await act(async () => { result = host.track(host.load(library, "all", { awaitHydration: true })); });
+    host.nextGeneration();
+    await act(async () => host.api.requests.find(request => request.kind === "primary")!.resolve());
+    expect(host.assets.state.current).toEqual([]);
+    expect(host.beginBrowsePage).not.toHaveBeenCalled();
+    expect(host.api.active).toBe(8);
+    const collections = [{ collectionId: "startup-collection", name: "Startup collection" }];
+    await act(async () => {
+      host.api.requests.find(request => request.kind === "listCollections")!.resolve({ ok: true, value: collections });
+      host.api.release(); await result.promise;
+    });
+    expect(host.sidebar.collections.state.current).toEqual(collections);
+    expect(host.counts.all.state.current).toBe(10);
+    expect(host.assets.state.current).toEqual([]);
+  });
+
+  it.each([false, true])("a newer full refresh supersedes old category results (showIgnored=%s)", async showIgnored => {
+    const host = await mountBoundary();
+    await act(async () => { host.track(host.load(library, "all", { awaitHydration: true })); });
+    await act(async () => { host.track(host.load(library, "all", { awaitHydration: true, showIgnored })); });
+    const newer = [{ folderId: "new-folder", name: "New folder" }];
+    await act(async () => {
+      host.api.group(2).find(request => request.kind === "listFolders")!.resolve({ ok: true, value: newer });
+      host.api.release(2);
+    });
+    await act(async () => {
+      host.api.group(1).find(request => request.kind === "listFolders")!.resolve({ ok: true, value: [{ folderId: "old-folder" }] });
+      host.api.release(1);
+    });
+    expect(host.sidebar.folders.state.current).toEqual(newer);
+    expect(vi.mocked(host.api.api.listFolders).mock.calls[1]![0].showIgnored).toBe(showIgnored);
+  });
+
+  it("count-only navigation does not cancel pending folder and collection hydration", async () => {
+    const host = await mountBoundary();
+    await act(async () => { host.track(host.load(library, "all", { awaitHydration: true })); });
+    await act(async () => { host.track(host.load(library, "root", { refreshSidebar: false, awaitHydration: true })); });
+    const folders = [{ folderId: "pending-folder", name: "Pending folder" }];
+    await act(async () => {
+      host.api.group(1).find(request => request.kind === "listFolders")!.resolve({ ok: true, value: folders });
+      host.api.release(1); host.api.release(2);
+    });
+    expect(host.sidebar.folders.state.current).toEqual(folders);
+    expect(host.counts.root.state.current).toBe(1);
+    expect(host.counts.all.state.current).toBe(10);
+  });
+
+  it.each([
+    { discovery: { search: parseSearchExpression("needle") } },
+    { discovery: { filters: [{ field: "favorite", values: ["true"], exclude: false }] as FilterClause[] } },
+    { searchScope: { kind: "collection", collectionId: "subset", recursive: false } as SearchScope },
+  ])("does not replace a library count with a filtered or alternate-scope page total: %j", async options => {
+    const host = await mountBoundary();
+    await act(async () => { host.track(host.load(library, "all", { ...options, awaitHydration: true })); });
+    expect(host.counts.all.state.current).toBe(0);
+    expect(host.api.group(1).some(request => request.kind === "all-count")).toBe(true);
+    await act(async () => host.api.release());
+    expect(host.counts.all.state.current).toBe(10);
+    expect(host.assets.state.current).toHaveLength(1);
+  });
+
+  it("keeps library organization publishable when restored sorting starts another foreground search", async () => {
+    const host = await mountBoundary();
+    await act(async () => { host.track(host.load(library, "all", { awaitHydration: true })); });
+    host.nextGeneration();
+    const folders = [{ folderId: "restored-folder", name: "Restored folder" }];
+    await act(async () => {
+      host.api.group(1).find(request => request.kind === "listFolders")!.resolve({ ok: true, value: folders });
+      host.api.release();
+    });
+    expect(host.sidebar.folders.state.current).toEqual(folders);
+    expect(host.counts.root.state.current).toBe(10);
+    expect(host.assets.state.current.map(({ assetId }) => assetId)).toEqual(["first-card"]);
+  });
   it("preserves default foreground completion and usable first cards before count/sidebar settles", async () => {
     const host = await mountBoundary();
     let result!: ReturnType<typeof host.track<AssetSummary[] | undefined>>;
@@ -436,7 +563,7 @@ describe("actual App loadContent hydration lease boundary", () => {
     expect(host.failures.state.current.size).toBe(0);
     expect(host.api.pageCalls).toBe(1);
     expect(host.api.group(1).map(({ kind }) => kind)).toEqual([
-      "root-count", "trash-count", "listFolders", "listLinkedFolders", "listTags", "listCollections", "listSmartCollections",
+      "listCollections", "listSmartCollections", "listTags", "listFolders", "listLinkedFolders", "root-count", "trash-count",
     ]);
     expect(host.api.active).toBe(7);
     await act(async () => host.api.release());
@@ -505,17 +632,17 @@ describe("actual App loadContent hydration lease boundary", () => {
     expect(result.outcome.error).toBeUndefined();
     expect(result.outcome.value?.map(({ assetId }) => assetId)).toEqual(["first-card"]);
     expect(host.api.active).toBe(0);
-    expect(host.counts.root.state.current).toBe(0);
-    expect(host.counts.trash.state.current).toBe(0);
-    expect(host.journal).not.toContain("folders");
+    expect(host.counts.root.state.current).toBe(kind === "root-count" ? 0 : 10);
+    expect(host.counts.trash.state.current).toBe(10);
+    expect(host.journal).toContain("folders");
     expect(host.onLoadMoreFailed).not.toHaveBeenCalled();
   });
 
-  it.each(["session", "generation"] as const)("holds old raw work but suppresses actual App hydration publication after %s replacement", async (kind) => {
+  it("holds old raw work but suppresses actual App hydration publication after session replacement", async () => {
     const host = await mountBoundary();
     let result!: ReturnType<typeof host.track<AssetSummary[] | undefined>>;
     await act(async () => { result = host.track(host.load(library, "all", { awaitHydration: true })); });
-    if (kind === "session") host.reopenSameLibrary(); else host.nextGeneration();
+    host.reopenSameLibrary();
     const before = [...host.journal];
     expect(result.outcome.settled).toBe(false);
     expect(host.api.active).toBe(7);

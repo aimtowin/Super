@@ -20,6 +20,7 @@ export const DEFAULT_E2E_FILES = Object.freeze([
   'tests/e2e/shell-navigation.test.ts',
   'tests/e2e/folder-create-root.test.ts',
   'tests/e2e/library-recent.test.ts',
+  'tests/e2e/sidebar-hydration.test.ts',
   'tests/e2e/folder-context-menu.test.ts',
   'tests/e2e/asset-rename.test.ts',
   'tests/e2e/folder-recursive-scope.test.ts',
