@@ -84,7 +84,7 @@ for (const scope of ["all", "filtered", "smart-collection", "draft-smart-collect
       const viewer = page.locator(".workspace-viewer");
       await expect(viewer.locator("img.preview-image:not(.is-hidden)")).toBeVisible();
       await viewer.getByRole("button", { name: "全屏", exact: true }).click();
-      await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains("workspace-viewer"))).toBe(true);
+      await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains("viewer-fullscreen-host"))).toBe(true);
       const originalViewer = await viewer.elementHandle();
       const assetId = await card.getAttribute("data-asset-id");
       expect(assetId).toBeTruthy();
@@ -104,7 +104,7 @@ for (const scope of ["all", "filtered", "smart-collection", "draft-smart-collect
         const notices = page.locator(".workspace-notice-stack");
         await expect(notices.getByText("已自动同步 37 项磁盘变化。", { exact: true })).toBeVisible();
         await expect(notices.getByText("已自动同步 41 项磁盘变化。", { exact: true })).toHaveCount(0);
-        expect(await originalViewer!.evaluate((element) => element.isConnected && document.fullscreenElement === element)).toBe(true);
+        expect(await originalViewer!.evaluate((element) => element.isConnected && document.fullscreenElement === element.parentElement)).toBe(true);
 
         // A previously accepted candidate survives the import's silent 120ms
         // drain; new import events remain domain-dirty without creating toast.
@@ -129,7 +129,7 @@ for (const scope of ["all", "filtered", "smart-collection", "draft-smart-collect
           await expect(notices.getByText("已自动同步 53 项磁盘变化。", { exact: true })).toBeVisible();
           await page.waitForTimeout(450);
           await expect(notices.getByText("已自动同步 59 项磁盘变化。", { exact: true })).toHaveCount(0);
-          expect(await originalViewer!.evaluate((element) => element.isConnected && document.fullscreenElement === element)).toBe(true);
+          expect(await originalViewer!.evaluate((element) => element.isConnected && document.fullscreenElement === element.parentElement)).toBe(true);
         } finally {
           await application.evaluate(({ BrowserWindow }) => {
             BrowserWindow.getAllWindows().find((entry) => entry.isVisible())!.webContents.send("super:progress", {
@@ -152,7 +152,7 @@ for (const scope of ["all", "filtered", "smart-collection", "draft-smart-collect
         }, event);
         // Cover the 300ms watcher debounce and subsequent 200ms discovery debounce.
         await page.waitForTimeout(1_200);
-        expect(await originalViewer!.evaluate((element) => element.isConnected && document.fullscreenElement === element), event.channel).toBe(true);
+        expect(await originalViewer!.evaluate((element) => element.isConnected && document.fullscreenElement === element.parentElement), event.channel).toBe(true);
         await expect(viewer.locator("img.preview-image:not(.is-hidden)")).toBeVisible();
       }
       await page.evaluate(() => document.exitFullscreen());

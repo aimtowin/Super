@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isNearViewerEdge, useViewerPreferences } from './viewer-preferences';
 
 import {
   createViewerChromeIdleScheduler,
@@ -15,8 +16,8 @@ const DEFAULT_IDLE_MS = 2_000;
  * a component that does not remount when the viewed asset changes (e.g. the
  * asset preview modal is remounted per-asset via a `key`, so this hook must
  * live one level up). Opening the viewer calls `wake()`; while `active`,
- * window-level capture listeners wake chrome on any keyboard / pointer /
- * wheel input.
+ * capture listeners implement the selected proximity/idle mode; keyboard and
+ * focused controls remain reachable regardless of pointer position.
  */
 export function useViewerChromeIdle(
   idleMs = DEFAULT_IDLE_MS,
@@ -27,6 +28,8 @@ export function useViewerChromeIdle(
   wake: () => void;
 } {
   const [idle, setIdle] = useState(false);
+  const { chromeMode } = useViewerPreferences();
+  const nearChromeRef = useRef(false);
   const schedulerRef = useRef<ReturnType<
     typeof createViewerChromeIdleScheduler
   > | null>(null);
@@ -34,7 +37,10 @@ export function useViewerChromeIdle(
   useEffect(() => {
     const scheduler = createViewerChromeIdleScheduler(
       idleMs,
-      () => setIdle(true),
+      () => {
+        if (chromeMode === 'proximity' && nearChromeRef.current) scheduler.bump();
+        else setIdle(true);
+      },
       () => setIdle(false),
     );
     schedulerRef.current = scheduler;
@@ -43,7 +49,7 @@ export function useViewerChromeIdle(
       scheduler.dispose();
       schedulerRef.current = null;
     };
-  }, [idleMs]);
+  }, [idleMs, chromeMode]);
 
   const wake = useCallback(() => {
     schedulerRef.current?.bump();
@@ -51,18 +57,32 @@ export function useViewerChromeIdle(
 
   const onActivity = useCallback(
     (source: ViewerChromeActivitySource) => {
+      if (chromeMode === 'proximity' && (source === 'pointermove' || source === 'wheel') && !nearChromeRef.current) return;
       if (!shouldWakeViewerChrome(source)) return;
       wake();
     },
-    [wake],
+    [chromeMode, wake],
   );
 
-  // While the viewer is open, any user input interrupts chrome fade.
+  // Hidden chrome has pointer-events:none; use its geometry too, so approaching
+  // a toolbar not exactly on the outer edge still reveals it.
   useEffect(() => {
     if (!active) return;
 
     const onKey = () => onActivity("keyboard");
-    const onPointerMove = () => onActivity("pointermove");
+    const onPointerMove = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const viewer = target?.closest('.workspace-viewer') ?? document.querySelector('.workspace-viewer');
+      nearChromeRef.current = Boolean(viewer && (
+        target?.closest('.preview-chrome-fade') || isNearViewerEdge(event.clientX, event.clientY, viewer.getBoundingClientRect()) ||
+        [...viewer.querySelectorAll('.preview-chrome-fade')].some(element => {
+          const rect = element.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0 && event.clientX >= rect.left - 20 && event.clientX <= rect.right + 20 &&
+            event.clientY >= rect.top - 20 && event.clientY <= rect.bottom + 20;
+        })
+      ));
+      onActivity("pointermove");
+    };
     const onPointerDown = () => onActivity("pointerdownOrClick");
     const onWheel = () => onActivity("wheel");
 
@@ -81,5 +101,5 @@ export function useViewerChromeIdle(
     };
   }, [active, onActivity]);
 
-  return { idle, onActivity, wake };
+  return { idle: chromeMode === 'always' ? false : idle, onActivity, wake };
 }

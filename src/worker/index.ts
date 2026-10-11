@@ -1929,6 +1929,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
       };
     case 'folder.browse-entries': {
       const entries = libraryService.listFolderBrowseEntries({
+        hideMissing: request.command.hideMissing,
         libraryId: request.command.libraryId,
         parentFolderId: request.command.parentFolderId,
         showIgnored: request.command.showIgnored === true,
@@ -1954,6 +1955,8 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
         entries,
       };
     }
+    case 'folder.cover':
+      return { ok: true, type: 'folder.cover', ...libraryService.folderCover(request.command) };
     case 'folder.list-trashed': {
       const folders = libraryService.listTrashedFolders(request.command.libraryId);
       return { ok: true, type: 'folder.list-trashed', folders };
@@ -2259,6 +2262,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
         folders: libraryService.listLinkedFolders(
           request.command.libraryId,
           request.command.showIgnored === true,
+          request.command.hideMissing === true,
         ),
       };
     case 'linked-folder.relink': {
@@ -2788,6 +2792,10 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
     case 'asset.text.read': {
       const result = libraryService.readTextAsset(request.command);
       return { ok: true, type: 'asset.text.read', ...result };
+    }
+    case 'asset.zip.preview': {
+      const preview = await libraryService.previewZipAsset(request.command);
+      return { ok: true, type: 'asset.zip.preview', preview };
     }
     case 'asset.text.save': {
       const result = libraryService.saveTextAsset(request.command);
@@ -4254,6 +4262,7 @@ parentPort.on('message', async (event) => {
     if (
       request.command.type === 'media.get-preview-artifact'
       || request.command.type === 'asset.text.read'
+      || request.command.type === 'asset.zip.preview'
       || request.command.type === 'media.get-source-path'
     ) {
       // Viewer requests must reach the Worker while background media work is

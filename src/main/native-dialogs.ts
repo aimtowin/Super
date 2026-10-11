@@ -6,6 +6,8 @@
  */
 
 import path from "node:path";
+import { statSync } from 'node:fs';
+import type { DialogDirectoryMemory } from './dialog-directory-memory';
 
 import {
   dialog,
@@ -24,6 +26,7 @@ export type NativeDialogHost = {
   readonly getLocale: () => AppLocale;
   readonly getMainWindow: () => BrowserWindow | null;
   readonly isE2e: () => boolean;
+  readonly directoryMemory?: DialogDirectoryMemory;
 };
 
 function openOptionsFor(
@@ -74,9 +77,18 @@ async function showOpen(
   options: OpenDialogOptions,
 ): Promise<Electron.OpenDialogReturnValue> {
   const mainWindow = host.getMainWindow();
-  return mainWindow
-    ? dialog.showOpenDialog(mainWindow, options)
-    : dialog.showOpenDialog(options);
+  const rememberedOptions = { ...options, defaultPath: host.directoryMemory?.defaultPath(options.defaultPath) ?? options.defaultPath };
+  const result = await (mainWindow
+    ? dialog.showOpenDialog(mainWindow, rememberedOptions)
+    : dialog.showOpenDialog(rememberedOptions));
+  if (!result.canceled && result.filePaths[0]) {
+    let directory = options.properties?.includes('openDirectory') === true && !options.properties?.includes('openFile');
+    if (options.properties?.includes('openDirectory') && options.properties?.includes('openFile')) {
+      try { directory = statSync(result.filePaths[0]).isDirectory(); } catch { /* Leave previous directory intact. */ }
+    }
+    host.directoryMemory?.remember(result.filePaths[0], directory);
+  }
+  return result;
 }
 
 async function showSave(
@@ -84,9 +96,12 @@ async function showSave(
   options: SaveDialogOptions,
 ): Promise<Electron.SaveDialogReturnValue> {
   const mainWindow = host.getMainWindow();
-  return mainWindow
-    ? dialog.showSaveDialog(mainWindow, options)
-    : dialog.showSaveDialog(options);
+  const rememberedOptions = { ...options, defaultPath: host.directoryMemory?.defaultPath(options.defaultPath) ?? options.defaultPath };
+  const result = await (mainWindow
+    ? dialog.showSaveDialog(mainWindow, rememberedOptions)
+    : dialog.showSaveDialog(rememberedOptions));
+  if (!result.canceled) host.directoryMemory?.remember(result.filePath, false);
+  return result;
 }
 
 export async function selectImportSources(

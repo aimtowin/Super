@@ -5,7 +5,7 @@ import path from "node:path";
 import { _electron as electron, expect, test, type ElectronApplication, type Locator } from "@playwright/test";
 import sharp from "sharp";
 
-import { resolveElectronExecutablePath } from "./electron-test-helpers";
+import { resolveElectronExecutablePath, dismissQuickStart } from "./electron-test-helpers";
 
 test.describe.configure({ timeout: 120_000 });
 
@@ -95,6 +95,7 @@ test("auto-detects, manually rebuilds, persists, plays, rotates and mirrors an i
   let application: ElectronApplication | null = await launch();
   try {
     let window = await application.firstWindow();
+    await dismissQuickStart(window);
     await window.getByRole("button", { name: "创建资源库" }).click();
     await window.getByRole("textbox", { name: "名称" }).fill(libraryName);
     await window.getByRole("button", { name: "创建", exact: true }).click();
@@ -205,9 +206,8 @@ test("auto-detects, manually rebuilds, persists, plays, rotates and mirrors an i
     expect(sourceMetrics.boxWidth / sourceMetrics.boxHeight).toBeCloseTo(16 / 9, 1);
 
     await viewer.hover({ position: { x: 40, y: 80 } });
-    const transformControls = viewer.locator(".preview-transform-controls");
-    await window
-      .locator(".preview-transform-controls")
+    await viewer
+      .locator(".preview-sequence-controls")
       .getByRole("button", { name: "顺时针旋转 90°" })
       .click();
     await expect(previewImage).toHaveAttribute(
@@ -228,12 +228,17 @@ test("auto-detects, manually rebuilds, persists, plays, rotates and mirrors an i
     expect(rotatedMetrics.cssWidth / rotatedMetrics.cssHeight).toBeCloseTo(16 / 9, 1);
     expect(rotatedMetrics.boxWidth / rotatedMetrics.boxHeight).toBeCloseTo(9 / 16, 1);
 
-    const horizontalMirror = transformControls.getByRole("button", { name: "水平镜像" });
-    const verticalMirror = transformControls.getByRole("button", { name: "垂直镜像" });
+    await viewer.locator('.preview-image-viewport').click({ button: 'right' });
+    const viewerMenu = window.getByRole('menu', { name: '查看器操作' });
+    const horizontalMirror = viewerMenu.getByRole("button", { name: "水平镜像" });
     await horizontalMirror.click();
-    await verticalMirror.click();
+    await viewer.locator('.preview-image-viewport').click({ button: 'right' });
     await expect(horizontalMirror).toHaveClass(/is-active/);
+    const verticalMirror = viewerMenu.getByRole("button", { name: "垂直镜像" });
+    await verticalMirror.click();
+    await viewer.locator('.preview-image-viewport').click({ button: 'right' });
     await expect(verticalMirror).toHaveClass(/is-active/);
+    await window.keyboard.press('Escape');
     await expect(previewImage).toHaveAttribute(
       "style",
       /scale\(-1, -1\).*rotate\(90deg\)/,

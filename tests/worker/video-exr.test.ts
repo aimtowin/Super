@@ -423,15 +423,16 @@ describe('video (ffprobe + ffmpeg)', () => {
     const posterCall = capturedSpawnArgs.find(
       (c) => c.command === '/fake/ffmpeg'
         && c.args.includes('-vf')
-        && String(c.args[c.args.indexOf('-vf') + 1]).includes('thumbnail=30'),
+        && c.args.includes('-ss'),
     );
     expect(posterCall).toBeDefined();
-    // Check that the poster filter includes the thumbnail filter
+    // Seek before decode; use a single scaled frame at 25%, not a batch after it.
     const vfIdx = posterCall!.args.indexOf('-vf');
     expect(vfIdx).not.toBe(-1);
     const vfValue = posterCall!.args[vfIdx + 1] as string;
-    expect(vfValue).toBe('scale=640:-2:force_original_aspect_ratio=decrease,thumbnail=30');
-    expect(vfValue.indexOf('scale=')).toBeLessThan(vfValue.indexOf('thumbnail='));
+    expect(vfValue).toBe('scale=640:-2:force_original_aspect_ratio=decrease');
+    expect(Number(posterCall!.args[posterCall!.args.indexOf('-ss') + 1])).toBe(Number(JSON.parse(CANNED_FFPROBE_JSON).format.duration) / 4);
+    expect(posterCall!.args.indexOf('-ss')).toBeLessThan(posterCall!.args.indexOf('-i'));
     expect(vfValue).not.toContain('fps=');
     expect(posterCall!.args).toContain('-frames:v');
     expect(posterCall!.args).toContain('1');
@@ -458,7 +459,7 @@ describe('video (ffprobe + ffmpeg)', () => {
         if (command.includes('ffprobe')) {
           return { stdout: Buffer.from(CANNED_FFPROBE_JSON), stderr: '', exitCode: 0 };
         }
-        if (args.includes('-vf') && String(args[args.indexOf('-vf') + 1]).includes('thumbnail=30')) {
+        if (args.includes('-vf') && args.includes('-ss')) {
           posterAttempts += 1;
           return {
             stdout: Buffer.alloc(0),

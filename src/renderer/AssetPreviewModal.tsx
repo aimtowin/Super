@@ -8,6 +8,7 @@ import {
   useState,
   type ChangeEvent,
   type SyntheticEvent,
+  type RefObject,
 } from "react";
 
 import type { AssetSummary } from "../shared/asset-types";
@@ -65,12 +66,15 @@ import { ShellSurface, ViewerSurface } from "./ui/surfaces";
 import { ModelViewerSurface } from "./3d-viewer/viewer-surface";
 import { isMacPlatform } from "./commands/command-types";
 import { isSolidWorksExtension } from "../shared/media-formats";
+import { isMarkdownName } from './MarkdownPreview';
+import { ZipViewerSurface } from './ZipViewerSurface';
 
 interface AssetPreviewModalProps {
   api: SuperLibraryApi;
   asset: AssetSummary;
   /** Owned by a parent that survives per-asset remounts (Super-ayf). */
   chromeIdle: boolean;
+  fullscreenHost?: RefObject<HTMLDivElement | null>;
   libraryId: string;
   onChromeActivity: (source: ViewerChromeActivitySource) => void;
   onSetColorSpace?: (assetId: string, colorSpace: string | null) => void;
@@ -160,6 +164,7 @@ export const AssetPreviewModal = forwardRef<
     api,
     asset,
     chromeIdle,
+    fullscreenHost,
     libraryId,
     onChromeActivity,
     onSetColorSpace,
@@ -639,9 +644,10 @@ export const AssetPreviewModal = forwardRef<
       return;
     }
     const refreshed = await resolvePreview(true, "fullscreen");
-    if (!refreshed?.ok || !modalRef.current) return;
+    const host = fullscreenHost?.current ?? modalRef.current;
+    if (!refreshed?.ok || !host) return;
     try {
-      await modalRef.current.requestFullscreen();
+      await host.requestFullscreen();
     } catch (caught) {
       const errorCode =
         caught instanceof Error && caught.name
@@ -664,14 +670,14 @@ export const AssetPreviewModal = forwardRef<
 
   useEffect(() => {
     const onFullscreenChange = () => {
-      setIsFullscreen(document.fullscreenElement === modalRef.current);
+      setIsFullscreen(document.fullscreenElement === (fullscreenHost?.current ?? modalRef.current));
     };
     document.addEventListener("fullscreenchange", onFullscreenChange);
     onFullscreenChange();
     return () => {
       document.removeEventListener("fullscreenchange", onFullscreenChange);
     };
-  }, []);
+  }, [fullscreenHost]);
 
   function handlePlaybackError(event: SyntheticEvent<HTMLMediaElement>) {
     const mediaError = event.currentTarget.error;
@@ -766,6 +772,7 @@ export const AssetPreviewModal = forwardRef<
     asset.mediaType === "image" &&
     Boolean(imageSrc) &&
     (ready || Boolean(placeholderUrl));
+  const isZipViewer = /\.zip$/iu.test(asset.displayName) && asset.availability === 'available' && !asset.deletedAt;
   const isTextViewer = ready && resolution?.mediaType === "text";
   const isDocumentViewer = ready && resolution?.mediaType === "document";
   const viewerContextMenuAvailable = ready && !isTextViewer;
@@ -901,7 +908,9 @@ export const AssetPreviewModal = forwardRef<
       <ShellSurface className="preview-modal">
         {/* REQ-VIEW-006: no top filename/toolbar bar; nav sits on the edges. */}
         <div className={`preview-content${isTextViewer ? " is-text-mode" : ""}${isDocumentViewer ? " is-document-mode" : ""}`}>
-          {primarySurface === "loading" && !placeholderUrl ? (
+          {isZipViewer ? (
+            <ZipViewerSurface key={`${libraryId}:${asset.assetId}`} api={api} libraryId={libraryId} assetId={asset.assetId} />
+          ) : primarySurface === "loading" && !placeholderUrl ? (
             <div
               aria-busy="true"
               aria-label={t("preview.resolving")}
@@ -1046,6 +1055,7 @@ export const AssetPreviewModal = forwardRef<
               assetId={asset.assetId}
               libraryId={libraryId}
               allowConvert={asset.locationKind === "managed"}
+              markdown={isMarkdownName(asset.displayName)}
               onClose={onClose}
               onSaved={() => setDirectApproved(true)}
             />

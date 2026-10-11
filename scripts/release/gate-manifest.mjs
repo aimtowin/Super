@@ -40,6 +40,8 @@ export const DEFAULT_E2E_FILES = Object.freeze([
   'tests/e2e/sidebar-hierarchy.test.ts',
   'tests/e2e/remaining-local-upgrades.test.ts',
   'tests/e2e/metadata-version-semantics.test.ts',
+  'tests/e2e/viewer-library-upgrades.test.ts',
+  'tests/e2e/image-sequence-viewer.test.ts',
 ]);
 
 export const GATE_STAGES = Object.freeze(['contract', 'development', 'native-updater', 'package']);

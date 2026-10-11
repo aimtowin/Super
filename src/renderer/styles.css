@@ -2523,11 +2523,14 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 
 .workspace-bar {
   display: flex;
-  height: var(--shell-workspace-bar-height);
+  min-height: var(--shell-workspace-bar-height);
+  height: auto;
   flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px 0 14px;
+  padding: 4px 12px 4px 14px;
   border-bottom: 1px solid var(--divider-soft);
   background: transparent;
 }
@@ -3153,6 +3156,8 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
   gap: 7px;
   overflow: visible;
   flex-shrink: 1;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .workspace-tools > * {
   flex: 0 0 auto;
@@ -3185,9 +3190,12 @@ body.platform-darwin .app-shell.left-collapsed .toolbar-workspace-cluster {
 }
 .canvas-controls {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   align-items: center;
   gap: 7px;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 /* CANVAS-002: toolbar grouping with CSS order for visual priority */
@@ -4496,7 +4504,8 @@ body.super-modal-open .app-shell {
   background: transparent;
 }
 
-.workspace-viewer:fullscreen .preview-modal {
+.workspace-viewer:fullscreen .preview-modal,
+.viewer-fullscreen-host:fullscreen .preview-modal {
   width: 100vw;
   height: 100vh;
   border: 0;
@@ -4539,7 +4548,8 @@ body.super-modal-open .app-shell {
    itself — a semi-transparent viewer-stage veil keeps the media readable
    (--ui-background-surface-opacity is 100% when no background is configured,
    restoring the solid dark stage). */
-.workspace-viewer:fullscreen .preview-content {
+.workspace-viewer:fullscreen .preview-content,
+.viewer-fullscreen-host:fullscreen .preview-content {
   background-color: color-mix(
     in srgb,
     var(--viewer-stage) var(--ui-background-surface-opacity, 100%),
@@ -4903,6 +4913,16 @@ body.super-modal-open .app-shell {
 /* Custom video transport (REQ-VIEW-005 / Super-60k): one unified bar so
    auto-hide has a single owner (chrome-idle) instead of fighting the UA's
    own native-controls hide timer, which caused the prior VIEW-009 failure. */
+.preview-video-mini-progress {
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: var(--divider);
+  pointer-events: none;
+  opacity: 0;
+}
+.preview-video-mini-progress span { display: block; height: 100%; background: var(--accent); }
+.workspace-viewer.is-chrome-idle .preview-video-mini-progress { opacity: 1; }
 .preview-video-controls {
   position: absolute;
   z-index: 2;
@@ -5334,6 +5354,27 @@ body.super-modal-open .app-shell {
   opacity: 1;
   transition: opacity 280ms ease;
 }
+.viewer-fullscreen-host {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.viewer-fullscreen-host:fullscreen,
+.viewer-fullscreen-host:fullscreen .workspace-viewer {
+  width: 100vw;
+  height: 100vh;
+  background: var(--viewer-stage);
+}
+.viewer-fullscreen-host:fullscreen .preview-modal {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+}
+.viewer-fullscreen-host:fullscreen:has(.workspace-viewer.is-chrome-idle) {
+  cursor: none;
+}
 .workspace-viewer.is-chrome-idle .preview-chrome-fade {
   opacity: 0;
   pointer-events: none;
@@ -5350,10 +5391,37 @@ body.super-modal-open .app-shell {
   opacity: 1;
   pointer-events: auto;
 }
-.workspace-viewer.is-text-viewer.is-chrome-idle .preview-chrome-fade {
+.workspace-viewer.is-text-viewer.is-chrome-idle .preview-chrome-fade:focus-within {
   opacity: 1;
   pointer-events: auto;
 }
+.markdown-preview { padding: 24px; color: var(--text); line-height: 1.65; overflow-wrap: anywhere; }
+.markdown-preview > :first-child { margin-top: 0; }
+.markdown-preview pre { overflow: auto; padding: 12px; background: var(--raised); border-radius: 6px; }
+.markdown-preview table { border-collapse: collapse; max-width: 100%; display: block; overflow-x: auto; }
+.markdown-preview th, .markdown-preview td { border: 1px solid var(--divider); padding: 6px 10px; }
+.markdown-preview a { color: var(--accent); }
+.markdown-preview.is-compact { padding: 12px; font-size: 11px; max-height: 100%; overflow: hidden; pointer-events: none; }
+.markdown-preview.is-compact h1 { font-size: 18px; }
+.markdown-preview.is-compact h2 { font-size: 15px; }
+.markdown-preview.is-compact pre { white-space: pre-wrap; }
+.markdown-blocked-image { color: var(--secondary); font-style: italic; }
+.zip-viewer-stage { display: flex; width: 100%; height: 100%; min-height: 0; background: var(--canvas); color: var(--text); }
+.zip-viewer-members { display: flex; flex-direction: column; width: clamp(200px, 30%, 400px); padding: 16px; gap: 12px; border-right: 1px solid var(--divider); min-height: 0; }
+.zip-viewer-list { overflow: auto; min-height: 0; }
+.zip-viewer-list button { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 8px; text-align: left; padding: 8px; background: transparent; border: 0; color: inherit; }
+.zip-viewer-list button:hover, .zip-viewer-list button[aria-current="true"] { background: var(--raised); }
+.zip-viewer-list button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zip-viewer-list button small { flex-shrink: 0; color: var(--secondary); font-variant-numeric: tabular-nums; }
+.zip-viewer-preview { flex: 1; min-width: 0; overflow: auto; padding: 20px; }
+.zip-viewer-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.zip-viewer-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.folder-cover-dialog { width: min(640px, 90vw); }
+.folder-cover-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; max-height: 45vh; overflow: auto; margin-top: 12px; }
+.folder-cover-option { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 8px; background: var(--raised); color: var(--text); border: 1px solid var(--divider); border-radius: 6px; }
+.folder-cover-option[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.folder-cover-option img { width: 100%; height: 72px; object-fit: contain; }
+.folder-cover-option span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Fullscreen viewer: hide the system cursor when chrome is idle (Super-c3lf). */
 .workspace-viewer:fullscreen.is-chrome-idle {
   cursor: none;
@@ -9124,6 +9192,12 @@ select.ai-config-input.ai-config-languages {
   overscroll-behavior: contain;
   transform: translateX(-50%);
   pointer-events: none;
+}
+
+.workspace-notice-stack.is-viewer-notice {
+  top: auto;
+  bottom: 80px;
+  max-height: calc(100vh - 180px);
 }
 
 /* A verified update waits for explicit user approval; unlike transient

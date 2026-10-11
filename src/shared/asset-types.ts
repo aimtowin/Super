@@ -377,6 +377,7 @@ const categoricalFilterClauseSchema = z.strictObject({
     'favorite',
     'source_url',
     'availability',
+    'linked_visibility',
     'analysis_status',
     'generation_status',
     'color',
@@ -384,6 +385,9 @@ const categoricalFilterClauseSchema = z.strictObject({
   values: z.array(boundedSearchValue).max(MAX_FORMAT_FILTER_VALUES),
   exclude: z.boolean(),
 }).superRefine((filter, context) => {
+  if (filter.field === 'linked_visibility' && (filter.values.length !== 1 || filter.values[0] !== 'available')) {
+    context.addIssue({ code: 'custom', path: ['values'], message: 'Linked visibility accepts only the available value.' });
+  }
   if (
     filter.field !== 'format'
     && filter.values.length > MAX_OTHER_CATEGORICAL_FILTER_VALUES

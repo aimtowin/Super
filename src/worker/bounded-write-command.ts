@@ -25,6 +25,7 @@ const BOUNDED_WRITE_COMMAND_TYPES = new Set<string>([
   'tag.assign',
   'tag.remove',
   'folder.create',
+  'folder.cover',
   'collection.create',
   'collection.update',
   'collection.reorder',
@@ -39,6 +40,7 @@ const BOUNDED_WRITE_COMMAND_TYPES = new Set<string>([
 ]);
 
 export function boundedWriteLibraryId(command: WorkerCommand): string | undefined {
+  if (command.type === 'folder.cover' && command.assetId === undefined) return undefined;
   if (!BOUNDED_WRITE_COMMAND_TYPES.has(command.type)) return undefined;
   if (!('libraryId' in command) || typeof command.libraryId !== 'string') {
     throw new Error(`Bounded write command ${command.type} is missing a library id.`);
@@ -57,6 +59,8 @@ export function executeBoundedWriteWorkerCommand(
   historyContext?: WorkerHistoryContext,
 ): WorkerResult | undefined {
   switch (command.type) {
+    case 'folder.cover':
+      return { ok: true, type: 'folder.cover', ...libraryService.folderCover(command) };
     case 'asset.rating.set': {
       const before = command.assetIds.flatMap((assetId) => {
         try {

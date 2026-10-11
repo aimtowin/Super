@@ -24,6 +24,18 @@ type CatalogMessages<T> = {
 
  */
 export const en = {
+  viewerUpgrade: {
+    cover: 'Set folder image cover', coverHint: 'Choose a library image. Missing or deleted images fall back to automatic covers. Source files are unchanged.',
+    coverSearch: 'Search cover image names', coverAutomatic: 'Automatic cover (reset)', coverError: 'Could not read or save this folder cover.',
+    coverResults: 'Showing {count} of {total} images. Search to find more.',
+    zipReadonly: 'ZIP members (read-only)', zipSearch: 'Filter member paths', zipSelect: 'Select a member to preview. No files are extracted.',
+    zipError: 'Cannot browse this ZIP: damaged, encrypted, unsafe paths, or safety limits exceeded (up to 5000 entries).',
+    zipMemberError: 'Cannot preview this member: supports text up to 1 MiB and images up to 8 MiB. Reopen if the archive changed.',
+    chrome: 'Viewer toolbar', chromeHint: 'Shared by all viewers. Keyboard input and focused controls remain visible.',
+    proximity: 'Show near edges', idle: 'Hide when idle', always: 'Always visible',
+    source: 'Source', rendered: 'Rendered preview', remoteImage: 'External image (not loaded)',
+    hideMissing: 'Hide missing linked assets and folders', hideMissingHint: 'Display only: keeps the index and ignore rules. Turn off to relink.',
+  },
   localUpgrade: {
     generationFilter: "Generation information", generationAny: "All generation markers", generationMarked: "AI generation marker", generationUnmarked: "No marker (including unknown)", generationHint: "Detects embedded Stable Diffusion / ComfyUI PNG markers, not proven origin or AI analysis status.", batchDone: "Created",
     batchLimit: "Up to 32; successful folders are kept, failed names can be corrected and retried",

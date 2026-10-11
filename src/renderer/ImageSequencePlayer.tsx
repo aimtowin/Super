@@ -191,6 +191,19 @@ export function ImageSequencePlayer({
           aria-label={t("preview.sequenceFrame")}
           max={sequence.frames.length - 1}
           min={0}
+          onKeyDown={event => {
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+            const current = Number(event.currentTarget.value);
+            const target = event.key === 'Home' ? 0 : event.key === 'End' ? sequence.frames.length - 1 :
+              event.key === 'ArrowRight' || event.key === 'ArrowUp' ? current + 1 :
+              event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? current - 1 : null;
+            if (target === null) return;
+            // Native range inputs emit no change when Home is already at zero.
+            // Pause even in that case before a queued playback tick can advance.
+            event.preventDefault();
+            setPlayback(false);
+            setFrameIndex(Math.max(0, Math.min(sequence.frames.length - 1, target)));
+          }}
           onValueChange={(nextFrame) => {
             setPlayback(false);
             setFrameIndex(nextFrame);

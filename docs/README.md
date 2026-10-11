@@ -9,7 +9,8 @@
 | 文档 | 内容 |
 | --- | --- |
 | [当前已知问题](reference/known-issues-2.3.18.md) · [文档审查](reference/documentation-review-2.3.18.md) | 成品 Console 实际失败、验证缺口与修订依据 |
-| [2.3.18 更新说明](releases/v2.3.18.md) · [验收记录](releases/v2.3.18-validation.md) | 本轮功能、关联修复、升级边界；已正式发行，保留候选检查点与最终上线证据 |
+| [2.3.19 更新说明](releases/v2.3.19.md) · [验收记录](releases/v2.3.19-validation.md) | 最新查看器／资源组织升级；当前发布状态以验收记录为准 |
+| [2.3.18 更新说明](releases/v2.3.18.md) · [验收记录](releases/v2.3.18-validation.md) | 前轮本体补齐及正式发行证据 |
 | [完整图文功能指南](user-guide/features.md) | 2.3.17 安装版实拍与 2.3.18 源码补齐章节，入口、步骤及真实限制 |
 | [后续开发决策与优化里程碑](POST_DEVELOPMENT_DECISIONS.md) | 真实决策演变、逐版修复、对话索引、验证限制及待办边界 |
 | [阶段 1 历史检查点](reference/followup-phase1-results-2026-10-09.md) · [分阶段升级计划](plans/2026-10-09-followup-upgrades.md) | 当时 8 项修复及验证限制；当前交付事实以顶部补齐结果和发行记录为准 |

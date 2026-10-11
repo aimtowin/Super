@@ -382,6 +382,10 @@ import { AssetPreviewModal, type AssetPreviewModalHandle } from "./AssetPreviewM
 import { TextAssetPreviewTile } from "./TextAssetPreviewTile";
 import { WindowsWindowControls } from "./WindowsWindowControls";
 import { useViewerChromeIdle } from "./use-viewer-chrome-idle";
+import { useViewerPreferences } from './viewer-preferences';
+import { withLinkedVisibility } from './linked-visibility';
+import { FolderCoverDialog } from './FolderCoverDialog';
+import { viewerDeleteAction } from './viewer-delete-shortcut';
 import { useViewerVolume } from "./use-viewer-volume";
 import { useDialogFocusTrap } from "./use-dialog-focus-trap";
 import { AssetContextMenu } from "./AssetContextMenu";
@@ -615,7 +619,9 @@ function ToolButton({
 function AppInner() {
   const t = useT();
   const { locale } = useLocale();
-  const api = (window as RendererWindow).super?.library;
+  const { hideMissingLinked } = useViewerPreferences();
+  const rawApi = (window as RendererWindow).super?.library;
+  const api = useMemo(() => withLinkedVisibility(rawApi, hideMissingLinked), [rawApi, hideMissingLinked]);
   const shellApi = (window as RendererWindow).super?.shell;
 
   useEffect(() => {
@@ -632,6 +638,7 @@ function AppInner() {
   }, [api]);
   // Library / folder / assets (existing)
   const [library, setLibrary] = useState<RendererLibrarySummary | null>(null);
+  const [folderCoverTarget, setFolderCoverTarget] = useState<{ libraryId: string; folderId: string; name: string } | null>(null);
   const [batchFolderTarget, setBatchFolderTarget] = useState<{libraryId: string; parent: string | null; linked: boolean} | null>(null);
   if (batchFolderTarget && batchFolderTarget.libraryId !== library?.libraryId) setBatchFolderTarget(null);
   const workspaces = useWorkspaces();
@@ -1590,6 +1597,8 @@ function AppInner() {
   // top of the canvas during a rapid open/close.
   const [previewRestoring, setPreviewRestoring] = useState(false);
   const previewModalRef = useRef<AssetPreviewModalHandle>(null);
+  const viewerFullscreenHostRef = useRef<HTMLDivElement>(null);
+  const viewerDeletePendingRef = useRef(false);
   // REQ-CANVAS-019: read synchronously inside the canvas ResizeObserver
   // callback (which is created once and does not close over fresh state)
   // to skip the reflow-anchor logic while the viewer hides the canvas.
@@ -5726,6 +5735,17 @@ function AppInner() {
   useLayoutEffect(() => {
     reloadCurrentContentRef.current = reloadCurrentContent;
   });
+  const appliedLinkedVisibilityRef = useRef(hideMissingLinked);
+  useEffect(() => {
+    if (appliedLinkedVisibilityRef.current === hideMissingLinked) return;
+    appliedLinkedVisibilityRef.current = hideMissingLinked;
+    if (!library) return;
+    // This is a reversible display change, not a library mutation. Re-query
+    // the current scope and its sidebar so turning it off restores old rows.
+    void reloadCurrentContentRef.current().catch(caught => {
+      setError(toMessage(caught, t('toast.diskChangedRefreshFailed'), locale));
+    });
+  }, [hideMissingLinked, library, locale, setError, t]);
 
   async function refreshAfterAutomationScript() {
     const owner = metadataSession;
@@ -5743,6 +5763,17 @@ function AppInner() {
       if (metadataController.isCurrent(owner)) setError(toMessage(caught, t("toast.diskChangedRefreshFailed"), locale));
     }
   }
+
+  /** Release source-backed preview streams before filesystem deletion. */
+  const releaseAssetPreviewsBeforeDiskDelete = useCallback(async () => {
+    await closeAssetPreview(false);
+    clearAssetSelection();
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => resolve());
+      });
+    });
+  }, [closeAssetPreview, clearAssetSelection]);
 
   const {
     batchAssignTagToSelection,
@@ -7461,22 +7492,6 @@ function AppInner() {
     await deleteManagedAssetsFromDisk(assetIds);
   }
 
-  /**
-   * Chromium can keep a source stream open for a card hover/selection even
-   * after the full viewer closes.  Clear every source-backed card first and
-   * give React two frames to unmount the media elements before Windows sees
-   * the filesystem delete request.
-   */
-  async function releaseAssetPreviewsBeforeDiskDelete() {
-    await closeAssetPreview(false);
-    clearAssetSelection();
-    await new Promise<void>((resolve) => {
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => resolve());
-      });
-    });
-  }
-
   function requestSelectionDiskDelete(
     assetIds: string[],
     folderIds: readonly string[],
@@ -8409,6 +8424,7 @@ function AppInner() {
 
   const dialogFocusTrapActive = Boolean(
     quickStart.active ||
+    Boolean(folderCoverTarget && folderCoverTarget.libraryId === library?.libraryId) ||
     dialog ||
       conflicts ||
       assetRenameDialog ||
@@ -8697,6 +8713,25 @@ function AppInner() {
           navigateAssetPreview(visibleAssets[previewIndex - 1]!);
           return;
         }
+        const deleteAction = viewerDeleteAction(event, SHORTCUT_PLATFORM, previewAsset);
+        if (deleteAction && !busy && !viewerDeletePendingRef.current) {
+          event.preventDefault();
+          viewerDeletePendingRef.current = true;
+          const asset = previewAsset, owner = metadataSessionRef.current;
+          void (async () => {
+            try {
+              if (previewModalRef.current && !(await previewModalRef.current.flushBeforeSwitch())) return;
+              if (!metadataController.isCurrent(owner)) return;
+              await releaseAssetPreviewsBeforeDiskDelete();
+              if (!metadataController.isCurrent(owner)) return;
+              if (deleteAction === 'disk') await deleteManagedAssetsFromDisk([asset.assetId]);
+              else if (asset.locationKind === 'linked') await trashLinkedAssets([asset.assetId]);
+              else await trashManagedAssets([asset.assetId]);
+            } catch (caught) { setError(toMessage(caught, t('toast.folderDeleteFromDiskFailed'), locale)); }
+            finally { viewerDeletePendingRef.current = false; }
+          })();
+          return;
+        }
         if (
           event.key === "ArrowRight" &&
           previewIndex >= 0 &&
@@ -8745,6 +8780,15 @@ function AppInner() {
     restoreDialog,
     selectedAsset,
     visibleAssets,
+    busy,
+    locale,
+    metadataController,
+    releaseAssetPreviewsBeforeDiskDelete,
+    deleteManagedAssetsFromDisk,
+    setError,
+    t,
+    trashLinkedAssets,
+    trashManagedAssets,
   ]);
 
   // macOS three-finger swipe while viewing → previous/next (same order as arrows).
@@ -10748,7 +10792,7 @@ function AppInner() {
                 <div
                   aria-atomic="false"
                   aria-live="polite"
-                  className="workspace-notice-stack workspace-notice"
+                  className={`workspace-notice-stack workspace-notice${previewAsset ? ' is-viewer-notice' : ''}`}
                 >
                   {renderedToastStack.map((message) => {
                     const isUndoTarget =
@@ -11459,6 +11503,7 @@ function AppInner() {
                               <TextAssetPreviewTile
                                 api={api}
                                 assetId={asset.assetId}
+                                displayName={asset.displayName}
                                 libraryId={library.libraryId}
                                 revisionId={asset.currentRevisionId}
                               />
@@ -11888,12 +11933,14 @@ function AppInner() {
         )}
         </div>
         {previewAsset && library && api && (
+          <div className="viewer-fullscreen-host" ref={viewerFullscreenHostRef}>
           <WorkspacePreviewContext.Provider value={workspacePreviewSessions.get(previewAsset.assetId)!}>
           <AssetPreviewModal
             ref={previewModalRef}
             api={api}
             asset={previewAsset}
             chromeIdle={viewerChromeIdle}
+            fullscreenHost={viewerFullscreenHostRef}
             key={workspaces.registry.activeId + ":" + previewAsset.assetId}
             libraryId={library.libraryId}
             onChromeActivity={onViewerChromeActivity}
@@ -11916,6 +11963,7 @@ function AppInner() {
             pluginContributionRefreshKey={pluginContributionRefreshKey}
           />
           </WorkspacePreviewContext.Provider>
+          </div>
         )}
       </section>
       <InspectorPanel
@@ -12682,7 +12730,12 @@ function AppInner() {
         onViewAppLog={openAppLog}
       />
       {/* Unified context menu */}
+      {api && library && folderCoverTarget?.libraryId === library.libraryId && <FolderCoverDialog
+        key={`${library.libraryId}:${folderCoverTarget.folderId}`} api={api} libraryId={library.libraryId}
+        folderId={folderCoverTarget.folderId} name={folderCoverTarget.name} onClose={() => setFolderCoverTarget(null)}
+        onSaved={() => setFolderBrowseRefreshToken(value => value + 1)} />}
       <AssetContextMenu
+        onSetFolderCover={(folderId, name) => { if (library) setFolderCoverTarget({ libraryId: library.libraryId, folderId, name }); }}
         busy={busy}
         libraryId={library?.libraryId}
         pluginBrowseScope={pluginBrowseScope}

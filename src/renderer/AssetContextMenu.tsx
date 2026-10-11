@@ -259,6 +259,7 @@ function descriptorKey(descriptor: ContextMenuDescriptor): string {
 }
 
 interface AssetContextMenuProps {
+  onSetFolderCover?: (folderId: string, name: string) => void;
   libraryId?: string;
   busy?: boolean;
   pluginBrowseScope?: Partial<PluginContributionContext["browse"]>;
@@ -678,6 +679,11 @@ export function AssetContextMenu(props: AssetContextMenuProps) {
             onAction={activeContextMenu.descriptor.onCustomizeEmoji}
           />
         ) : null}
+        {activeContextMenu.descriptor.type === 'folder' && props.onSetFolderCover && (
+          <ContextMenuItem label={t('viewerUpgrade.cover')} icon={<Icon name="file" size={14} />}
+            disabled={busy || activeContextMenu.descriptor.status === 'offline'}
+            onAction={() => { const descriptor = activeContextMenu.descriptor; if (descriptor.type === 'folder') props.onSetFolderCover?.(descriptor.folderId, descriptor.name); }} />
+        )}
         {activeContextMenu.descriptor.type === "workspace" && (() => {
           const desc = activeContextMenu.descriptor;
           if (desc.type !== "workspace") return null;

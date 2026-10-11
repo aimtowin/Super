@@ -15,6 +15,18 @@ import type { MessageTree } from '../types';
  *   call-site migration should compose with placeholders rather than one mega-template.
  */
 export const zhCN = {
+  viewerUpgrade: {
+    cover: '设置文件夹图片封面', coverHint: '选择库内图片；缺失或删除时回退到自动封面。不修改源图片。',
+    coverSearch: '搜索封面图片名称', coverAutomatic: '自动封面（重置）', coverError: '无法读取或保存文件夹封面。',
+    coverResults: '显示 {count} / {total} 张，请搜索以定位其他图片。',
+    zipReadonly: 'ZIP 成员（只读）', zipSearch: '筛选成员路径', zipSelect: '选择成员以预览；不会解压到磁盘。',
+    zipError: '无法浏览此压缩包：可能损坏、加密、路径不安全或超出安全预算（最多 5000 项）。',
+    zipMemberError: '无法预览此成员：仅支持文本（1 MiB 内）和图片（8 MiB 内）；文件变化后请重新打开。',
+    chrome: '查看器工具栏', chromeHint: '各类查看器共用此设置；键盘操作和焦点始终显示控件。',
+    proximity: '靠近边缘显示', idle: '闲置后隐藏', always: '始终显示',
+    source: '源码', rendered: '渲染预览', remoteImage: '外部图片（未加载）',
+    hideMissing: '隐藏缺失的链接资产与文件夹', hideMissingHint: '只影响显示，不删除索引或改变忽略规则；关闭后可找回链接。',
+  },
   localUpgrade: {
     generationFilter: "生成信息", generationAny: "所有生成标记", generationMarked: "有 AI 生成标记", generationUnmarked: "无生成标记（含未知）", generationHint: "根据 PNG 中 Stable Diffusion / ComfyUI 标记识别，不是来源真实性证明，也不等于“已 AI 分析”。", batchDone: "已创建",
     batchLimit: "最多 32 个；成功项保留，失败项可修改后重试",

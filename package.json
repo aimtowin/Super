@@ -1,7 +1,7 @@
 {
   "name": "super",
   "productName": "Super",
-  "version": "2.3.18",
+  "version": "2.3.19",
   "description": "A local-first visual asset workspace for creative professionals.",
   "author": "dolag233",
   "license": "MIT",
@@ -83,6 +83,8 @@
     "quickjs-emscripten": "0.32.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
     "sharp": "^0.35.3",
     "three": "^0.185.1",
     "trash": "10.1.1",

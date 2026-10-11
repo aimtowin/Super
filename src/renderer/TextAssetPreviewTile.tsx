@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { SuperLibraryApi } from "../shared/library-api";
 import { textCardPreviewSnippet } from "../shared/text-media";
 import { useT } from "./i18n";
+import { MarkdownPreview, isMarkdownName } from './MarkdownPreview';
 
 const previewCache = new Map<string, string>();
 const previewInFlight = new Map<string, Promise<string | null>>();
@@ -16,6 +17,7 @@ export type TextAssetPreviewTileProps = {
   api: SuperLibraryApi;
   libraryId: string;
   assetId: string;
+  displayName?: string;
   /** Busts cache when the text revision changes. */
   revisionId: string;
   className?: string;
@@ -32,6 +34,7 @@ export function TextAssetPreviewTile({
   api,
   libraryId,
   assetId,
+  displayName = '',
   revisionId,
   className = "text-asset-preview",
   snippetClassName = "text-asset-preview-snippet",
@@ -62,7 +65,7 @@ export function TextAssetPreviewTile({
         .readTextAsset({ libraryId, assetId, maxBytes: 2048 })
         .then((result) => {
           if (!result.ok) return null;
-          const next = textCardPreviewSnippet(result.value.content);
+          const next = result.value.content;
           if ((previewGenerations.get(key) ?? 0) !== generation) return null;
           previewCache.set(key, next);
           return next;
@@ -113,9 +116,9 @@ export function TextAssetPreviewTile({
       ref={tileRef}
       {...(cardFeelTilt ? { "data-card-feel-tilt": "" } : {})}
     >
-      <pre className={snippetClassName}>
-        {snippet ?? t("preview.textLoading")}
-      </pre>
+      {snippet !== null && isMarkdownName(displayName) ? <MarkdownPreview content={snippet} compact /> : (
+        <pre className={snippetClassName}>{snippet === null ? t('preview.textLoading') : textCardPreviewSnippet(snippet)}</pre>
+      )}
     </div>
   );
 }

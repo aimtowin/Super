@@ -11,6 +11,8 @@ Super (MIT, see [LICENSE](LICENSE)) 依赖以下开源组件。各组件按其�
 | [Electron](https://www.electronjs.org/) | MIT | 桌面应用运行时 |
 | Chromium (随 Electron) | BSD-3-Clause | 浏览器内核 |
 | [React / React DOM](https://react.dev/) | MIT | 界面渲染框架 |
+| [react-markdown](https://github.com/remarkjs/react-markdown) | MIT | 安全 Markdown 渲染 |
+| [remark-gfm](https://github.com/remarkjs/remark-gfm) | MIT | Markdown 表格、任务列表等 GFM 语法 |
 | [Vite](https://vitejs.dev/) | MIT | 构建工具（打包产物含构建产物） |
 | [TypeScript](https://www.typescriptlang.org/) | Apache-2.0 | 类型系统与编译器 |
 | [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) | MIT | SQLite 绑定 |

@@ -58,6 +58,13 @@ const assetRenameFileFieldsSchema = z.object({
 );
 const selectedPathSchema = nonBlankString;
 const optionalIdentifierSchema = identifierSchema.optional();
+// Preserve all 16 user filters while reserving one bounded display-only clause.
+const browseFiltersSchema = z.array(filterClauseSchema).max(17).superRefine((filters, context) => {
+  const displayClauses = filters.filter(filter => filter.field === 'linked_visibility').length;
+  if (displayClauses > 1 || filters.length - displayClauses > 16) {
+    context.addIssue({ code: 'custom', message: 'At most 16 user filters and one linked visibility clause are allowed.' });
+  }
+});
 const optionalClearableDescriptionSchema = z.string().max(10000).optional();
 const queryDefinitionJsonSchema = nonBlankString.max(65_536);
 export const manualPaletteColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/u, {
@@ -292,10 +299,13 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('folder.browse-entries.request'),
+    hideMissing: z.boolean().optional(),
     libraryId: identifierSchema,
     parentFolderId: z.string().min(1).max(4096).nullable(),
     showIgnored: z.boolean().optional(),
   }),
+  z.strictObject({ type: z.literal('folder.cover.request'), libraryId: identifierSchema,
+    folderId: folderScopeIdSchema, assetId: identifierSchema.nullable().optional() }),
   // Clarification #7 / Super-ekj: managed folder trash / permanent disk delete.
   z.strictObject({
     type: z.literal('folder.trash.request'),
@@ -504,6 +514,7 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('linked-folder.list.request'),
+    hideMissing: z.boolean().optional(),
     libraryId: identifierSchema,
     showIgnored: z.boolean().optional(),
   }),
@@ -751,7 +762,7 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     type: z.literal('asset.search.request'),
     libraryId: identifierSchema,
     query: searchQuerySchema,
-    filters: z.array(filterClauseSchema).max(16).optional(),
+    filters: browseFiltersSchema.optional(),
     scope: searchScopeSchema.optional(),
     sort: sortDefinitionSchema.optional(),
     /** When true, return the full browse scope (up to browse-scope cap); limit/offset ignored. */
@@ -882,6 +893,10 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     libraryId: identifierSchema,
     assetId: identifierSchema,
     maxBytes: z.number().int().positive().max(2_097_152).optional(),
+  }),
+  z.strictObject({
+    type: z.literal('asset.zip.preview.request'), libraryId: identifierSchema, assetId: identifierSchema,
+    memberPath: z.string().min(1).max(2048).optional(), expectedRevisionId: identifierSchema.optional(),
   }),
   z.strictObject({
     type: z.literal('asset.image.transform.request'),
@@ -1461,10 +1476,13 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('folder.browse-entries'),
+    hideMissing: z.boolean().optional(),
     libraryId: identifierSchema,
     parentFolderId: folderScopeIdSchema.nullable(),
     showIgnored: z.boolean().optional(),
   }),
+  z.strictObject({ type: z.literal('folder.cover'), libraryId: identifierSchema,
+    folderId: folderScopeIdSchema, assetId: identifierSchema.nullable().optional() }),
   z.strictObject({
     type: z.literal('folder.list-trashed'),
     libraryId: identifierSchema,
@@ -1635,6 +1653,7 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('linked-folder.list'),
+    hideMissing: z.boolean().optional(),
     libraryId: identifierSchema,
     showIgnored: z.boolean().optional(),
   }),
@@ -1896,7 +1915,7 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
     type: z.literal('asset.search'),
     libraryId: identifierSchema,
     query: searchQuerySchema,
-    filters: z.array(filterClauseSchema).max(16).optional(),
+    filters: browseFiltersSchema.optional(),
     scope: searchScopeSchema.optional(),
     sort: sortDefinitionSchema.optional(),
     scopeMode: z.boolean().optional(),
@@ -2126,6 +2145,10 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
     libraryId: identifierSchema,
     assetId: identifierSchema,
     maxBytes: z.number().int().positive().max(2_097_152).optional(),
+  }),
+  z.strictObject({
+    type: z.literal('asset.zip.preview'), libraryId: identifierSchema, assetId: identifierSchema,
+    memberPath: z.string().min(1).max(2048).optional(), expectedRevisionId: identifierSchema.optional(),
   }),
   z.strictObject({
     type: z.literal('asset.image.transform'),

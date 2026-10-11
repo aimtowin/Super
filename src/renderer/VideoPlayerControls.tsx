@@ -477,6 +477,9 @@ export function VideoPlayerControls({
           {t("preview.videoUnsupported")}
         </video>
       </div>
+      <div className="preview-video-mini-progress" aria-hidden="true">
+        <span style={{ width: `${displayRatio * 100}%` }} />
+      </div>
       <div className="preview-video-controls preview-chrome-fade">
         <button
           className="preview-video-playpause"

@@ -13,6 +13,7 @@ import { TEXT_VIEWER_MAX_BYTES, countTextLines } from "../shared/text-media";
 import { messageForPublicError } from "./error-utils";
 import { useLocale, useT } from "./i18n";
 import { invalidateTextAssetPreviewCache } from "./TextAssetPreviewTile";
+import { MarkdownPreview } from './MarkdownPreview';
 
 export type TextViewerControlsProps = {
   api: SuperLibraryApi;
@@ -21,6 +22,7 @@ export type TextViewerControlsProps = {
   onClose: () => void;
   onSaved?: () => void;
   allowConvert?: boolean;
+  markdown?: boolean;
 };
 
 export type TextViewerControlsHandle = {
@@ -44,6 +46,7 @@ export const TextViewerControls = forwardRef<
     onClose,
     onSaved,
     allowConvert = false,
+    markdown = false,
   },
   ref,
 ) {
@@ -60,6 +63,7 @@ export const TextViewerControls = forwardRef<
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [wrapLines, setWrapLines] = useState(false);
+  const [rendered, setRendered] = useState(markdown);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const onSavedRef = useRef(onSaved);
@@ -258,7 +262,7 @@ export const TextViewerControls = forwardRef<
 
   return (
     <div className="preview-text-stage">
-      <div className="preview-text-topbar">
+      <div className="preview-text-topbar preview-chrome-fade">
         <div className="preview-text-meta" aria-live="polite">
           <span>
             {t("preview.textLineCount", { count: lineCount })}
@@ -278,6 +282,11 @@ export const TextViewerControls = forwardRef<
           ) : null}
         </div>
         <div className="preview-text-actions">
+          {markdown && <div className="app-settings-option-group" role="radiogroup" aria-label="Markdown">
+            {([false, true] as const).map(value => <button className="preview-text-action-chip" type="button" role="radio"
+              key={String(value)} aria-checked={rendered === value} onClick={() => setRendered(value)}>
+              {t(value ? 'viewerUpgrade.rendered' : 'viewerUpgrade.source')}</button>)}
+          </div>}
           <button className="preview-text-action-chip" type="button" aria-pressed={wrapLines} onClick={() => setWrapLines(current => !current)}>{t("localUpgrade.wrap")}</button>
           {allowConvert && !editable && !truncated && encoding !== 'utf-8' && <button className="preview-text-action-chip" disabled={saving} type="button" onClick={async () => {
             if (!window.confirm(t("localUpgrade.convertConfirm"))) return;
@@ -312,6 +321,7 @@ export const TextViewerControls = forwardRef<
         </div>
       </div>
       <div className={`preview-text-scroll${wrapLines ? " is-wrapped" : ""}`}>
+        {markdown && rendered ? <MarkdownPreview content={content} /> : (
         <div className="preview-text-line-layer">
           <pre aria-hidden="true" hidden={wrapLines} className="preview-text-gutter">
             {gutter}
@@ -327,6 +337,7 @@ export const TextViewerControls = forwardRef<
             value={content}
           />
         </div>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { zipPreviewSchema } from '../zip-preview';
 import { embeddedGenerationSchema, folderInspectionSchema, ignorePreviewSchema } from '../local-upgrade-results';
 
 import { aiSearchPlanSchema, assetMetadataResultSchema, extractedMetadataResultSchema, assetSummarySchema, browseLayoutEntrySchema, collectionSummarySchema, folderBrowseEntrySchema, ignoredPathSchema, linkedFolderDirectoryMutationSchema, linkedFolderRuleSchema, linkedFolderSummarySchema, managedFolderSummarySchema, portableRelativePathSchema, smartCollectionSummarySchema, tagCooccurrenceGraphSchema, tagSummarySchema, trashedFolderSummarySchema } from '../asset-types';
@@ -1357,6 +1358,8 @@ const assetOperationSuccessSchemas = [
     editable: z.boolean(),
     mimeType: z.string(),
   }),
+  z.strictObject({ ok: z.literal(true), type: z.literal('asset.zip.preview'), preview: zipPreviewSchema }),
+  z.strictObject({ ok: z.literal(true), type: z.literal('folder.cover'), folderId: nonBlankString, assetId: nonBlankString.nullable() }),
   z.strictObject({
     ok: z.literal(true),
     type: z.literal('asset.text.saved'),

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { ZipPreviewInput } from '../shared/zip-preview';
 
 import type { AiJobStatus, LibraryApiResult, LinkedAssetDeleteResult, MediaJobStatus, PluginJobStatus, PreviewResolution, RelinkAssetResult, SuperLibraryApi, SyncCapabilities, SyncReport } from '../shared/library-api';
 import { summarizePluginJobs } from '../shared/plugin-job-status';
@@ -589,10 +590,12 @@ const library: SuperLibraryApi = Object.freeze({
   async listFolderBrowseEntries(input: {
     libraryId: string;
     parentFolderId: string | null;
+    hideMissing?: boolean;
     showIgnored?: boolean;
   }): Promise<LibraryApiResult<FolderBrowseEntry[]>> {
     const result = await request({
       type: 'folder.browse-entries.request',
+      hideMissing: input.hideMissing,
       libraryId: input.libraryId,
       parentFolderId: input.parentFolderId,
       showIgnored: input.showIgnored,
@@ -602,6 +605,12 @@ const library: SuperLibraryApi = Object.freeze({
       throw new Error('Unexpected list-folder-browse-entries response.');
     }
     return { ok: true, value: result.entries };
+  },
+  async folderCover(input: { libraryId: string; folderId: string; assetId?: string | null }) {
+    const result = await request({ ...input, type: 'folder.cover.request' });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'folder.cover') throw new Error('Unexpected folder-cover response.');
+    return { ok: true as const, value: { folderId: result.folderId, assetId: result.assetId } };
   },
 
   async trashFolder(input: {
@@ -931,11 +940,12 @@ const library: SuperLibraryApi = Object.freeze({
     };
   },
 
-  async listLinkedFolders({ libraryId, showIgnored }: {
+  async listLinkedFolders({ libraryId, showIgnored, hideMissing }: {
     libraryId: string;
     showIgnored?: boolean;
+    hideMissing?: boolean;
   }): Promise<LibraryApiResult<LinkedFolderSummary[]>> {
-    const result = await request({ type: 'linked-folder.list.request', libraryId, showIgnored });
+    const result = await request({ type: 'linked-folder.list.request', libraryId, showIgnored, hideMissing });
     if (!result.ok) return failure(result);
     if (result.type !== 'linked-folder.list') throw new Error('Unexpected list-linked-folders response.');
     return { ok: true, value: result.folders };
@@ -1440,6 +1450,13 @@ const library: SuperLibraryApi = Object.freeze({
         mimeType: result.mimeType,
       },
     };
+  },
+
+  async previewZipAsset(input: ZipPreviewInput) {
+    const result = await request({ ...input, type: 'asset.zip.preview.request' });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'asset.zip.preview') throw new Error('Unexpected ZIP preview response.');
+    return { ok: true as const, value: result.preview };
   },
 
   async saveTextAsset({ libraryId, assetId, content, expectedRevisionId, createRevision, convertToUtf8 }: { libraryId: string; assetId: string; content: string; expectedRevisionId?: string; createRevision?: boolean; convertToUtf8?: boolean }) {

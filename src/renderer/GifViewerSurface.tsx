@@ -90,7 +90,7 @@ export function GifViewerSurface({src, alt, displayTransform, onFullscreen, onSw
     <div className="preview-image-viewport" ref={viewportRef} {...viewportPointerHandlers}>
       <canvas ref={canvas} aria-label={alt} role="img" style={{width:natural.w * view.scale,height:natural.h * view.scale,transform:`translate(${view.x}px,${view.y}px)`}} />
     </div>
-    <div className="gif-viewer-controls">
+    <div className="gif-viewer-controls preview-chrome-fade">
       <button type="button" onClick={toggle} aria-label={paused ? t('preview.videoPlay') : t('preview.videoPause')}>{paused ? '▶' : 'Ⅱ'}</button>
       <button type="button" aria-label={t("localUpgrade.previousFrame")} disabled={!count} onClick={() => {playing.current = false; setPaused(true); requested.current = (frameIndex - 1 + count) % count; wake.current();}}>◀</button>
       <input aria-label={t('preview.videoScrubAria')} type="range" min={0} max={Math.max(0,count-1)} value={frameIndex} disabled={!count} onChange={event => {playing.current=false;setPaused(true);requested.current=Number(event.target.value);wake.current();}} />

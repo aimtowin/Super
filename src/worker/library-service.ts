@@ -1,4 +1,7 @@
 import { randomUUID, createHash } from 'node:crypto';
+import { videoPosterSeekSeconds } from './video-poster-seek';
+import { readZipPreview } from './zip-preview';
+import type { ZipPreview, ZipPreviewInput } from '../shared/zip-preview';
 import { syncMetadataSchema, canonicalSyncMetadata, metadataFingerprint, type SyncMetadata } from './sync/sync-metadata';
 import { readEmbeddedGeneration } from './embedded-generation';
 import type { Sharp } from 'sharp';
@@ -3051,6 +3054,25 @@ const OPERATION_HISTORY_STALE_RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
 
 // Exported for schema-compatibility tests that replay migrations
 // version-by-version (Super-verg.4/6).
+const FOLDER_COVERS_SCHEMA_SQL = `CREATE TABLE IF NOT EXISTS folder_covers (
+  folder_id TEXT PRIMARY KEY,
+  asset_id TEXT REFERENCES assets(asset_id) ON DELETE SET NULL
+);
+CREATE TRIGGER IF NOT EXISTS library_change_on_folder_covers_insert AFTER INSERT ON folder_covers BEGIN
+  UPDATE library_change_sequence SET sequence = sequence + 1;
+END;
+CREATE TRIGGER IF NOT EXISTS library_change_on_folder_covers_update AFTER UPDATE ON folder_covers BEGIN
+  UPDATE library_change_sequence SET sequence = sequence + 1;
+END;
+CREATE TRIGGER IF NOT EXISTS library_change_on_folder_covers_delete AFTER DELETE ON folder_covers BEGIN
+  UPDATE library_change_sequence SET sequence = sequence + 1;
+END;
+CREATE TRIGGER IF NOT EXISTS folder_cover_managed_cleanup AFTER DELETE ON managed_folders BEGIN
+  DELETE FROM folder_covers WHERE folder_id = OLD.folder_id;
+END;
+CREATE TRIGGER IF NOT EXISTS folder_cover_linked_cleanup AFTER DELETE ON linked_folders BEGIN
+  DELETE FROM folder_covers WHERE folder_id = OLD.folder_id OR substr(folder_id, 1, length(OLD.folder_id) + 5) = 'lfv:' || OLD.folder_id || '/';
+END;`;
 export const MIGRATIONS = [
   { version: 1, sql: INITIAL_SCHEMA_SQL, checksum: INITIAL_SCHEMA_CHECKSUM },
   { version: 2, sql: ASSET_SCHEMA_SQL, checksum: ASSET_SCHEMA_CHECKSUM },
@@ -3212,6 +3234,7 @@ export const MIGRATIONS = [
   {version: 51,
     sql: 'CREATE TABLE IF NOT EXISTS revision_generation_info (revision_id TEXT PRIMARY KEY REFERENCES revisions(revision_id) ON DELETE CASCADE, info_json TEXT);',
     checksum: createHash('sha256').update('CREATE TABLE IF NOT EXISTS revision_generation_info (revision_id TEXT PRIMARY KEY REFERENCES revisions(revision_id) ON DELETE CASCADE, info_json TEXT);').digest('hex')},
+  { version: 52, sql: FOLDER_COVERS_SCHEMA_SQL, checksum: createHash('sha256').update(FOLDER_COVERS_SCHEMA_SQL).digest('hex') },
 ] as const;
 export const SUPPORTED_SCHEMA_VERSION = MIGRATIONS.at(-1)!.version;
 
@@ -13276,6 +13299,18 @@ export class LibraryService {
           updateAsset.run(rewritten, portablePathIdentity(rewritten), now, asset.asset_id);
           this.syncAssetSearchContent(openLibrary.connection, asset.asset_id);
         }
+        if (hasTable(openLibrary.connection, 'folder_covers')) {
+          const oldId = encodeLinkedVirtualFolderId(target.linkedFolderId, target.relativePath);
+          const newId = encodeLinkedVirtualFolderId(target.linkedFolderId, newRelativePath);
+          const covers = openLibrary.connection.prepare('SELECT folder_id, asset_id FROM folder_covers').all() as Array<{ folder_id: string; asset_id: string | null }>;
+          const remove = openLibrary.connection.prepare('DELETE FROM folder_covers WHERE folder_id = ?');
+          const insert = openLibrary.connection.prepare('INSERT INTO folder_covers(folder_id, asset_id) VALUES (?, ?) ON CONFLICT(folder_id) DO UPDATE SET asset_id = excluded.asset_id');
+          for (const cover of covers) {
+            if (cover.folder_id !== oldId && !cover.folder_id.startsWith(oldId + '/')) continue;
+            remove.run(cover.folder_id);
+            insert.run(newId + cover.folder_id.slice(oldId.length), cover.asset_id);
+          }
+        }
         if (ignoredPaths.length > 0) {
           const remove = openLibrary.connection.prepare(
             `DELETE FROM explicit_ignored_paths
@@ -13610,8 +13645,53 @@ export class LibraryService {
   listFolderBrowseEntries(input: {
     libraryId: string;
     parentFolderId: string | null;
+    hideMissing?: boolean;
     showIgnored?: boolean;
   }): FolderBrowseEntry[] {
+    const library = this.requireOpenLibrary(input.libraryId);
+    const entries = this.listDefaultFolderBrowseEntries(input);
+    if (!hasTable(library.connection, 'folder_covers') || entries.length === 0) return entries;
+    // One bounded query, not a separate asset/thumbnail lookup for each folder.
+    const custom = library.connection.prepare(`
+      SELECT c.folder_id, a.asset_id, ar.artifact_id FROM folder_covers c
+      JOIN assets a ON a.asset_id = c.asset_id AND a.deleted_at IS NULL AND a.availability = 'available'
+      LEFT JOIN revision_artifacts ar ON ar.revision_id = a.current_revision_id AND ar.kind = 'thumbnail' AND ar.status = 'ready' AND ar.invalidated_at IS NULL
+      WHERE c.folder_id IN (SELECT value FROM json_each(?))
+      ORDER BY ar.generated_at DESC
+    `).all(JSON.stringify(entries.map(entry => entry.folderId))) as Array<{ folder_id: string; asset_id: string; artifact_id: string | null }>;
+    const byFolder = new Map<string, typeof custom[number]>();
+    for (const cover of custom) if (!byFolder.has(cover.folder_id)) byFolder.set(cover.folder_id, cover);
+    return entries.map(entry => {
+      const cover = byFolder.get(entry.folderId);
+      return cover ? { ...entry,
+        coverAssetIds: [cover.asset_id, ...entry.coverAssetIds.filter(id => id !== cover.asset_id)].slice(0, 3),
+        coverArtifactIds: cover.artifact_id ? [cover.artifact_id] : entry.coverArtifactIds,
+      } : entry;
+    });
+  }
+
+  /** Undefined assetId reads; null resets; a library image identity selects. */
+  folderCover(input: { libraryId: string; folderId: string; assetId?: string | null }): { folderId: string; assetId: string | null } {
+    const library = this.requireOpenLibrary(input.libraryId);
+    const linked = this.resolveLinkedFolderScope(library, input.folderId);
+    if (!linked && !library.connection.prepare('SELECT 1 FROM managed_folders WHERE folder_id = ?').get(input.folderId)) throw new LibraryServiceError('FOLDER_NOT_FOUND');
+    if (!hasTable(library.connection, 'folder_covers')) {
+      if (input.assetId === undefined) return { folderId: input.folderId, assetId: null };
+      throw new LibraryServiceError('LIBRARY_READ_ONLY');
+    }
+    if (input.assetId !== undefined) {
+      if (library.readOnly) throw new LibraryServiceError('LIBRARY_READ_ONLY');
+      if (input.assetId !== null) {
+        const asset = library.connection.prepare("SELECT relative_file_path FROM assets WHERE asset_id = ? AND deleted_at IS NULL AND availability = 'available'").get(input.assetId) as { relative_file_path: string } | undefined;
+        if (!asset || LibraryService.detectMediaType(asset.relative_file_path) !== 'image') throw new LibraryServiceError('INVALID_IMPORT_DECISION', { reason: 'UNSUPPORTED_FORMAT' });
+        library.connection.prepare('INSERT INTO folder_covers (folder_id, asset_id) VALUES (?, ?) ON CONFLICT(folder_id) DO UPDATE SET asset_id = excluded.asset_id').run(input.folderId, input.assetId);
+      } else library.connection.prepare('DELETE FROM folder_covers WHERE folder_id = ?').run(input.folderId);
+    }
+    const row = library.connection.prepare('SELECT asset_id FROM folder_covers WHERE folder_id = ?').get(input.folderId) as { asset_id: string | null } | undefined;
+    return { folderId: input.folderId, assetId: row?.asset_id ?? null };
+  }
+
+  private listDefaultFolderBrowseEntries(input: { libraryId: string; parentFolderId: string | null; hideMissing?: boolean; showIgnored?: boolean }): FolderBrowseEntry[] {
     const openLibrary = this.requireOpenLibrary(input.libraryId);
     if (input.parentFolderId !== null) {
       const linkedEntries = this.listLinkedFolderBrowseEntries(openLibrary, input);
@@ -13696,16 +13776,18 @@ export class LibraryService {
    */
   private listLinkedFolderBrowseEntries(
     openLibrary: OpenLibrary,
-    input: { parentFolderId: string | null; showIgnored?: boolean },
+    input: { parentFolderId: string | null; showIgnored?: boolean; hideMissing?: boolean },
   ): FolderBrowseEntry[] | null {
     if (input.parentFolderId === null) return null;
     const resolved = this.resolveLinkedFolderScope(openLibrary, input.parentFolderId);
     if (!resolved) return null;
+    if (input.hideMissing && (resolved.status === 'offline' || this.linkedRootIsGone(resolved.absoluteRootPath))) return [];
 
     const paths = this.listLinkedAssetRelativePaths(
       openLibrary,
       resolved.linkedFolderId,
       input.showIgnored === true,
+      input.hideMissing === true,
     );
     // A linked source can contain tens of thousands of files. Never derive
     // every folder card by repeatedly filtering that complete path array; it
@@ -13800,6 +13882,7 @@ export class LibraryService {
     openLibrary: OpenLibrary,
     linkedFolderId: string,
     showIgnored: boolean,
+    availableOnly = false,
   ): string[] {
     const connection = openLibrary.connection;
     const hasIgnoreTable = hasTable(connection, 'linked_ignored_assets');
@@ -13810,6 +13893,7 @@ export class LibraryService {
            FROM assets a
           WHERE a.linked_folder_id = ?
             AND a.location_kind = 'linked'
+            ${availableOnly ? "AND a.availability = 'available'" : ''}
             AND a.deleted_at IS NULL
             ${hasIgnoreTable
               ? 'AND NOT EXISTS (SELECT 1 FROM linked_ignored_assets ignored WHERE ignored.asset_id = a.asset_id)'
@@ -14301,7 +14385,7 @@ export class LibraryService {
     return [...prefixes].sort();
   }
 
-  listLinkedFolders(libraryId: string, showIgnored = false): LinkedFolderSummary[] {
+  listLinkedFolders(libraryId: string, showIgnored = false, hideMissing = false): LinkedFolderSummary[] {
     const openLibrary = this.requireOpenLibrary(libraryId);
     const rows = openLibrary.connection
       .prepare(
@@ -14319,8 +14403,9 @@ export class LibraryService {
       // asks to show ignored items. Otherwise it becomes impossible to
       // unignore or remove the root after its source files disappear.
       .filter((row) => showIgnored || !this.explicitFolderIgnored(openLibrary, 'linked', row.folder_id, ''))
+      .filter((row) => !hideMissing || (row.status === 'available' && !this.linkedRootIsGone(row.absolute_root_path)))
       .flatMap((row) => {
-        const paths = this.listLinkedAssetRelativePaths(openLibrary, row.folder_id, false);
+        const paths = this.listLinkedAssetRelativePaths(openLibrary, row.folder_id, showIgnored, hideMissing);
         // Full disk traversal is only needed to surface empty directories.
         // For large linked sources the indexed hierarchy is authoritative and
         // avoids walking every source file on every sidebar refresh.
@@ -22750,7 +22835,7 @@ export class LibraryService {
     }
   }
 
-  /** Generate a video poster frame using ffmpeg thumbnail filter. */
+  /** Prefer 25%-duration video frames; keep bounded first-frame fallback. */
   private async generateVideoPoster(
     input: { libraryId: string; assetId: string },
     openLibrary: OpenLibrary,
@@ -22766,12 +22851,38 @@ export class LibraryService {
     const artifactAbsPath = path.join(artifactsDir, artifactRelPath);
 
     try {
-      const result = await this.runFfmpeg(ffmpegPath, [
+      let seek = 0;
+      if (kind === 'video_poster') {
+        const known = openLibrary.connection.prepare(
+          "SELECT duration_ms FROM revision_artifacts WHERE revision_id = ? AND kind = 'extracted_metadata' AND status = 'ready' ORDER BY generated_at DESC LIMIT 1",
+        ).get(revisionId) as { duration_ms: number | null } | undefined;
+        seek = videoPosterSeekSeconds(known?.duration_ms);
+        if (!seek) {
+          try {
+            const probe = await this.runFfmpeg(resolveFfprobePath(), [
+              '-v', 'error', '-show_entries', 'format=duration', '-of', 'json', assetPath,
+            ], { timeoutMs: 15_000, signal: execution.signal });
+            const resourceError = asMediaResourceExhaustedError(probe, 'ffprobe-poster');
+            if (resourceError) throw resourceError;
+            if (probe.exitCode === 0) {
+              const data = JSON.parse(probe.stdout.toString('utf8')) as { format?: { duration?: string } };
+              seek = videoPosterSeekSeconds(Number(data.format?.duration) * 1_000);
+            }
+          } catch (error) {
+            if (execution.signal?.aborted) throw error;
+            const resourceError = asMediaResourceExhaustedError(error, 'ffprobe-poster');
+            if (resourceError) throw resourceError;
+            this.diagnose('video-poster-duration', error, input);
+          }
+        }
+      }
+      const generate = (at: number, representative: boolean) => this.runFfmpeg(ffmpegPath, [
         '-y',
         '-hide_banner',
         '-loglevel', 'error',
         '-threads:v', '1',
         '-filter_threads', '1',
+        ...(at > 0 ? ['-ss', String(at)] : []),
         '-i', assetPath,
         // Do not let FFmpeg auto-select audio, subtitles, or data streams for
         // a one-frame image output. Those streams are irrelevant to a card
@@ -22784,17 +22895,35 @@ export class LibraryService {
         // hundreds of full-resolution decoded frames. A small batch is
         // sufficient for a fast card poster; visual quality is intentionally
         // secondary to keeping import and browsing responsive.
-        '-vf', 'scale=640:-2:force_original_aspect_ratio=decrease,thumbnail=30',
+        '-vf', `scale=640:-2:force_original_aspect_ratio=decrease${representative ? ',thumbnail=30' : ''}`,
         '-frames:v', '1',
         '-q:v', '3',
         artifactAbsPath,
       ], { timeoutMs: 120_000, signal: execution.signal });
-
+      let result;
+      try { result = await generate(seek, kind === 'thumbnail' || seek === 0); }
+      catch (error) {
+        if (execution.signal?.aborted || seek === 0) throw error;
+        const resourceError = asMediaResourceExhaustedError(error, 'ffmpeg-video-poster');
+        if (resourceError) throw resourceError;
+        this.diagnose('video-poster-seek-fallback', error, input);
+        seek = 0;
+        result = await generate(0, true);
+      }
+      const resourceError = asMediaResourceExhaustedError(result, 'ffmpeg-video-poster');
+      if (resourceError) throw resourceError;
+      if (execution.signal?.aborted) throw execution.signal.reason ?? new Error('Poster cancelled');
+      if (seek > 0 && (result.exitCode !== 0 || !existsSync(artifactAbsPath) || statSync(artifactAbsPath).size === 0)) {
+        result = await generate(0, true);
+        const fallbackResourceError = asMediaResourceExhaustedError(result, 'ffmpeg-video-poster');
+        if (fallbackResourceError) throw fallbackResourceError;
+      }
       if (result.exitCode !== 0) {
         throw new Error(`ffmpeg poster exited with code ${result.exitCode}: ${result.stderr.slice(-200)}`);
       }
 
       const outputStat = statSync(artifactAbsPath);
+      if (!outputStat.size) throw new Error('Video poster output is empty');
       openLibrary.connection
         .prepare(
           `INSERT INTO revision_artifacts
@@ -22803,7 +22932,7 @@ export class LibraryService {
            VALUES (?, ?, ?, 'image/jpeg', ?, ?, ?, 'ready', ?)`,
         )
         .run(artifactId, revisionId, kind, outputStat.size, artifactRelPath,
-          kind === 'thumbnail' ? AUDIO_WAVEFORM_GENERATOR : `ffmpeg@${FFMPEG_VERSION}`, new Date().toISOString());
+          kind === 'thumbnail' ? AUDIO_WAVEFORM_GENERATOR : `ffmpeg@${FFMPEG_VERSION}:poster25-v1`, new Date().toISOString());
 
       return artifactId;
     } catch (error) {
@@ -27020,6 +27149,11 @@ export class LibraryService {
           }
           break;
         }
+        case 'linked_visibility': {
+          const visible = "(a.location_kind != 'linked' OR a.availability = 'available')";
+          conditions.push(filter.exclude ? `NOT ${visible}` : visible);
+          break;
+        }
         case 'availability': {
           const phs = filter.values.map(() => '?').join(',');
           const clause = filter.exclude
@@ -29821,6 +29955,26 @@ export class LibraryService {
     const prefix = `${libraryId}\0`;
     for (const key of this.textAssetPreviewCache.keys()) {
       if (key.startsWith(prefix)) this.textAssetPreviewCache.delete(key);
+    }
+  }
+
+  async previewZipAsset(input: ZipPreviewInput): Promise<ZipPreview> {
+    const library = this.requireOpenLibrary(input.libraryId);
+    const row = library.connection.prepare(
+      'SELECT current_revision_id, relative_file_path, availability, deleted_at FROM assets WHERE asset_id = ?',
+    ).get(input.assetId) as { current_revision_id: string | null; relative_file_path: string; availability: string; deleted_at: string | null } | undefined;
+    if (!row?.current_revision_id || row.availability !== 'available' || row.deleted_at) throw new LibraryServiceError('ASSET_NOT_FOUND');
+    if (!/\.zip$/iu.test(row.relative_file_path)) throw new LibraryServiceError('INVALID_IMPORT_DECISION', { reason: 'UNSUPPORTED_FORMAT' });
+    if (input.expectedRevisionId && input.expectedRevisionId !== row.current_revision_id) throw new LibraryServiceError('VERSION_CONFLICT');
+    try {
+      const preview = await readZipPreview(this.resolveAssetPath(input.libraryId, input.assetId), input.memberPath);
+      const current = library.connection.prepare('SELECT current_revision_id, deleted_at FROM assets WHERE asset_id = ?').get(input.assetId) as { current_revision_id: string; deleted_at: string | null } | undefined;
+      if (!current || current.deleted_at || current.current_revision_id !== row.current_revision_id) throw new LibraryServiceError('VERSION_CONFLICT');
+      return { ...preview, revisionId: row.current_revision_id };
+    } catch (error) {
+      if (error instanceof LibraryServiceError) throw error;
+      this.diagnose('zip-preview', error, { libraryId: input.libraryId, assetId: input.assetId });
+      throw new LibraryServiceError('INVALID_IMPORT_DECISION', { reason: 'UNSUPPORTED_FORMAT' });
     }
   }
 

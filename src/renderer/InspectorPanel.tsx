@@ -234,6 +234,7 @@ function InspectorHeroSinglePreview({
         api={api}
         assetId={asset.assetId}
         cardFeelTilt={cardFeelEnabled}
+        displayName={asset.displayName}
         className="inspector-hero-preview inspector-hero-text-preview text-asset-preview"
         libraryId={library.libraryId}
         revisionId={asset.currentRevisionId}

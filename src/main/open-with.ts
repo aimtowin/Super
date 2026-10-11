@@ -11,6 +11,7 @@
 
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
+import type { DialogDirectoryMemory } from './dialog-directory-memory';
 
 import type { BrowserWindow, OpenDialogOptions } from "electron";
 
@@ -50,6 +51,7 @@ export function detectOpenWithPlatform(
 export function createOpenWithDeps(
   locale: AppLocale,
   getParentWindow: () => BrowserWindow | null,
+  directoryMemory?: DialogDirectoryMemory,
 ): OpenWithDeps {
   // Lazy-require electron so unit tests can inject deps without loading Electron.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -67,10 +69,12 @@ export function createOpenWithDeps(
     platform: detectOpenWithPlatform(),
     locale,
     getParentWindow,
-    showOpenDialog: (parent, options) =>
-      parent
-        ? dialog.showOpenDialog(parent, options)
-        : dialog.showOpenDialog(options),
+    showOpenDialog: async (parent, options) => {
+      const rememberedOptions = { ...options, defaultPath: directoryMemory?.defaultPath(options.defaultPath) ?? options.defaultPath };
+      const result = await (parent ? dialog.showOpenDialog(parent, rememberedOptions) : dialog.showOpenDialog(rememberedOptions));
+      if (!result.canceled) directoryMemory?.remember(result.filePaths[0], false);
+      return result;
+    },
     execFile: (file, args) => execFile(file, [...args]),
   };
 }

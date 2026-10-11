@@ -562,7 +562,7 @@ export function PdfViewerSurface({
         </div>
       ) : null}
       {pageCount !== null ? (
-        <div className="pdf-viewer-toolbar">
+        <div className="pdf-viewer-toolbar preview-chrome-fade">
           <button
             className="pdf-viewer-tool"
             disabled={zoom <= PDF_ZOOM_MIN}

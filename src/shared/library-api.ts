@@ -1,4 +1,5 @@
 import type { EmbeddedGenerationInfo, FolderInspection, IgnorePreview } from './local-upgrade-results';
+import type { ZipPreview, ZipPreviewInput } from './zip-preview';
 import type { PublicError, PublicErrorReason } from './protocol/errors';
 
 /** Super-xffq：WebDAV 服务端能力探测结果。 */
@@ -327,8 +328,11 @@ export interface SuperLibraryApi {
   listFolderBrowseEntries(input: {
     libraryId: string;
     parentFolderId: string | null;
+    hideMissing?: boolean;
     showIgnored?: boolean;
   }): Promise<LibraryApiResult<FolderBrowseEntry[]>>;
+  /** Omit assetId to read, null to reset, library image ID to customize. */
+  folderCover(input: { libraryId: string; folderId: string; assetId?: string | null }): Promise<LibraryApiResult<{ folderId: string; assetId: string | null }>>;
   trashFolder(input: {
     libraryId: string;
     folderId: string;
@@ -468,6 +472,7 @@ export interface SuperLibraryApi {
   >;
   listLinkedFolders(input: {
     libraryId: string;
+    hideMissing?: boolean;
     /** Includes roots hidden by explicit ignore rules for recovery and removal. */
     showIgnored?: boolean;
   }): Promise<LibraryApiResult<LinkedFolderSummary[]>>;
@@ -544,6 +549,7 @@ export interface SuperLibraryApi {
   copyAssets(input: { libraryId: string; assetIds: string[]; targetFolderId: string | null; conflictStrategy?: 'keep-both' | 'replace' | 'skip' }): Promise<LibraryApiResult<{ copiedCount: number; skippedCount: number; operationId: string | null; assets: AssetSummary[]; historyEntryId?: string }>>;
   undoCopyAssets(input: { libraryId: string; operationId: string; conflictStrategy?: 'error' | 'keep-both' | 'replace' | 'skip' }): Promise<LibraryApiResult<{ undoneCount: number; skippedCount: number; assets: AssetSummary[] }>>;
   renameAssetFile(input: { libraryId: string; assetId: string; newBaseName?: string; newFileName?: string }): Promise<LibraryApiResult<AssetSummary & { historyEntryId?: string }>>;
+  previewZipAsset(input: ZipPreviewInput): Promise<LibraryApiResult<ZipPreview>>;
   readTextAsset(input: { libraryId: string; assetId: string; maxBytes?: number }): Promise<LibraryApiResult<{
     encoding?: 'utf-8' | 'utf-16le' | 'utf-16be' | 'gb18030';
     assetId: string;

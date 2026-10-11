@@ -18,6 +18,7 @@ import {
   type Locator,
 } from "@playwright/test";
 import sharp from "sharp";
+import type { SuperLibraryApi } from '../../src/shared/library-api';
 
 import {
   closeLibraryViaSwitcher,
@@ -244,9 +245,7 @@ test("generates a decoded thumbnail and keeps asset viewer context coherent", as
     const thumbnail = assetCard.locator('img[alt="automatic.png"]');
     await expect(thumbnail).toBeVisible({ timeout: 15_000 });
     await expectImageDecoded(thumbnail);
-    expect(
-      await thumbnail.evaluate((image) => getComputedStyle(image).objectFit),
-    ).toBe("contain");
+    await expect(thumbnail).toHaveCSS('object-fit', 'contain');
 
     await assetCard.click();
     await expect(assetCard).toHaveAttribute("aria-pressed", "true");
@@ -301,7 +300,7 @@ test("generates a decoded thumbnail and keeps asset viewer context coherent", as
     await navigationTitleTip.hover();
     await expect(window.locator(".hover-tip-corner")).toHaveText(navigationTipText!);
     await expect(preview).toBeAttached({ attached: true });
-    await expect(window.locator(".workspace > .workspace-viewer")).toHaveCount(
+    await expect(window.locator(".workspace > .viewer-fullscreen-host > .workspace-viewer")).toHaveCount(
       1,
     );
     await expect(
@@ -640,7 +639,8 @@ test("video preview reports a specific generation failure and persists its diagn
   }
 });
 
-test("repairs a historical video preview after a full process restart", async () => {
+test("repairs a historical video preview through explicit refresh after a full process restart", async ({ browserName }, testInfo) => {
+  void browserName;
   test.skip(
     !configuredFfmpegPath ||
       !configuredFfprobePath ||
@@ -782,10 +782,26 @@ test("repairs a historical video preview after a full process restart", async ()
       .getByRole("button")
       .filter({ hasText: "repairable-video.mp4" });
     await expect(repairedCard).toBeVisible();
+    // Global failed-artifact repair is intentionally explicit since the
+    // bounded scheduling optimization; opening/listing must not scan the
+    // complete library. Exercise the real refresh action, not a direct API.
+    await window.getByRole('button', { name: '刷新磁盘变化', exact: true }).click();
     await expectImageDecoded(
       repairedCard.locator('img[alt="repairable-video.mp4"]'),
     );
   } finally {
+    if (application) {
+      const diagnosticWindow = await application.firstWindow();
+      const jobs = await diagnosticWindow.evaluate(async () => {
+        const api = (globalThis as typeof globalThis & { super: { library: SuperLibraryApi } }).super.library;
+        const libraries = await api.listOpen();
+        return libraries.ok && libraries.value[0] ? api.listMediaJobs({ libraryId: libraries.value[0].libraryId }) : libraries;
+      });
+      await testInfo.attach('restart-media-jobs', { body: JSON.stringify(jobs), contentType: 'application/json' });
+      const logsPath = await application.evaluate(({ app }) => app.getPath('logs'));
+      const logPath = resolveSessionLogPath(logsPath);
+      if (existsSync(logPath)) await testInfo.attach('restart-media-diagnostic', { body: readFileSync(logPath), contentType: 'text/plain' });
+    }
     await application?.close();
     rmSync(temporaryRoot, { force: true, recursive: true });
   }

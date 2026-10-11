@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useViewerPreferences, updateViewerPreferences, type ViewerChromeMode } from './viewer-preferences';
 
 import {
   APP_SETTINGS_CANVAS_BADGE_FIELD_OPTIONS,
@@ -463,6 +464,7 @@ export function BrowseSettingsPage({
   onToggleHoverVideoSound,
 }: BrowseSettingsPageProps): ReactNode {
   const t = useT();
+  const viewerPrefs = useViewerPreferences();
   return (
     <SettingsCard>
       <div className="app-settings-row app-settings-row-stack">
@@ -567,6 +569,22 @@ export function BrowseSettingsPage({
         label={t("settings.hoverVideoSound")}
         onChange={onToggleHoverVideoSound}
       />
+      <div className="app-settings-card-divider" />
+      <div className="app-settings-row app-settings-row-stack">
+        <div className="app-settings-row-copy">
+          <strong>{t('viewerUpgrade.chrome')}</strong>
+          <span>{t('viewerUpgrade.chromeHint')}</span>
+        </div>
+        <div className="app-settings-option-group" role="radiogroup" aria-label={t('viewerUpgrade.chrome')}>
+          {(['proximity', 'idle', 'always'] as ViewerChromeMode[]).map(mode => (
+            <button key={mode} className="app-settings-option" role="radio" type="button"
+              aria-checked={viewerPrefs.chromeMode === mode}
+              onClick={() => updateViewerPreferences({ chromeMode: mode })}>{t(`viewerUpgrade.${mode}`)}</button>
+          ))}
+        </div>
+      </div>
+      <SettingsToggleRow checked={viewerPrefs.hideMissingLinked} label={t('viewerUpgrade.hideMissing')}
+        hint={t('viewerUpgrade.hideMissingHint')} onChange={() => updateViewerPreferences({ hideMissingLinked: !viewerPrefs.hideMissingLinked })} />
     </SettingsCard>
   );
 }

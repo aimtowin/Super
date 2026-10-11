@@ -1,4 +1,5 @@
 import path from "node:path";
+import { DialogDirectoryMemory } from './dialog-directory-memory';
 import type { ExtensionUploadStagingHandle } from "./extension-upload-staging";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -2277,11 +2278,24 @@ function primeNativeAssetDragCacheInBackground(
   void drainNativeAssetDragPrimeQueue(libraryId, queue);
 }
 
+let dialogDirectoryMemory: DialogDirectoryMemory | undefined;
+function sharedDialogDirectoryMemory(): DialogDirectoryMemory {
+  if (!dialogDirectoryMemory) {
+    const file = path.join(app.getPath('userData'), 'dialog-directory.json');
+    dialogDirectoryMemory = new DialogDirectoryMemory({
+      read: () => existsSync(file) ? readFileSync(file, 'utf8') : null,
+      write: value => writeFileSync(file, value, 'utf8'),
+    });
+  }
+  return dialogDirectoryMemory;
+}
+
 function createNativeDialogHost(): NativeDialogHost {
   return {
     getLocale: () => appLocale,
     getMainWindow: () => mainWindow ?? null,
     isE2e: () => !app.isPackaged && process.env.SUPER_E2E === "1",
+    directoryMemory: sharedDialogDirectoryMemory(),
   };
 }
 
@@ -2329,16 +2343,24 @@ async function selectPluginPackage(): Promise<string | undefined> {
   const result = mainWindow
     ? await dialog.showOpenDialog(mainWindow, {
       title: 'Install a Super plugin',
+      defaultPath: sharedDialogDirectoryMemory().defaultPath(),
       buttonLabel: 'Choose plugin',
       properties: ['openFile', 'openDirectory'],
       filters: [{ name: 'Super plugin package', extensions: ['zip'] }],
     })
     : await dialog.showOpenDialog({
       title: 'Install a Super plugin',
+      defaultPath: sharedDialogDirectoryMemory().defaultPath(),
       buttonLabel: 'Choose plugin',
       properties: ['openFile', 'openDirectory'],
       filters: [{ name: 'Super plugin package', extensions: ['zip'] }],
     });
+  if (!result.canceled && result.filePaths[0]) {
+    // Package picker permits directories as well as ZIP files.
+    const { statSync } = await import('node:fs');
+    try { sharedDialogDirectoryMemory().remember(result.filePaths[0], statSync(result.filePaths[0]).isDirectory()); }
+    catch { /* A removed selection must not invalidate previous dialog memory. */ }
+  }
   return result.canceled || result.filePaths.length === 0 ? undefined : result.filePaths[0];
 }
 
@@ -2535,9 +2557,12 @@ async function commandFor(
       };
     case "folder.list.request":
       return { type: "folder.list", libraryId: request.libraryId, showIgnored: request.showIgnored };
+    case 'folder.cover.request':
+      return { type: 'folder.cover', libraryId: request.libraryId, folderId: request.folderId, assetId: request.assetId };
     case "folder.browse-entries.request":
       return {
         type: "folder.browse-entries",
+        hideMissing: request.hideMissing,
         libraryId: request.libraryId,
         parentFolderId: request.parentFolderId,
         showIgnored: request.showIgnored,
@@ -2802,7 +2827,7 @@ async function commandFor(
         : undefined;
     }
     case "linked-folder.list.request":
-      return { type: "linked-folder.list", libraryId: request.libraryId };
+      return { type: "linked-folder.list", libraryId: request.libraryId, showIgnored: request.showIgnored, hideMissing: request.hideMissing };
     case "linked-folder.relink.request": {
       const newRootPath = await selectOpenDirectory(
         createNativeDialogHost(),
@@ -3208,6 +3233,9 @@ async function commandFor(
         assetId: request.assetId,
         maxBytes: request.maxBytes,
       };
+    case 'asset.zip.preview.request':
+      return { type: 'asset.zip.preview', libraryId: request.libraryId, assetId: request.assetId,
+        memberPath: request.memberPath, expectedRevisionId: request.expectedRevisionId };
     case "asset.text.save.request":
       return {
         type: "asset.text.save",
@@ -5184,7 +5212,7 @@ async function handleLibraryRequest(input: unknown): Promise<RendererResult> {
     ) {
       const outcome = await openPathWithOtherApplication(
         workerResult.absolutePath,
-        createOpenWithDeps(appLocale, () => mainWindow ?? null),
+        createOpenWithDeps(appLocale, () => mainWindow ?? null, sharedDialogDirectoryMemory()),
       );
       if (outcome === "failed") {
         logger?.error("main.open-with", new Error("open-with failed"));
@@ -5321,7 +5349,7 @@ async function handleLibraryRequest(input: unknown): Promise<RendererResult> {
     ) {
       const outcome = await openPathWithOtherApplication(
         workerResult.absolutePath,
-        createOpenWithDeps(appLocale, () => mainWindow ?? null),
+        createOpenWithDeps(appLocale, () => mainWindow ?? null, sharedDialogDirectoryMemory()),
       );
       if (outcome === "failed") {
         logger?.error("main.folder-open-with", new Error("open-with failed"));
