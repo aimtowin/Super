@@ -87,8 +87,15 @@ test("Folders heading resets only the creation parent while preview and focus st
     await expect(preview).toBeVisible();
     const fit = preview.getByRole("button", { name: "适应", exact: true });
     await fit.focus();
+    // The visible placeholder legitimately changes to the decoded source.
+    // Capture the full-image node after that transition, not the placeholder.
     const image = preview.locator("img.preview-image:not(.is-hidden)");
     await expect(image).toBeVisible();
+    await expect(image).toHaveAttribute("src", /^super:\/\/source\//);
+    await expect.poll(() => image.evaluate((element) => {
+      const image = element as HTMLImageElement;
+      return image.complete && image.naturalWidth > 0;
+    })).toBe(true);
     const imageSource = await image.getAttribute("src");
     const originalNode = await image.elementHandle();
     await heading.hover();
