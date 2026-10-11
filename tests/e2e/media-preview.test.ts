@@ -510,6 +510,16 @@ test("generates a decoded thumbnail and keeps asset viewer context coherent", as
         .getByRole("region", { name: "automatic.png 查看页面" })
         .locator("img.preview-image:not(.is-hidden)"),
     );
+  } catch (error) {
+    const logDirectory = path.join(temporaryRoot, 'user-data', 'logs');
+    if (existsSync(logDirectory)) {
+      const logPath = resolveSessionLogPath(logDirectory);
+      if (existsSync(logPath)) await test.info().attach('thumbnail-session-log', { body: readFileSync(logPath), contentType: 'text/plain' });
+    }
+    const page = application.windows()[0];
+    if (page && !page.isClosed()) console.log('THUMBNAIL_FAILURE_STATE', await page.evaluate(() =>
+      [...document.querySelectorAll('img')].map(image => ({ alt: image.alt, src: image.src, complete: image.complete, width: image.naturalWidth, height: image.naturalHeight }))));
+    throw error;
   } finally {
     await application.close();
     rmSync(temporaryRoot, { force: true, recursive: true });
