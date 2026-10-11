@@ -57,3 +57,9 @@
 - Application/extension typecheck and scoped ESLint passed; final whitespace/diff check passed. No full-suite, real-provider, NAS or real-user-library upgrade claim is made from these targeted results.
 - Screenshot `sidebar-before-slow-count.png` in the final test output captures successful side lists while the root-count response is still held. It is an isolated fixture, not the user's production library.
 - Source fix is **not in the installed 2.3.19 package**. Frozen artifacts and baseline remain unchanged. GitHub 2.3.19 stays draft; the existing ECS source already serves the original 2.3.19. Repackaging must use a new version and fresh provenance rather than replace these bytes.
+
+## Delivery follow-up: 2.3.20
+
+On 2026-10-11, the user explicitly requested repackaging and publication. A fresh Windows 2.3.20 package from frozen commit `f4664285af04eb2ab3efdc1f575d8770725d173d` passed all 9 packaged scenarios, including this regression. Contract gates passed; the full development suite ran 106 cases (94 passed, 12 conditional skips, no failures or flaky cases); 9 isolated native-updater scenarios passed. The old 2.3.19 artifacts and baseline were not replaced.
+
+GitHub 2.3.20 became the public latest release at 20:12:06 Asia/Shanghai; the existing ECS updater now serves 2.3.20. All 46 GitHub assets and all 25 server staging files were hash-checked. Public full-update and 2.3.19 delta downloads matched their exact lengths and SHA-256 values. See the [release acceptance](../releases/v2.3.20-validation.md). This delivery follow-up supersedes the earlier pending-delivery state; it does not change the original reproduction or targeted-test evidence, and K01 remains open.
