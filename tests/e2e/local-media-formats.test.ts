@@ -30,10 +30,20 @@ test("real JFIF/AVIF sources decode and real FLV falls back to a playable proxy 
     await page.getByRole("textbox", { name: "名称", exact: true }).fill("Media Test");
     await page.getByRole("button", { name: "创建", exact: true }).click();
     await page.getByRole("button", { name: "导入文件", exact: true }).first().click();
+    // Import completion deliberately reveals/selects the whole imported batch.
+    // Wait for that UI operation before testing single-asset decoding; a card
+    // may already be painted while the completion reload is still pending.
+    await expect(page.locator(".asset-card.is-selected")).toHaveCount(3);
+    await expect(page.locator(".activity-strip")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".asset-card.is-selected")).toHaveCount(0);
     for (const name of ["sample.jfif", "sample.avif", "clip.flv"]) {
       const card = assetCard(page, name);
       await expect(card).toBeVisible({ timeout: 20_000 });
-      await card.click(); await page.keyboard.press("Space");
+      await card.click();
+      await expect(page.locator(".asset-card.is-selected")).toHaveCount(1);
+      await expect(card).toHaveClass(/is-selected/);
+      await page.keyboard.press("Space");
       const preview = page.getByRole("region", { name: name + " 查看页面", exact: true });
       await expect(preview).toBeVisible();
       if (name.endsWith("flv")) {
@@ -47,6 +57,7 @@ test("real JFIF/AVIF sources decode and real FLV falls back to a playable proxy 
         await expect(element).toHaveAttribute("src", /super:\/\/source\//);
       }
       await page.keyboard.press("Escape");
+      await expect(preview).toHaveCount(0);
     }
   } catch (error) {
     await (await app.firstWindow()).screenshot({ path: test.info().outputPath("media-failure.png") });
