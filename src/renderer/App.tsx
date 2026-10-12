@@ -92,6 +92,7 @@ import {
   buildManagedFolderBreadcrumbTrail,
 } from "./folder-breadcrumb-trail";
 import { folderBrowseScope } from "./folder-browse-scope";
+import { useFolderBrowseEntries, type FolderBrowseRequest } from "./use-folder-browse-entries";
 import {
   linkedDirectoryName,
   linkedRevealFolderId,
@@ -341,7 +342,6 @@ import type {
   AssetMetadataResult,
   CollectionSummary,
   FilterClause,
-  FolderBrowseEntry,
   LinkedFolderRule,
   LinkedFolderSummary,
   ManagedFolderSummary,
@@ -671,6 +671,7 @@ function AppInner() {
   // Do not treat the initial empty React array as an empty library while the
   // first paged result for the current scope is still on its way from Worker.
   const [contentLoading, setContentLoading] = useState(false);
+  const [contentReadFailed, setContentReadFailed] = useState(false);
   const [browseLayout, setBrowseLayout] = useState<BrowseLayoutEntry[]>([]);
   const [layoutThumbnailArtifacts, setLayoutThumbnailArtifacts] = useState<{
     libraryId: string;
@@ -684,7 +685,6 @@ function AppInner() {
     useWorkspaceValue<AssetScope>(workspaces, "sidebarFolderScope", "all");
   // REQ-FOLDER-001/002/003/010: direct child folder cards shown above assets
   // when the current browse parent is a managed folder or the managed root.
-  const [folderBrowseEntries, setFolderBrowseEntries] = useState<FolderBrowseEntry[]>([]);
   // Super-d0nv: bump to re-fetch folder browse entries when a cover
   // candidate's thumbnail becomes ready (progressive cover refresh).
   const [folderBrowseRefreshToken, setFolderBrowseRefreshToken] = useState(0);
@@ -2360,6 +2360,29 @@ function AppInner() {
     durationRange,
   ]);
 
+  const resolvedFolderBrowseParentId = api && library && shouldShowFolderBrowseCards(assetScope, folderRecursive)
+    ? resolveFolderBrowseParentId({assetScope,showTrash,activeTagId,activeCollectionId,activeSmartCollectionId,
+      folders,linkedFolders,searchActive:Boolean(searchValue.trim())}) : undefined;
+  // Navigation IDs come from a sidebar/creation result/session. A new folder
+  // need not already exist in asynchronously hydrated global sidebar arrays.
+  const folderBrowseParentId = resolvedFolderBrowseParentId !== undefined ? resolvedFolderBrowseParentId
+    : assetScope !== "all" && assetScope !== "root" && !showTrash && !activeTagId && !activeCollectionId
+      && !activeSmartCollectionId && !searchValue.trim() && !folderRecursive ? assetScope : undefined;
+  const folderBrowseSearchActive = Boolean(searchValue.trim());
+  const folderBrowseLibraryId = library?.libraryId;
+  const folderBrowseRequest = useMemo<FolderBrowseRequest | null>(() => {
+    if (!folderBrowseLibraryId) return null;
+    if (activeCollectionId && !folderBrowseSearchActive) return {kind:"collection",libraryId:folderBrowseLibraryId,
+      collectionId:activeCollectionId,recursive:collectionRecursive,parentFolderId:collectionSourceFolderId,showIgnored:showIgnoredItems};
+    return folderBrowseParentId === undefined ? null : {kind:"folder",libraryId:folderBrowseLibraryId,
+      parentFolderId:folderBrowseParentId,showIgnored:showIgnoredItems};
+  }, [folderBrowseLibraryId,activeCollectionId,folderBrowseSearchActive,collectionRecursive,collectionSourceFolderId,folderBrowseParentId,showIgnoredItems]);
+  const {entries:folderBrowseEntries,loading:folderBrowseLoading,error:folderBrowseError} = useFolderBrowseEntries({
+    api:api ?? null,owner:metadataSession,request:folderBrowseRequest,
+    firstPageReady:browsePagination.firstPageReady && browserSessionReady,firstPageToken:browsePagination.firstPageToken,scopeToken:browsePagination.firstPageScopeToken,
+    contentLoading,refresh:folderBrowseRefreshToken,
+  });
+
   // CANVAS-022: folders-only (recursive off, zero direct assets) must not
   // mount an empty asset grid — its min-height:100% left a large void.
   const canvasFolderBrowseEntries = useMemo(() => {
@@ -2616,82 +2639,6 @@ function AppInner() {
     });
   }, [shellApi, locale, setNotice]);
 
-  // REQ-FOLDER-001/002/003/010: load direct child folder cards whenever the
-  // browse parent is a managed folder or the managed root.  A collection with
-  // linked members additionally gets read-only source-directory cards derived
-  // from those members; this never reads arbitrary sibling source assets.
-  useEffect(() => {
-    let cancelled = false;
-    async function loadFolderBrowseEntries() {
-      if (api && library && activeCollectionId) {
-        if (searchValue.trim()) {
-          if (!cancelled) setFolderBrowseEntries([]);
-          return;
-        }
-        const result = await api.listCollectionSourceBrowseEntries({
-          libraryId: library.libraryId,
-          collectionId: activeCollectionId,
-          recursive: collectionRecursive,
-          parentFolderId: collectionSourceFolderId,
-          showIgnored: showIgnoredItems,
-        });
-        if (!cancelled && result.ok) setFolderBrowseEntries(result.value);
-        return;
-      }
-      const parentFolderId =
-        api && library
-          ? resolveFolderBrowseParentId({
-              assetScope,
-              showTrash,
-              activeTagId,
-              activeCollectionId,
-              activeSmartCollectionId,
-              folders,
-              linkedFolders,
-              searchActive: Boolean(searchValue.trim()),
-            })
-          : undefined;
-      if (!api || !library || parentFolderId === undefined) {
-        if (!cancelled) setFolderBrowseEntries([]);
-        return;
-      }
-      // Super-7a9e89: 「递归显示子文件夹内容」的浏览语义是把子级资产
-      // 摊平进画布，子文件夹卡片会与摊平结果冲突——递归开启时不再
-      // 查询/展示子文件夹卡片（关闭后由 mutable 依赖恢复原行为）。
-      if (!shouldShowFolderBrowseCards(assetScope, folderRecursive)) {
-        if (!cancelled) setFolderBrowseEntries([]);
-        return;
-      }
-      const result = await api.listFolderBrowseEntries({
-        libraryId: library.libraryId,
-        parentFolderId,
-        showIgnored: showIgnoredItems,
-      });
-      if (!cancelled && result.ok) setFolderBrowseEntries(result.value);
-    }
-    void loadFolderBrowseEntries();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    api,
-    library,
-    assetScope,
-    showTrash,
-    activeTagId,
-    activeCollectionId,
-    activeSmartCollectionId,
-    collectionSourceFolderId,
-    collectionRecursive,
-    folders,
-    linkedFolders,
-    searchValue,
-    showIgnoredItems,
-    folderRecursive,
-    // Super-d0nv: a cover candidate's thumbnail.ready bumps this token so
-    // the row re-fetches and the generated cover appears without navigation.
-    folderBrowseRefreshToken,
-  ]);
 
   // Super-d0nv: keep the cover-candidate asset set (from the last browse
   // entries response) visible to the thumbnail event subscriber so a ready
@@ -3261,6 +3208,7 @@ function AppInner() {
       let scopeTotalAvailable = false;
       let primaryCompleted = false;
       setContentLoading(true);
+      setContentReadFailed(false);
       try {
       // The Worker is a single synchronous SQLite owner. Keep its only
       // foreground request to the page the user can see; sidebar/count work
@@ -3335,10 +3283,14 @@ function AppInner() {
         offset: assetResult.value.offset,
       });
       return assetResult.value.items;
+      } catch (caught) {
+        if (isCurrent()) setContentReadFailed((current) => isCurrent() ? true : current);
+        throw caught;
       } finally {
         // Foreground ownership still controls the canvas/loading surface.
         if (isCurrent()) {
           setContentLoading((current) => isCurrent() ? false : current);
+          setUiState((current) => isCurrent() && current === "loading" ? "ready" : current);
         }
         // Even when a restored sort supersedes the first page, the initial
         // library sidebar must finish loading. New category refreshes and library
@@ -3566,7 +3518,6 @@ function AppInner() {
           setTrashedAssets([]);
           setFolders([]);
           setLinkedFolders([]);
-          setFolderBrowseEntries([]);
           setTrashedFolders([]);
           setTags([]);
           setCollections([]);
@@ -4158,12 +4109,14 @@ function AppInner() {
     setAvailabilityFilter("any");
     setExcludeAvailabilityFilter(false);
     setAnalysisStatusFilter("any");
-    setWidthRange({ min: "", max: "", exclude: false });
-    setHeightRange({ min: "", max: "", exclude: false });
-    setAspectRatioRange({ min: "", max: "", exclude: false });
-    setAspectRatioRanges([]);
-    setDurationRange({ min: "", max: "", exclude: false });
-    setLongEdgeRange({ min: "", max: "", exclude: false });
+    // Preserve semantic no-ops: fresh empty objects otherwise re-run the
+    // non-default-sort debounce and duplicate the navigation's first page.
+    setWidthRange(current => !current.min && !current.max && !current.exclude ? current : { min: "", max: "", exclude: false });
+    setHeightRange(current => !current.min && !current.max && !current.exclude ? current : { min: "", max: "", exclude: false });
+    setAspectRatioRange(current => !current.min && !current.max && !current.exclude ? current : { min: "", max: "", exclude: false });
+    setAspectRatioRanges(current => current.length === 0 ? current : []);
+    setDurationRange(current => !current.min && !current.max && !current.exclude ? current : { min: "", max: "", exclude: false });
+    setLongEdgeRange(current => !current.min && !current.max && !current.exclude ? current : { min: "", max: "", exclude: false });
     hadDiscoveryInput.current = false;
   }
 
@@ -4317,9 +4270,16 @@ function AppInner() {
     managedImportTargetFolderIdRef.current = folderId ?? undefined;
     api?.setActiveContext(library.libraryId, folderId);
     setUiState("loading");
+    let readGeneration = generation;
+    const isCurrentNavigation = () => metadataController.isCurrent(owner)
+      && readGeneration === contentLoadGenerationRef.current;
     try {
-      await loadContent(library, scope, {
-        discovery: { sort: { field: sortField, order: sortOrder } },
+      const read = loadContent(library, scope, {
+        discovery: {
+          sort: { field: sortField, order: sortOrder },
+          filters: generationStatusFilter === "any" ? undefined
+            : [{field:"generation_status",values:[generationStatusFilter],exclude:false}],
+        },
         // Ordinary navigation keeps sidebar queries out of the hot path for
         // large libraries. A destructive mutation that removed the current
         // folder opts in once so the deleted row cannot remain visible.
@@ -4331,6 +4291,9 @@ function AppInner() {
         refreshSidebar:
           options?.refreshSidebar ?? (scope === "all" || scope === "root"),
       });
+      readGeneration = contentLoadGenerationRef.current;
+      await read;
+      if (!isCurrentNavigation()) return;
       recordNavigation(
         scope === "all"
           ? { kind: "all" }
@@ -4339,9 +4302,9 @@ function AppInner() {
             : { kind: "folder", folderId: scope },
       );
     } catch (caught) {
-      setError(toMessage(caught, t("toast.readAssetsFailed"), locale));
+      if (isCurrentNavigation()) setError(toMessage(caught, t("toast.readAssetsFailed"), locale));
     } finally {
-      setUiState("ready");
+      if (isCurrentNavigation()) setUiState((current) => isCurrentNavigation() ? "ready" : current);
     }
   }
   chooseFolderRef.current = chooseFolder;
@@ -4576,7 +4539,8 @@ function AppInner() {
     const generation = ++contentLoadGenerationRef.current;
     const isCurrent = () => metadataController.isCurrent(owner)
       && generation === contentLoadGenerationRef.current;
-    setContentLoading((current) => isCurrent() ? false : current);
+    setContentLoading((current) => isCurrent() ? true : current);
+    setContentReadFailed((current) => isCurrent() ? false : current);
     await closeAssetPreview(false);
     if (!isCurrent()) return;
     closeContextMenu();
@@ -4630,9 +4594,13 @@ function AppInner() {
       });
     } catch (caught) {
       if (!isCurrent()) return;
+      setContentReadFailed((current) => isCurrent() ? true : current);
       setError(toMessage(caught, t("toast.readTagAssetsFailed"), locale));
     } finally {
-      if (isCurrent()) setUiState((current) => isCurrent() ? "ready" : current);
+      if (isCurrent()) {
+        setContentLoading((current) => isCurrent() ? false : current);
+        setUiState((current) => isCurrent() ? "ready" : current);
+      }
     }
   }
 
@@ -4645,7 +4613,8 @@ function AppInner() {
     const generation = ++contentLoadGenerationRef.current;
     const isCurrent = () => metadataController.isCurrent(owner)
       && generation === contentLoadGenerationRef.current;
-    setContentLoading((current) => isCurrent() ? false : current);
+    setContentLoading((current) => isCurrent() ? true : current);
+    setContentReadFailed((current) => isCurrent() ? false : current);
     // Closing an absent preview is synchronous. Do not yield to a queued
     // background hydration before committing this explicit navigation.
     const closing = closeAssetPreview(false);
@@ -4699,9 +4668,13 @@ function AppInner() {
       recordNavigation({ kind: "tag", tagId });
     } catch (caught) {
       if (!isCurrent()) return;
+      setContentReadFailed((current) => isCurrent() ? true : current);
       setError(toMessage(caught, t("toast.readTagAssetsFailed"), locale));
     } finally {
-      if (isCurrent()) setUiState((current) => isCurrent() ? "ready" : current);
+      if (isCurrent()) {
+        setContentLoading((current) => isCurrent() ? false : current);
+        setUiState((current) => isCurrent() ? "ready" : current);
+      }
     }
   }
 
@@ -5149,7 +5122,8 @@ function AppInner() {
     const generation = ++contentLoadGenerationRef.current;
     const isCurrent = () => metadataController.isCurrent(owner)
       && generation === contentLoadGenerationRef.current;
-    setContentLoading((current) => isCurrent() ? false : current);
+    setContentLoading((current) => isCurrent() ? true : current);
+    setContentReadFailed((current) => isCurrent() ? false : current);
     await closeAssetPreview(false);
     if (!isCurrent()) return;
     closeContextMenu();
@@ -5214,9 +5188,13 @@ function AppInner() {
       });
     } catch (caught) {
       if (!isCurrent()) return;
+      setContentReadFailed((current) => isCurrent() ? true : current);
       setError(toMessage(caught, t("toast.readCollectionFailed"), locale));
     } finally {
-      if (isCurrent()) setUiState((current) => isCurrent() ? "ready" : current);
+      if (isCurrent()) {
+        setContentLoading((current) => isCurrent() ? false : current);
+        setUiState((current) => isCurrent() ? "ready" : current);
+      }
     }
   }
 
@@ -6272,7 +6250,9 @@ function AppInner() {
     const generation = ++contentLoadGenerationRef.current;
     const isCurrent = () => metadataController.isCurrent(owner)
       && generation === contentLoadGenerationRef.current;
-    setContentLoading((current) => isCurrent() ? false : current);
+    setContentLoading((current) => isCurrent() ? true : current);
+    setContentReadFailed((current) => isCurrent() ? false : current);
+    try {
     // A draft smart collection is a rule-editing surface: its first query is
     // composed with the normal discovery controls, then saved by the sidebar
     // action.  Keep that draft selected while its controls are being edited;
@@ -6329,6 +6309,15 @@ function AppInner() {
       offset: result.value.offset,
     });
     return result.value;
+    } catch (caught) {
+      if (isCurrent()) setContentReadFailed((current) => isCurrent() ? true : current);
+      throw caught;
+    } finally {
+      if (isCurrent()) {
+        setContentLoading((current) => isCurrent() ? false : current);
+        setUiState((current) => isCurrent() && current === "loading" ? "ready" : current);
+      }
+    }
   }
 
   async function runSearch(
@@ -6412,7 +6401,13 @@ function AppInner() {
       (!hasDiscoveryInput && !shouldClearPreviousResults)
     )
       return;
+    const debounceOwner = metadataSessionRef.current;
+    const debounceGeneration = contentLoadGenerationRef.current;
     const timer = window.setTimeout(() => {
+      // A timer captures this render's scope. Never let an old sort/filter
+      // timer start a new all-assets query after the user navigated elsewhere.
+      if (!metadataController.isCurrent(debounceOwner)
+        || debounceGeneration !== contentLoadGenerationRef.current) return;
       void runSearch(undefined, { silent: true });
     }, 200);
     return () => window.clearTimeout(timer);
@@ -6472,6 +6467,7 @@ function AppInner() {
     resetBrowsePagination();
     setAssets([]);
     setContentLoading(false);
+    setContentReadFailed(false);
     setShowTrash(false);
     setShowTagManagement(false);
     setActivePluginSidebarViewId(null);
@@ -6503,6 +6499,8 @@ function AppInner() {
     const generation = ++contentLoadGenerationRef.current;
     const isCurrent = () => metadataController.isCurrent(owner)
       && generation === contentLoadGenerationRef.current;
+    setContentLoading((current) => isCurrent() ? true : current);
+    setContentReadFailed((current) => isCurrent() ? false : current);
     try {
       const result = await api.executeSmartCollection({
         libraryId: library.libraryId,
@@ -6530,8 +6528,11 @@ function AppInner() {
       });
     } catch (caught) {
       if (isCurrent()) {
+        setContentReadFailed((current) => isCurrent() ? true : current);
         setError(toMessage(caught, t("toast.smartCollectionRunFailed"), locale));
       }
+    } finally {
+      if (isCurrent()) setContentLoading((current) => isCurrent() ? false : current);
     }
   }
 
@@ -11102,7 +11103,15 @@ function AppInner() {
               tags={tags}
             />
           ) : library ? (
-            (contentLoading || !browserSessionReady || uiState === "opening" || uiState === "creating") ? (
+            (contentReadFailed || folderBrowseError) && browseCanvasBodyLayout.mode === "empty" ? (
+              <div className="empty-library" role="alert">
+                <div className="empty-orbit"><Icon name="warning" size={24} /></div>
+                <h1>{t("toast.readAssetsFailed")}</h1>
+                {folderBrowseError ? <p>{folderBrowseError}</p> : null}
+              </div>
+            ) : (!browserSessionReady || uiState === "opening" || uiState === "creating" ||
+              (browseCanvasBodyLayout.mode === "empty" && !(activeSmartCollectionId && !isConfiguredSmartCollectionActive)
+                && (contentLoading || !browsePagination.firstPageReady || folderBrowseLoading))) ? (
               <div aria-busy="true" className="empty-library" role="status">
                 <div className="empty-orbit"><Icon name="file" size={24} /></div>
                 <h1>{t("common.loading")}</h1>
@@ -12003,6 +12012,9 @@ function AppInner() {
       </section>
       <InspectorPanel
         selectedFolderId={selectedFolderId}
+        folderInspectionOwner={metadataSession}
+        browseContentPending={contentLoading || !browsePagination.firstPageReady || folderBrowseLoading || !browserSessionReady}
+        indexedChildFolderCount={folderBrowseParentId === selectedFolderId && !folderRecursive ? folderBrowseEntries.length : undefined}
         aiContent={
           aiContent?.assetId === selectedAsset?.assetId ? aiContent : null
         }

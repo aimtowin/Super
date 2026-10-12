@@ -4,7 +4,7 @@
 
 </div>
 
-# Super Lib v2.3.20
+# Super Lib v2.3.21
 
 <div align="center">
 
@@ -47,7 +47,7 @@ Super Lib 是一款完全免费的本地素材管理应用。把图片、视频�
 
 ## 安装与使用
 
-本次源码版本为 `v2.3.20`，Windows x64 已发行附件以 Release 页为准。首次安装请下载 `SuperSetup.exe`；发布页上的完整更新 ZIP 和 delta 增量包用于更新交付，不是首次安装的首选入口。其他平台的安装包以发布页实际附件为准。
+本次源码版本为 `v2.3.21`，实际发行状态见[验收记录](docs/releases/v2.3.21-validation.md)，Windows x64 已发行附件以 Release 页为准。首次安装请下载 `SuperSetup.exe`；发布页上的完整更新 ZIP 和 delta 增量包用于更新交付，不是首次安装的首选入口。其他平台的安装包以发布页实际附件为准。
 
 资产库保存在创建时选择的位置。导入会复制素材进入库；链接文件夹会引用原位置的文件，原目录需要保持可访问。详情见[快速上手](docs/user-guide/quick-start.md)。
 
@@ -84,7 +84,7 @@ npm run make:inno
 
 ## 文档
 
-最新侧栏加载修复见[2.3.20 更新说明](docs/releases/v2.3.20.md)与[验收记录](docs/releases/v2.3.20-validation.md)。查看器与资源组织升级见[2.3.19 更新说明](docs/releases/v2.3.19.md)。前轮[软件本体补齐结果](docs/reference/completion-results-2026-10-10.md)及首批结果保留历史语境。
+最新画布优先与文件夹加载修复见[2.3.21 更新说明](docs/releases/v2.3.21.md)与[验收记录](docs/releases/v2.3.21-validation.md)。此前[2.3.20 侧栏修复](docs/releases/v2.3.20.md)及[2.3.19 查看器升级](docs/releases/v2.3.19.md)保留历史记录。前轮[软件本体补齐结果](docs/reference/completion-results-2026-10-10.md)及首批结果保留历史语境。
 
 | 文档 | 内容 |
 | --- | --- |

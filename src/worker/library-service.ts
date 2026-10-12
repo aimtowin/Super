@@ -34356,11 +34356,28 @@ export class LibraryService {
   /** Indexed, read-only information: never walks the user's source tree. */
   inspectFolder(input: {libraryId: string; folderId: string}): FolderInspection {
     const lib = this.requireOpenLibrary(input.libraryId);
-    const managed = this.listManagedFolders(input.libraryId, true);
-    const folder = managed.find(row => row.folderId === input.folderId);
-    const linked = folder ? [] : this.listLinkedFolders(input.libraryId, true);
-    const external = linked.find(row => row.folderId === input.folderId);
+    // A secondary Inspector must not rebuild the whole sidebar, aggregate
+    // unrelated roots or walk source disks while foreground browsing queues.
+    const folder = hasTable(lib.connection, 'managed_folders')
+      ? lib.connection.prepare('SELECT folder_id, name, relative_path FROM managed_folders WHERE folder_id = ?')
+        .get(input.folderId) as Pick<ManagedFolderRow, 'folder_id' | 'name' | 'relative_path'> | undefined
+      : undefined;
+    const external = folder ? null : this.resolveLinkedFolderScope(lib, input.folderId);
     if (!folder && !external) throw new LibraryServiceError('FOLDER_NOT_FOUND');
+    const linkedPrefixes = external
+      ? collectLinkedDirectoryPrefixes(this.listLinkedAssetRelativePaths(lib, external.linkedFolderId, true)) : [];
+    if (external?.relativePath) {
+      if (path.isAbsolute(external.relativePath) || external.relativePath.split(/[\\/]/).some(part => !part || part === '.' || part === '..')) {
+        throw new LibraryServiceError('FOLDER_NOT_FOUND');
+      }
+      // Empty source directories have no indexed asset path. Preserve their
+      // identity with one target metadata check, never a whole-tree traversal.
+      if (!linkedPrefixes.includes(external.relativePath)) {
+        try {
+          if (!statSync(path.join(external.absoluteRootPath, external.relativePath)).isDirectory()) throw new Error('Not a folder');
+        } catch { throw new LibraryServiceError('FOLDER_NOT_FOUND'); }
+      }
+    }
     let predicate: string;
     let params: Array<string | number>;
     if (folder) {
@@ -34370,7 +34387,7 @@ export class LibraryService {
         SELECT folder_id FROM subtree)`;
       params = [input.folderId];
     } else {
-      const rootId = external!.linkedFolderId ?? external!.folderId;
+      const rootId = external!.linkedFolderId;
       const prefix = external!.relativePath ? external!.relativePath + '/' : '';
       predicate = "a.location_kind = 'linked' AND a.linked_folder_id = ?";
       params = [rootId];
@@ -34379,12 +34396,20 @@ export class LibraryService {
     const totals = lib.connection.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(r.byte_size),0) AS bytes
       FROM assets a LEFT JOIN revisions r ON r.revision_id = a.current_revision_id
       WHERE a.deleted_at IS NULL AND ${predicate}`).get(...params) as {count: number; bytes: number};
-    const covers = this.searchAssets({libraryId: input.libraryId, scope: {kind: 'folder', folderId: input.folderId, recursive: true}, limit: 4, showIgnored: true}).items;
-    return {folderId: input.folderId, name: folder?.name ?? external!.displayName,
-      absolutePath: folder ? path.join(this.assetsPath(lib), folder.relativePath) : path.join(external!.absoluteRootPath, external!.relativePath ?? ''),
+    const covers = this.searchAssets({libraryId: input.libraryId, scope: {kind: 'folder', folderId: input.folderId, recursive: true}, limit: 4, deferTotal: true, showIgnored: true}).items;
+    const childFolderCount = folder
+      ? (lib.connection.prepare('SELECT COUNT(*) AS count FROM managed_folders WHERE parent_folder_id = ?')
+        .get(input.folderId) as {count:number}).count
+      : directChildLinkedDirectories(linkedPrefixes, external!.relativePath).length;
+    const linkedName = external && (external.relativePath
+      ? linkedDirectoryName(external.relativePath)
+      : (lib.connection.prepare('SELECT display_name FROM linked_folders WHERE folder_id = ? AND library_id = ?')
+        .get(external.linkedFolderId, input.libraryId) as {display_name:string}).display_name);
+    return {folderId: input.folderId, name: folder?.name ?? linkedName!,
+      absolutePath: folder ? path.join(this.assetsPath(lib), folder.relative_path) : path.join(external!.absoluteRootPath, external!.relativePath),
       locationKind: folder ? 'managed' : 'linked', status: external?.status ?? 'available',
       assetCount: totals.count, byteSize: totals.bytes,
-      childFolderCount: folder?.childFolderCount ?? linked.filter(row => row.parentFolderId === input.folderId).length, covers};
+      childFolderCount, covers};
   }
 
   /** Uses exactly the same matcher as save, but changes neither disk nor index. */

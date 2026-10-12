@@ -8,6 +8,7 @@ import {
 
 import { EmbeddedGenerationPanel } from "./EmbeddedGenerationPanel";
 import { FolderInspector } from "./FolderInspector";
+import type { MetadataSessionOwner } from "./metadata-read-controller";
 import { parseTagNames } from "./sidebar-discovery";
 import { Icon } from "./Icons";
 import { InspectorCardFeelMotion } from "./inspector-card-feel-motion";
@@ -134,6 +135,9 @@ export interface AiContent {
 
 export interface InspectorPanelProps {
   selectedFolderId?: string;
+  browseContentPending?: boolean;
+  indexedChildFolderCount?: number;
+  folderInspectionOwner?: MetadataSessionOwner | null;
   selectedAsset: AssetSummary | undefined;
   /** Full multi-selection in canvas order; primary is still `selectedAsset`. */
   selectedAssets?: AssetSummary[];
@@ -1716,7 +1720,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
 
         </div>
       ) : library && api && props.selectedFolderId ? (
-        <FolderInspector api={api} libraryId={library.libraryId} folderId={props.selectedFolderId} key={`${library.libraryId}:${props.selectedFolderId}`} />
+        <FolderInspector api={api} libraryId={library.libraryId} folderId={props.selectedFolderId} canvasPending={props.browseContentPending} indexedChildFolderCount={props.indexedChildFolderCount} sessionOwner={props.folderInspectionOwner} key={`${library.libraryId}:${props.selectedFolderId}`} />
       ) : library ? (
         <div className="inspector-content">
           <div className="inspector-identity">

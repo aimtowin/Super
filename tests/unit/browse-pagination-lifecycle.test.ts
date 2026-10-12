@@ -152,6 +152,17 @@ afterEach(async () => {
 });
 
 describe("actual browse-pagination generation lifetime", () => {
+  it("distinguishes a not-yet-read scope from a successfully empty first page", async () => {
+    const fixture = apiFixture(); const host = await mountHook(fixture.api);
+    const ready=()=>(host.get().pagination as UseBrowsePaginationResult & {firstPageReady?:boolean}).firstPageReady;
+    expect(ready()).toBe(false);
+    await act(async () => host.get().pagination.beginPage(definition("empty"),{items:[],total:0,offset:0}));
+    expect(ready()).toBe(true);
+    await act(async () => host.get().pagination.reset());
+    expect(ready()).toBe(false);
+    await begin(host,"populated");
+    expect(ready()).toBe(true);
+  });
   it.each(["success", "failure", "rejection"] as const)("keeps B100 reserved/loading when A100 completes with %s after reset", async (completion) => {
     const fixture = apiFixture(); const host = await mountHook(fixture.api);
     await begin(host, "A"); const a = await startPage(host);

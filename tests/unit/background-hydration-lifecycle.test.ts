@@ -36,7 +36,7 @@ import {
  */
 const bindingNames = [
   "api", "showIgnoredItems", "folderRecursiveRef", "folderBrowseScope",
-  "contentLoadGenerationRef", "setContentLoading", "BROWSE_PAGE_SIZE",
+  "contentLoadGenerationRef", "setContentLoading", "setContentReadFailed", "setUiState", "BROWSE_PAGE_SIZE",
   "LibraryOperationError", "setThumbnailFailures", "assetSupportsThumbnail",
   "setAllAssetCount", "setRootAssetCount", "setSearchTotal", "setSearchOffset",
   "setSearchSnippets", "registerBrowseSearchPage", "beginBrowsePage",
@@ -259,7 +259,7 @@ async function mountBoundary(deferFirstPage = false, queueHydrationUpdates = fal
   const beginBrowsePage = vi.fn<BeginBrowsePage>((definition, firstPage) => pagination.beginPage(definition, firstPage));
   const bindings: Record<BindingName, unknown> = {
     api: api.api, showIgnoredItems: false, folderRecursiveRef: { current: false }, folderBrowseScope,
-    contentLoadGenerationRef: generation, setContentLoading: loading.set, BROWSE_PAGE_SIZE,
+      contentLoadGenerationRef: generation, setContentLoading: loading.set, setContentReadFailed: vi.fn(), setUiState: vi.fn(), BROWSE_PAGE_SIZE,
     sidebarLoadGenerationRef: { current: 0 }, libraryCountLoadGenerationRef: { current: 0 },
     LibraryOperationError, setThumbnailFailures: failures.set, assetSupportsThumbnail,
     setAllAssetCount: counts.all.set, setRootAssetCount: counts.root.set,

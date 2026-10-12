@@ -277,6 +277,10 @@ export type UseBrowsePaginationResult = {
   removeLocally: (assetIds: string[], removedCount: number) => void;
   /** Drop the current definition (library close / navigation to non-browse views). */
   reset: () => void;
+  /** A successful first page, including an explicitly empty page, owns this generation. */
+  firstPageReady: boolean;
+  firstPageToken: number;
+  firstPageScopeToken: number;
   hasMorePages: boolean;
   loadingMore: boolean;
   sentinelRef: (node: HTMLDivElement | null) => void;
@@ -306,13 +310,14 @@ export function isIgnorableBrowseWindowFailure(code: string | undefined): boolea
 
 type BrowseGenerationOwner = {
   generation: number;
+  scopeGeneration: number;
   inFlightOffsets: Set<number>;
   layoutInFlight: boolean;
   disposed: boolean;
 };
 
-function createBrowseGenerationOwner(generation: number): BrowseGenerationOwner {
-  return { generation, inFlightOffsets: new Set(), layoutInFlight: false, disposed: false };
+function createBrowseGenerationOwner(generation: number, scopeGeneration = generation): BrowseGenerationOwner {
+  return { generation, scopeGeneration, inFlightOffsets: new Set(), layoutInFlight: false, disposed: false };
 }
 
 export function useBrowsePagination(
@@ -341,6 +346,7 @@ export function useBrowsePagination(
   const deletedIdsRef = useRef<Set<string>>(new Set());
   const [hasMorePages, setHasMorePages] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [firstPageOwner, setFirstPageOwner] = useState<BrowseGenerationOwner | null>(null);
   const [sentinelNode, setSentinelNode] = useState<HTMLDivElement | null>(null);
   // Re-arm the IntersectionObserver after the compact layout response settles.
   // The observer must not depend on the large layout array itself.
@@ -349,10 +355,11 @@ export function useBrowsePagination(
   const isCurrentOwner = useCallback((owner: BrowseGenerationOwner) =>
     !owner.disposed && lifetimeRef.current.owner === owner, []);
 
-  const replaceOwner = useCallback(() => {
+  const replaceOwner = useCallback((navigation = false) => {
     const lifetime = lifetimeRef.current;
     lifetime.owner.disposed = true;
-    const owner = createBrowseGenerationOwner(++generationRef.current);
+    const generation = ++generationRef.current;
+    const owner = createBrowseGenerationOwner(generation, navigation ? generation : lifetime.owner.scopeGeneration);
     lifetime.owner = owner;
     return owner;
   }, []);
@@ -450,6 +457,7 @@ export function useBrowsePagination(
       if (!isCurrentOwner(lifetimeRef.current.owner)) return;
       const owner = replaceOwner();
       definitionRef.current = definition;
+      setFirstPageOwner((current) => isCurrentOwner(owner) ? owner : current);
       deletedIdsRef.current = new Set();
       totalRef.current = firstPage.total;
       const initialLayout = firstPage.items.map((asset) => ({
@@ -712,8 +720,9 @@ export function useBrowsePagination(
 
   const reset = useCallback(() => {
     if (!isCurrentOwner(lifetimeRef.current.owner)) return;
-    const owner = replaceOwner();
+    const owner = replaceOwner(true);
     definitionRef.current = null;
+    setFirstPageOwner((current) => isCurrentOwner(owner) ? null : current);
     totalRef.current = 0;
     layoutRef.current = [];
     layoutHydrationCompleteRef.current = false;
@@ -771,6 +780,9 @@ export function useBrowsePagination(
     fetchScopeAssetIds,
     removeLocally,
     reset,
+    firstPageReady: firstPageOwner !== null && !firstPageOwner.disposed,
+    firstPageToken: firstPageOwner?.generation ?? 0,
+    firstPageScopeToken: firstPageOwner?.scopeGeneration ?? 0,
     hasMorePages,
     loadingMore,
     sentinelRef,

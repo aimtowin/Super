@@ -119,7 +119,7 @@ function fixture(primaryDeferred = false) {
   const initial: Record<string, unknown> = {
     setAssets: [], setTrashedAssets: [], setFolders: [], setLinkedFolders: [], setTags: [], setCollections: [], setSmartCollections: [], setTrashedFolders: [],
     setAllAssetCount: 0, setRootAssetCount: 0, setTrashedAssetCount: 0, setSearchTotal: null, setSearchOffset: 0,
-    setSearchSnippets: new Map(), setThumbnailFailures: new Map(), setContentLoading: false,
+    setSearchSnippets: new Map(), setThumbnailFailures: new Map(), setContentLoading: false, setContentReadFailed: false,
     setLayoutThumbnailArtifacts: { libraryId: "library", ids: new Map() }, setUiState: "ready",
     setShowTrash: false, setShowTagManagement: false, setActivePluginSidebarViewId: null, setActiveTagId: null,
     setActiveCollectionId: null, setActiveSmartCollectionId: null, setSidebarFolderScope: "all", setAssetScope: "all",
@@ -287,6 +287,27 @@ function navigationArgs(name: typeof navigationNames[number]): unknown[] {
 }
 
 describe("actual direct query publication owns its session and generation", () => {
+  it("releases a superseded navigation's loading UI but not an import operation", async () => {
+    const host = fixture();
+    const read = compileActual<(definition: unknown) => Promise<unknown>>("executeSearchDefinition", host.bindings);
+    host.states.set("setUiState", "loading");
+    await read({search: null});
+    expect(host.states.get("setUiState")).toBe("ready");
+    host.states.set("setUiState", "importing");
+    await read({search: null});
+    expect(host.states.get("setUiState")).toBe("importing");
+  });
+  it("keeps foreground loading while a direct first-page request is pending", async () => {
+    const host=fixture(true);
+    const read=compileActual<(definition:unknown)=>Promise<unknown>>("executeSearchDefinition",host.bindings);
+    const pending=host.track(read({search:null}));
+    await act(async()=>undefined);
+    expect.soft(host.states.get("setContentLoading")).toBe(true);
+    host.raw.find(({kind})=>kind==="old-primary")!.resolve();
+    await pending;
+    expect(host.states.get("setContentLoading")).toBe(false);
+    expect(host.states.get("setAssets")).toEqual([card("old-page")]);
+  });
   it.each(navigationNames)("%s cannot publish after a newer same-owner browse load", async (name) => {
     const host = fixture(true);
     const navigate = compileActual<(...args: unknown[]) => Promise<unknown>>(name, host.bindings);

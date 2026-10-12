@@ -761,13 +761,14 @@ test("maintains consistent preferences, accessible names, zoom behavior, and avo
         }),
     );
 
+    // The existing size-anchor scheduler deliberately waits 30 frames. Two
+    // frames above only await the React layout, not anchor restoration; wait
+    // for that operation before testing an explicit programmatic scroll.
+    await expect(canvas).not.toHaveAttribute("data-card-size-restoring", "true");
     // Scroll to top and assert first card is fully visible (not clipped at top)
     await canvas.evaluate((el) => {
       el.scrollTop = 0;
     });
-    // Reflow anchoring may preserve the previously visible band while the
-    // layout settles; the invariant is a valid, clamped scroll position and
-    // the first visible card staying inside the viewport, not a forced zero.
     await expect
       .poll(() => canvas.evaluate((el) => el.scrollTop))
       .toBeLessThanOrEqual(5);

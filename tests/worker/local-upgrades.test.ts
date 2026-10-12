@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LibraryService } from "../../src/worker/library-service";
 import { resolveFfmpegPath } from "../../src/worker/binary-resolver";
 import { executeBoundedWriteWorkerCommand } from "../../src/worker/bounded-write-command";
@@ -17,6 +17,7 @@ import { colorFilterSql } from "../../src/shared/color-filter-presets";
 import { createRequire } from "node:module";
 import { renameSync, mkdirSync } from "node:fs";
 import { importNoConflict } from "./import-no-conflict";
+import { encodeLinkedVirtualFolderId } from "../../src/shared/linked-folder-tree";
 
 const roots: string[] = [];
 const services: LibraryService[] = [];
@@ -166,6 +167,55 @@ describe("local upgrade real pipelines", () => {
     expect(f.service.getGitignore(f.libraryId)).toEqual(before);
     expect(f.service.searchAssets({libraryId:f.libraryId}).total).toBe(1);
     expect(() => f.service.previewIgnoreRules({libraryId:f.libraryId,content:"x\n".repeat(2001)})).toThrow();
+  });
+
+  it("inspects one managed folder without enumerating unrelated folder statistics", () => {
+    const f = fixture();
+    const parent = f.service.createManagedFolder({libraryId:f.libraryId,name:"Target"});
+    f.service.createManagedFolder({libraryId:f.libraryId,name:"Empty",parentFolderId:parent.folderId});
+    const source = path.join(f.root,"local.txt"); writeFileSync(source,"abc");
+    importNoConflict(f.service,f.libraryId,source,parent.folderId);
+    for (let index=0; index<24; index++) f.service.createManagedFolder({libraryId:f.libraryId,name:`Unrelated-${index}`});
+    const managed = vi.spyOn(f.service,"listManagedFolders");
+    const linked = vi.spyOn(f.service,"listLinkedFolders");
+    const search = vi.spyOn(f.service,"searchAssets");
+    const started = performance.now();
+    for (let run=0; run<7; run++) expect(f.service.inspectFolder({libraryId:f.libraryId,folderId:parent.folderId}))
+      .toMatchObject({assetCount:1,byteSize:3,childFolderCount:1,locationKind:"managed",name:"Target"});
+    console.log("FOLDER_INSPECTION_POINT_READ",JSON.stringify({kind:"managed",meanMs:(performance.now()-started)/7,wholeManagedReads:managed.mock.calls.length,wholeLinkedReads:linked.mock.calls.length}));
+    expect.soft(managed).not.toHaveBeenCalled();
+    expect.soft(linked).not.toHaveBeenCalled();
+    expect(search.mock.calls.every(([input]) => input.limit===4 && input.deferTotal===true)).toBe(true);
+    managed.mockRestore(); linked.mockRestore(); search.mockRestore();
+  });
+
+  it("inspects a Unicode linked subtree without loading every managed/linked tree", () => {
+    const f = fixture(), root = path.join(f.root,"linked-precise");
+    mkdirSync(path.join(root,"组😀[A]","child"),{recursive:true});
+    mkdirSync(path.join(root,"组😀[A]other"),{recursive:true});
+    writeFileSync(path.join(root,"组😀[A]","child","keep.txt"),"abc");
+    writeFileSync(path.join(root,"组😀[A]other","skip.txt"),"sibling-data");
+    f.service.importFolderAsLinked({libraryId:f.libraryId,sourceRootPath:root});
+    const scope=f.service.listLinkedFolders(f.libraryId,true).find(folder=>folder.relativePath==="组😀[A]")!;
+    expect(scope).toBeDefined();
+    const managed=vi.spyOn(f.service,"listManagedFolders"), linked=vi.spyOn(f.service,"listLinkedFolders");
+    const started=performance.now();
+    const info=f.service.inspectFolder({libraryId:f.libraryId,folderId:scope.folderId});
+    console.log("FOLDER_INSPECTION_POINT_READ",JSON.stringify({kind:"linked",ms:performance.now()-started,wholeManagedReads:managed.mock.calls.length,wholeLinkedReads:linked.mock.calls.length}));
+    expect(info).toMatchObject({name:"组😀[A]",assetCount:1,byteSize:3,childFolderCount:1,locationKind:"linked"});
+    expect(info.covers).toHaveLength(1);
+    expect.soft(managed).not.toHaveBeenCalled(); expect.soft(linked).not.toHaveBeenCalled();
+    managed.mockRestore(); linked.mockRestore();
+  });
+  it("preserves empty linked directory identity and rejects missing/traversal virtual scopes", () => {
+    const f=fixture(), source=path.join(f.root,"empty-linked");
+    mkdirSync(path.join(source,"空目录😀"),{recursive:true});writeFileSync(path.join(source,"keep.txt"),"abc");
+    f.service.importFolderAsLinked({libraryId:f.libraryId,sourceRootPath:source});
+    const root=f.service.listLinkedFolders(f.libraryId,true).find(folder=>folder.relativePath==="")!;
+    expect(f.service.inspectFolder({libraryId:f.libraryId,folderId:encodeLinkedVirtualFolderId(root.folderId,"空目录😀")}))
+      .toMatchObject({name:"空目录😀",assetCount:0,byteSize:0,locationKind:"linked"});
+    for(const relative of ["not-indexed-not-on-disk","../outside","./keep","/outside"])
+      expect(()=>f.service.inspectFolder({libraryId:f.libraryId,folderId:encodeLinkedVirtualFolderId(root.folderId,relative)})).toThrow("FOLDER_NOT_FOUND");
   });
 
   it("explicitly converts legacy text with durable byte undo/redo and refuses implicit conversion", async () => {
