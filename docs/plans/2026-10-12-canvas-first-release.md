@@ -26,7 +26,7 @@
 
 ## Task 3: Build and test the actual packaged app
 
-- Run `npm run release:package` and inspect version/build provenance. Run `npm run release:e2e`.
+- Run `npm run release:package` and inspect version/build provenance. Run `npm run release:e2e:packaged` (the existing package.json alias).
 - Execute canvas-first, sidebar hydration, viewer upgrades and four preview-background-refresh scopes against the actual `out/Super-win32-x64/Super.exe`, not a rebuilt development bundle.
 - Product failures block publication; preserve evidence and repair within this authorized scope before rebuilding. Do not install the package into the user's running directory.
 
@@ -47,3 +47,9 @@
 ## Handoff
 
 Report the published version, direct GitHub installer and absolute local installer path. Distinguish current delivery facts from source-test results, platform skips and known Console failure; do not promise a universal loading-speed percentage.
+
+## Execution checkpoint
+
+Frozen source `465e820dc6fb5965b1e0366535eab98dd70b28cd`; 2.3.20 program/install artifacts archived without replacing their baselines. Six contract gates pass, full development rerun 95 pass / 12 conditional skip / zero failures, native update fixtures 9 pass. The first development run's pre-test Windows process failure is retained separately. New package build `dc17eded-0189-465a-8d7d-4cf869c5c926` has 9,037 files, clean capture and 2.3.21 EXE/manifest; ten combined actual-package scenarios all pass.
+
+Installer/full package, twenty 2.3.1–2.3.20 direct deltas, immutable 2.3.21 baseline, checksums and ECS dry run are complete. GitHub draft/source/tag prepared; the verified large installer/full files were uploaded while the independent delta producers completed, rather than waiting to start their network transfer. Remaining canonical files are uploaded only after checksum verification; the draft is not publicly published until all attachment and public-source verification completes. Details and subsequent delivery facts are recorded in [release validation](../releases/v2.3.21-validation.md).
