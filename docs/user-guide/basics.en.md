@@ -1,6 +1,6 @@
 # Basics
 
-> Reviewed for Super Lib v2.3.19 (2026-10-11). Screenshots retain their recorded versions; external integrations require separate acceptance.
+> Documentation reviewed for Super Lib v2.3.21 on 2026-10-13 against current source and existing [packaged acceptance evidence](../releases/v2.3.21-validation.md). This review did not rerun the application or external integrations; screenshots retain their actual capture versions.
 
 [简体中文](basics.md) · [User guide](README.en.md) · [Floating image preview](#floating-image-preview) · [Corner hint bubble](#hover-hints)
 
@@ -170,4 +170,15 @@ Display rotation/mirroring does not write files. Explicit write-back is limited 
 - Viewer `Delete` targets only the current asset. Managed `Shift+Delete` retains confirmation; linked assets do not expose that permanent-delete key. Text input and unsaved drafts stay protected.
 - Native open/import/save dialogs remember the most recent successful directory, respect explicit paths and do not update on cancel. Newly generated video posters prefer the 25% frame, with bounded fallback; existing posters are not regenerated in bulk.
 
-Back up the complete library before upgrading: this release adds schema migration 52. Do not write the upgraded database with an older app. See [release notes](../releases/v2.3.19.md) and [packaged screenshots](features.md#2319-查看器与资源组织).
+Back up the complete library before upgrading: 2.3.19 added schema migration 52, which 2.3.21 retains. Do not let older apps that do not support this schema write the upgraded database. See [release notes](../releases/v2.3.19.md) and [packaged screenshots](features.md#2319-查看器与资源组织).
+
+## 2.3.21 folder navigation and loading states
+
+Selecting a sidebar folder prioritizes the central first page and child-folder cards. Inspector statistics and covers load independently after the canvas is usable and has a chance to paint; the canvas does not wait for all Inspector work. Indexed statistics may update after cards and are not a live-disk scan completion percentage.
+
+- Pending first-page or child-folder queries show loading, not the import-assets prompt.
+- The import prompt appears only after a successful query confirms no assets or child-folder cards. An empty filtered result refers to that scope, not proof that the whole folder is empty.
+- Failed reads show an error, not an empty folder. Late results from the previous folder must not replace the current scope.
+- Background refresh within the same scope retains usable cards where possible. Updating sidebar statistics must not close an open media preview.
+
+See the published [2.3.21 acceptance record](../releases/v2.3.21-validation.md). These behaviors do not guarantee a fixed loading time on every disk or linked library. If an incorrect empty state persists, preserve logs and follow [Troubleshooting](troubleshooting.en.md#slow-loading-after-restoring-from-the-tray); do not delete the database or rebuild indexes to hide the cause.

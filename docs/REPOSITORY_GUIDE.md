@@ -34,6 +34,12 @@
 `npm run release:publish-ecs`。服务器保留策略与本地基线数量由发布脚本管理；
 完整安装包和增量 ZIP 都属于发布产物，不属于源码。
 
+### 当前构建前置边界
+
+开发环境和常用命令见根 [README](../README.md)。`npm ci` 重建依赖，但不能补齐所有本地开发输入：当前成品门禁还要求被 Git 忽略的 `docs/internal/skills/super-automation/automation-api.d.ts`，公开仓库没有交付该文件，也没有有效的自动生成 CLI。缺少它的 clean checkout 会被 `verify-package` 拒绝，不能承诺克隆后直接完成 `release:local`，也不能通过关闭门禁或手工伪造声明解决。具体限制见[扩展作者手册](manual/README.md#clean-checkout-的构建准备缺口)。
+
+Windows x64 的受控媒体工具和 ZIP 已跟踪；macOS arm64 使用锁定的远程媒体输入。两者都要通过固定哈希、许可证与来源校验，媒体锁状态 `ready` 不代表相应平台的应用成品已经验收。媒体准备细节见[媒体资源说明](../resources/media-binaries/README.md)。发布、联网取得媒体、上传及线上清理仍需要对应任务授权，文档入口本身不执行这些操作。
+
 ## 测试与文档
 
 | 路径 | 职责 |
@@ -63,7 +69,7 @@
 
 ## 当前文档与隐私边界
 
-- 用户功能入口：[全功能图文介绍](user-guide/features.md)；当前真实截图在 `docs/assets/ui/live-2.3.17/`，附来源、尺寸及哈希清单。
+- 用户功能入口：[全功能图文介绍](user-guide/features.md)。基础界面截图来自 `docs/assets/ui/live-2.3.17/`，后续真实成品查看器截图见 [2.3.19 截图说明](assets/ui/packaged-2.3.19/README.md)；各补充组保留自己的来源、版本和验证限制，不把旧截图冒充当前全量实拍。
 - 架构图、源码清点、迁移历史和验证结果按其日期/提交保留，不将历史未通过或未执行项改成通过。
 - 旧用户界面图片仅在没有有效引用且有可恢复备份时移出工作树；历史版本仍可从 Git 查看。
 - 本机对话导出、私钥、交接文档和临时截图目录不提交。清理仓库不包含数据库整理或用户资产删除。

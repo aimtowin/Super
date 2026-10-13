@@ -1,12 +1,12 @@
 # Super Lib 已知问题与验证边界
 
-更新日期：2026-10-12；K01 原运行复现为 2026-10-10 的 2.3.18 成品，以下不反向改写该证据。本页区分真实失败及尚未运行的专项场景。历史 U01–U08 的原复现记录保留在 [修复前快照](../plans/confirmed-unfixed-2026-10-09.md)，2.3.18 的已交付修复见 [验收记录](../releases/v2.3.18-validation.md)，后续 2.3.19 的实际范围见[新验收](../releases/v2.3.19-validation.md)。本页不是穷尽所有可能缺陷的承诺。
+更新日期：2026-10-13；K01 原运行复现为 2026-10-10 的 2.3.18 成品，以下不反向改写该证据。本页区分真实失败、构建准备缺口及尚未运行的专项场景。历史 U01–U08 的原复现记录保留在[修复前快照](../plans/confirmed-unfixed-2026-10-09.md)，当前正式交付范围见[2.3.21 验收](../releases/v2.3.21-validation.md)，此前[2.3.18](../releases/v2.3.18-validation.md)与[2.3.19](../releases/v2.3.19-validation.md)记录保留历史。本页不是穷尽所有可能缺陷的承诺。
 
-## 本轮实际复现、仍未修复
+## 已实际复现的运行问题（仍未修复）
 
 | ID | 问题 | 成品结果 | 当前处理 |
 | --- | --- | --- | --- |
-| K01 | Windows 2.3.18 自动化 Console 缺少运行依赖 `typescript` | 只读 `assets.search` 示例失败，`RUNTIME_PROCESS_EXITED`，子进程退出码 1 | 2.3.19 / 2.3.20 没有修复此依赖路径；指南继续注明执行受阻，不用其他门禁通过关闭它 |
+| K01 | Windows 成品自动化 Console 缺少运行依赖 `typescript` | 2.3.18 只读 `assets.search` 实跑失败，`RUNTIME_PROCESS_EXITED`，子进程退出码 1 | 2.3.19–2.3.21 成品静态核对仍缺依赖；后续未重跑 Console，保持开放，不用其他门禁通过关闭它 |
 
 2026-10-10 20:07:52（北京时间），运行本地已验收的 `out/Super-win32-x64/Super.exe`；身份检查为 `version=2.3.18`、`packaged=true`。使用独立 userData 和临时空库，没有接触用户真实库。只批准这一次只读脚本运行确认：
 
@@ -15,7 +15,7 @@ const page = await superApi.assets.search({ query: null, limit: 20 });
 return { count: page.items.length, total: page.total };
 ```
 
-实际 UI 显示 `The isolated script runtime exited unexpectedly (1).`；会话日志的 `automation.runtime.stderr` 明确为 `Error: Cannot find module 'typescript'`，require stack 指向 `.vite/build/script_runtime_utility.js`。该成品中仍存在 `require("typescript")`，但 `resources/app/node_modules/typescript/package.json` 不存在。此前 2.3.17 的同类失败在当前版仍成立。
+实际 UI 显示 `The isolated script runtime exited unexpectedly (1).`；会话日志的 `automation.runtime.stderr` 明确为 `Error: Cannot find module 'typescript'`，require stack 指向 `.vite/build/script_runtime_utility.js`。该 2.3.18 成品中仍存在 `require("typescript")`，但 `resources/app/node_modules/typescript/package.json` 不存在；此前 2.3.17 的同类失败在这次 2.3.18 实跑中仍成立。后续版本静态证据另见下文，不冒充新的实跑。
 
 ![2.3.18 成品只读脚本失败实拍](../assets/ui/review-2.3.18/console-runtime-error.png)
 
@@ -29,7 +29,7 @@ K02：用户更新至 2.3.19 后，画布已有资产但目录、合集及 Inspe
 
 当前源码已把全库组织、全库计数与画布查询的所有权分离，逐字段发布并优先提交导航请求；库切换、同 ID 重开、新刷新和 React 队列更新的保护仍保留。另修复了筛选页总数误写为全库数量的关联问题。164 项相关单元、8 项串行真实窗口回归通过，详见[复现、方案与验证记录](../plans/2026-10-11-sidebar-hydration-recovery.md)。没有修改用户真实库、重建索引或扩大超时。
 
-修复已打包进新的 2.3.20 安装器，实际成品 9 项回归全部通过，包含恢复排序、暂缓无关统计时的独立列表显示、筛选页与全库计数隔离，以及全屏后台刷新。旧 ECS 更新源已切换到 2.3.20，GitHub 2.3.20 已公开为最新正式版，公网完整包和 2.3.19 增量实下载校验通过，详见[发行验收](../releases/v2.3.20-validation.md)。K02 在上述验证范围内关闭；原 2.3.19 成品、基线和附件不包含此修复，GitHub 2.3.19 保持草稿，不补写历史成品为已经修复。
+修复已打包进 2.3.20 安装器，实际成品 9 项回归全部通过，包含恢复排序、暂缓无关统计时的独立列表显示、筛选页与全库计数隔离，以及全屏后台刷新。该次发行时旧 ECS 更新源切换到 2.3.20，GitHub 2.3.20 公开为当时最新正式版，公网完整包和 2.3.19 增量实下载校验通过，详见[发行验收](../releases/v2.3.20-validation.md)；当前最新正式版为下节的 2.3.21。K02 在上述范围内关闭；原 2.3.19 成品、基线和附件不包含此修复，原草稿状态及失败证据不改写。
 
 ## 2.3.20 文件夹切换回归：2.3.21 已发布修复
 
@@ -41,14 +41,25 @@ K03：用户报告切换目录后中央画布误显示导入空状态、右侧�
 
 ## 验证范围更新
 
-2.3.19 实际成品核对：仍含 `script_runtime_utility.js`，其 `resources/app/node_modules/typescript/package.json` 不存在；本轮 8 项成品回归没有执行 Console 脚本，因此不把静态核对冒充再次运行复现。K01 保持开放。
+2.3.19 成品静态核对仍缺 `typescript`；[2.3.21 发行验收](../releases/v2.3.21-validation.md)同样明确依赖缺失、没有执行 Console。2026-10-13 再次只读核对原正式 2.3.21 的程序 manifest、`script_runtime_utility.js` 与依赖路径：版本为 2.3.21，运行时代码仍 `require("typescript")`，对应包不存在。本轮没有重新运行 Console，也不把静态证据冒充再次运行复现。K01 保持开放。
+
+[本地发布工具试构建](release-throughput-2026-10-12.md)只核验构建工具与选定成品场景，其应用载荷与正式 2.3.21 相同，未关闭 K01、未生成新产品版本。
 
 | 类型 | 范围 | 当前结论 |
 | --- | --- | --- |
-| 已有局部专项运行 | 全屏上一张/下一张、查看器删除 | 2.3.19 的真实 Windows 成品查看器组合通过；后台刷新在四种浏览范围通过，不能扩展为所有平台、所有删除权限和特殊素材 |
+| 已有局部专项运行 | 全屏上一张/下一张、查看器删除、后台刷新、画布优先 | 2.3.19 查看器组合与 2.3.21 选定成品组合已有通过证据；后台刷新在四种浏览范围通过，不能扩展为所有平台、所有权限和特殊素材 |
 | 仍有专项边界 | 链接重复内容／新序列的所有交互组合 | 保留既有确认与保护；单元和本轮窗口场景不替代所有组合、外部盘或新行为的运行对照 |
 | 外部服务验收缺口 | 真实多设备/多写者 WebDAV、NAS 离线重连、真实 AI 供应商、第三方插件及 MCP Agent | 本地/Mock 通过不能自动扩展为所有服务通过 |
-| 平台/交付范围 | macOS 成品；浏览器商店/可直接安装扩展附件 | 本轮 2.3.19 构建和验收为 Windows x64，实际发布状态见发行验收；扩展保留内部开发态 |
+| 平台/交付范围 | macOS 成品；浏览器商店/可直接安装扩展附件 | 当前正式 2.3.21 的成品发行范围仍为 Windows x64，未补做 macOS 成品验收；扩展保留内部开发态 |
 | 暂停范围 | F15 账号、官方插件目录与社区、ECS 迁移 | 用户指示暂停，不列为已实现 |
+
+<a id="clean-checkout-build-gap"></a>
+## 干净 checkout 的构建准备缺口
+
+这不是已发行应用的新运行故障，但影响开发者复现完整打包：`scripts/verify-package.mjs` 强制读取 `docs/internal/skills/super-automation/automation-api.d.ts`，校验 API 版本与 Registry 命令 ID；该目录被 `.gitignore` 忽略，公开仓库没有交付完整匹配声明，也没有满足此门禁的生成 CLI。直接调用 `generateAutomationTypeDeclaration()` 不能补齐所需版本标记和全部命令声明，不应作为未经验证的生成教程。
+
+2026-10-12 的独立本地验证第一次打包在这个门禁明确失败；复制本机已有匹配声明后，使用全新构建身份重跑通过，失败记录保留在[本地验证说明](release-throughput-2026-10-12.md)。这不代表干净 clone 已能自动获得声明，也不等于发布了 SDK。
+
+本轮仅修正文档并记录缺口，未实现完整生成／交付流程。缺少声明时应停止打包；不要跳过 `verify-package`、伪造证明或复用旧成品来宣称当前构建通过。开发启动、类型检查、浏览器扩展构建与完整发行打包是不同验收项。
 
 操作指南入口：[安装](../user-guide/installation.md) · [同步](../user-guide/sync.md) · [自动化](../user-guide/automation.md)。

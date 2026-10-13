@@ -4,18 +4,19 @@
 
 ## 交付文档
 
-当前补齐状态：[本体补齐与验证结果](reference/completion-results-2026-10-10.md)。F15 账号/官方目录/ECS 迁移暂停；用户已单独授权更新此前旧 ECS 自动更新源。
+当前正式发行：**2.3.21**，以[发行验收](releases/v2.3.21-validation.md)和 GitHub 实际附件为准；[10 月 10 日本体补齐记录](reference/completion-results-2026-10-10.md)保留历史语境。F15 账号/官方目录/社区与 ECS 迁移继续暂停。旧 ECS 更新源的历史交付见对应发行记录，不代表本次文档工作获授权继续操作云端。
 
 | 文档 | 内容 |
 | --- | --- |
-| [当前已知问题](reference/known-issues-2.3.18.md) · [文档审查](reference/documentation-review-2.3.18.md) | 成品 Console 实际失败、验证缺口与修订依据 |
-| [2.3.20 更新说明](releases/v2.3.20.md) · [验收记录](releases/v2.3.20-validation.md) | 当前侧栏独立加载、恢复排序和全库计数修复；实际上线状态以验收记录为准 |
+| [当前已知问题](reference/known-issues-2.3.18.md) · [当前文档审查](reference/documentation-review-2.3.21.md) | 成品 Console 实际失败、构建准备缺口与修订依据 |
+| [2.3.21 更新说明](releases/v2.3.21.md) · [验收记录](releases/v2.3.21-validation.md) | 当前画布优先、正确加载状态与目录查询修复；正式交付范围以验收记录为准 |
+| [2.3.20 更新说明](releases/v2.3.20.md) · [验收记录](releases/v2.3.20-validation.md) | 此前侧栏独立加载、恢复排序和全库计数修复；保留原发行证据 |
 | [2.3.19 更新说明](releases/v2.3.19.md) · [验收记录](releases/v2.3.19-validation.md) | 查看器／资源组织升级及原成品侧栏回归历史，不覆盖旧证据 |
 | [2.3.18 更新说明](releases/v2.3.18.md) · [验收记录](releases/v2.3.18-validation.md) | 前轮本体补齐及正式发行证据 |
 | [完整图文功能指南](user-guide/features.md) | 2.3.17 安装版实拍、2.3.18 源码补齐及 2.3.19 实际成品新查看器，入口、步骤及真实限制 |
 | [后续开发决策与优化里程碑](POST_DEVELOPMENT_DECISIONS.md) | 真实决策演变、逐版修复、对话索引、验证限制及待办边界 |
-| [阶段 1 历史检查点](reference/followup-phase1-results-2026-10-09.md) · [分阶段升级计划](plans/2026-10-09-followup-upgrades.md) | 当时 8 项修复及验证限制；当前交付事实以顶部补齐结果和发行记录为准 |
-| [软件本体升级首批](reference/local-upgrades-results-2026-10-10.md) · [本轮计划](plans/2026-10-10-local-upgrades.md) | 分类 Emoji/图形颜色、父项拖拽提升、合集撤销修正及 JFIF/AVIF/FLV；历史首批检查点；后续补齐见页面顶部当前结果，账号/目录/迁移继续暂停 |
+| [阶段 1 历史检查点](reference/followup-phase1-results-2026-10-09.md) · [分阶段升级计划](plans/2026-10-09-followup-upgrades.md) | 当时 8 项修复及验证限制；当前交付事实以最新发行验收为准 |
+| [软件本体升级首批](reference/local-upgrades-results-2026-10-10.md) · [本轮计划](plans/2026-10-10-local-upgrades.md) | 分类 Emoji/图形颜色、父项拖拽提升、合集撤销修正及 JFIF/AVIF/FLV；历史首批检查点；后续交付见最新发行验收，账号/目录/迁移继续暂停 |
 | [修复前确认未修复清单](plans/confirmed-unfixed-2026-10-09.md) | 保留 8 项实际失败复现与已发行 2.3.17 安全提醒，不覆盖历史证据 |
 | [快速上手](user-guide/quick-start.md) | 下载安装、创建本地资产库、可选 AI 与外观配置 |
 | [外观设置](user-guide/appearance.md) | 深浅主题、背景图片、字体大小与实拍截图 |
@@ -28,11 +29,13 @@
 
 构建环境、常用验证命令和 Windows 安装包输出位置见仓库根目录的 [README.md](../README.md)。Super Lib 完全免费，Windows 安装包在 [GitHub Release](https://github.com/aimtowin/Super/releases/latest) 下载。仓库代码许可见 [LICENSE](../LICENSE)。
 
+发布工具的本地耗时、四路有界哈希试验及验证边界见[发布工具耗时复核](reference/release-throughput-2026-10-12.md)。优化源码与诊断 CLI 尚未同步到公开 main；仅同步此记录不使其命令成为干净 checkout 可执行入口。Codex 额度暂停不计入编译耗时，试构建不是新产品发行。
+
 ## 文档维护原则
 
-工作区最新修复状态与限制见[本体补齐结果](reference/completion-results-2026-10-10.md)；[阶段 1 结果](reference/followup-phase1-results-2026-10-09.md)保留原时点。[2026-10-09 修复前清单](plans/confirmed-unfixed-2026-10-09.md)和旧[后续修复清单](plans/follow-up-fixes.md)保留当时失败与待确认路径；源码修复不等于已发布，未重新验收的历史项不自动关闭。
+当前已交付修复见[2.3.21 验收](releases/v2.3.21-validation.md)，未关闭问题见[已知问题与边界](reference/known-issues-2.3.18.md)。[本体补齐记录](reference/completion-results-2026-10-10.md)、[阶段 1 结果](reference/followup-phase1-results-2026-10-09.md)、[修复前清单](plans/confirmed-unfixed-2026-10-09.md)和旧[后续修复清单](plans/follow-up-fixes.md)保留当时语境；源码或文档修订不等于新产品已发布，未重新验收的历史项不自动关闭。
 
-使用手册已按 `v2.3.18`（2026-10-10）源码、附件与专项成品复核修订，见[当前审查报告](reference/documentation-review-2.3.18.md)。旧 [2.3.17 审查](reference/documentation-review-2.3.17.md)保留原证据。`plans/`、产品简报、架构快照与历史验证记录保留当时的语境，不代表所有计划已实现或历史失败已消失。发布附件以 GitHub Release 当前列表为准；外部 AI、WebDAV、MCP Agent 与第三方插件不因截图而视为验证通过。
+使用手册当前版本入口与操作按 2.3.21 源码及既有验收复核，见[2026-10-13 文档核对](reference/documentation-review-2.3.21.md)。[2.3.18 审查](reference/documentation-review-2.3.18.md)与[2.3.17 审查](reference/documentation-review-2.3.17.md)保留原证据；2.3.17／2.3.18／2.3.19 配图仍标实际拍摄版本，本轮没有重新拍摄。`plans/`、产品简报、架构快照与历史验证记录保留当时语境，不代表所有计划已实现或历史失败已消失。外部 AI、WebDAV、MCP Agent 与第三方插件不因截图或本次文档检查而视为验收通过。
 
 - 用户可执行的步骤必须以当前产品界面和已发布能力为准。
 - 扩展 API 以 [扩展作者手册](manual/README.md)中的 API 参考为准；示例不得要求访问内部数据库、绝对路径或未公开的运行时句柄。

@@ -1,6 +1,6 @@
 # Product
 
-This is a product/design brief, not a release feature checklist. Current behavior is documented in the [user guide](docs/user-guide/README.en.md), [2.3.18 acceptance](docs/releases/v2.3.18-validation.md) and [known issues](docs/reference/known-issues-2.3.18.md).
+This is a product/design brief, not a release feature checklist. Current behavior is documented in the [user guide](docs/user-guide/README.en.md), [2.3.21 acceptance](docs/releases/v2.3.21-validation.md) and [known issues](docs/reference/known-issues-2.3.18.md).
 
 ## Users
 

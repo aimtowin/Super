@@ -71,6 +71,8 @@ npm start
 
 常用验证与打包命令：
 
+打包前置边界：当前干净 checkout 不包含成品校验所需的 `docs/internal/skills/super-automation/automation-api.d.ts`，也没有可用的公开生成 CLI。缺少匹配声明时，`npm run package` 会在成品门禁失败；不要跳过校验或把旧本机文件视为公开 SDK。开发启动与类型检查成功不等于可直接完成发行构建，详见[构建准备缺口](docs/reference/known-issues-2.3.18.md#clean-checkout-build-gap)。
+
 ```bash
 npm run lint
 npm run typecheck
@@ -88,7 +90,8 @@ npm run make:inno
 
 | 文档 | 内容 |
 | --- | --- |
-| [当前已知问题](docs/reference/known-issues-2.3.18.md) · [文档审查](docs/reference/documentation-review-2.3.18.md) | 成品 Console 故障及验收缺口 |
+| [当前已知问题](docs/reference/known-issues-2.3.18.md) · [当前文档审查](docs/reference/documentation-review-2.3.21.md) | 成品 Console 故障、构建准备缺口及当前核对边界 |
+| [本地发布工具耗时复核](docs/reference/release-throughput-2026-10-12.md) | 本地增量阶段实测；优化源码尚未同步到公开 main，不是新版本发行或现成 CLI 指南 |
 | [完整图文功能指南](docs/user-guide/features.md) | 每项用户功能的真实截图、入口、用法与边界 |
 | [后续开发决策与优化里程碑](docs/POST_DEVELOPMENT_DECISIONS.md) | 接力开发的真实决策、52 个版本节点、349 条对话索引及未完成事项 |
 | [审计后修复进度](docs/reference/followup-phase1-results-2026-10-09.md) · [分阶段升级计划](docs/plans/2026-10-09-followup-upgrades.md) | 历史第一阶段检查点；当前补齐及发布状态见本页上方最新结果 |
@@ -102,7 +105,7 @@ npm run make:inno
 
 第三方组件、媒体运行时和素材的许可信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 及各组件随附的许可文件。
 
-维护者可运行 `node --test scripts/docs/audit-docs.test.mjs` 与 `node scripts/docs/audit-docs.mjs` 检查本地文档引用。仓库分类与清理边界见[仓库指南](docs/REPOSITORY_GUIDE.md)，本次修订证据见[文档审查报告](docs/reference/documentation-review-2.3.18.md)。
+维护者可运行 `node --test scripts/docs/audit-docs.test.mjs` 与 `node scripts/docs/audit-docs.mjs` 检查本地文档引用。仓库分类与清理边界见[仓库指南](docs/REPOSITORY_GUIDE.md)，本次修订证据见[2.3.21 文档核对](docs/reference/documentation-review-2.3.21.md)；[2.3.18 审查](docs/reference/documentation-review-2.3.18.md)保留原时点。
 
 借鉴与开源许可：Super Lib 在开源基础上持续独立开发，感谢原作者及贡献者；保留必要版权声明，并继续以 [MIT 许可证](LICENSE) 开源。
 

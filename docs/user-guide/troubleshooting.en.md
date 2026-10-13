@@ -1,6 +1,6 @@
 # Troubleshooting
 
-> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
+> Documentation reviewed for Super Lib v2.3.21 on 2026-10-13 against current source and existing [packaged acceptance evidence](../releases/v2.3.21-validation.md). This review did not rerun the application or external integrations; screenshots retain their actual capture versions.
 
 ## macOS Gatekeeper / Windows SmartScreen
 
@@ -22,7 +22,7 @@ Video AI needs a contact sheet and 3D AI needs a four-view sheet. Retry media ge
 
 ## Searches miss imported assets
 
-Check active filter chips; Shift-selected values can intentionally narrow the result. Search remains within the current folder/collection scope, and hovering or focusing the `?` beside the field shows advanced syntax. Ignore rules affect browsing, search, and scanning; inspect **Library settings → Ignore rules**.
+Check the active-condition summary: Shift-selected values within a dimension combine with OR; different dimensions combine with AND. Exclude mode excludes that dimension's selected set, not the asset selection. Search remains within the current folder/collection scope, and hovering or focusing the `?` beside the field shows advanced syntax. Ignore rules affect browsing, search, and scanning; inspect **Library settings → Ignore rules**.
 
 ## A plugin will not enable
 
@@ -32,7 +32,7 @@ Open **Settings → Plugins** and check the plugin status and trust prompt. A li
 
 For a script, open a library first and choose **More tools → Automation scripts**. For MCP, open **Settings → MCP**, ensure the service is enabled and started, and paste Super’s latest configuration into the client. The default address is `http://127.0.0.1:47342/mcp`. If you revoked a Token, add the client again and copy a new configuration. Connect only a local AI tool you trust.
 
-The 2.3.18 packaged Console still failed on 2026-10-10 with `RUNTIME_PROCESS_EXITED` because its utility process cannot resolve `typescript`. Renaming folders or configuring an API key does not fix this packaging issue. See [K01 and the actual screenshot](../reference/known-issues-2.3.18.md) and [automation](automation.en.md).
+The 2.3.18 packaged Console failed on 2026-10-10 with `RUNTIME_PROCESS_EXITED` because its utility process cannot resolve `typescript`; this remains historical runtime evidence. The 2.3.21 packaged acceptance still found the dependency missing in static inspection and did not rerun Console scripts, so K01 remains open. Renaming folders or configuring an API key does not fix this packaging issue. See [K01 and the actual screenshot](../reference/known-issues-2.3.18.md), [2.3.21 acceptance](../releases/v2.3.21-validation.md), and [automation](automation.en.md).
 
 ## A library will not open
 
@@ -68,6 +68,8 @@ Never attach API keys, full tokens, private assets, or unsanitized personal path
 Record when you restored the window and switched folders. Check **Main menu → Window → Background jobs** and diagnostic logs for scans, slow requests, or timeouts. The loading bar is indeterminate, not a measured percentage. Indexing completion does not mean thumbnail or palette jobs have finished.
 
 Save the relevant session log before restarting, and report library size, linked-folder use, disk accessibility, and reproduction steps. Do not delete the library database to troubleshoot a delay.
+
+2.3.21 fixes the regressions where supplemental sidebar reads delayed the central first page and pending folder reads showed an empty import prompt. Folder navigation prioritizes the canvas; an Inspector still loading does not require the central view to wait. Pending first-page or child-folder queries should show loading; failed reads should show an error. The import prompt belongs only to a successfully confirmed empty scope. If the latest version behaves differently, include navigation steps and logs rather than assuming files have disappeared. See [2.3.21 acceptance](../releases/v2.3.21-validation.md).
 
 ## Extension thumbnails instead of previews
 

@@ -1,21 +1,21 @@
 # WebDAV Cloud Sync
 
-> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
+> Documentation reviewed for Super Lib v2.3.21 on 2026-10-13 against current source and existing [packaged acceptance evidence](../releases/v2.3.21-validation.md). This review did not rerun the application or external integrations; screenshots retain their actual capture versions.
 
 Super Lib can sync a library across machines over WebDAV. Configure servers globally, bind each library individually, and Super syncs both ways automatically: local changes upload, remote changes pull.
 
-The screenshots below were captured from the current Super Lib instance, with no server configured; they show setup entry points, not a completed sync. Sync propagates edits and deletions and is not an independent backup. Back up your library first and verify your server and devices with a small test library before syncing important assets.
+The screenshots below were captured in an isolated 2.3.17 demo instance with no server configured; they show setup entry points, not a completed sync or new 2.3.21 captures. Sync propagates edits and deletions and is not an independent backup. Back up your library first and verify your server and devices with a small test library before syncing important assets.
 
 ## Sync overview
 
-- Configure one or more WebDAV servers in **General settings**; each library binds to one server and a remote folder.
+- Configure one or more WebDAV servers in **Main menu → Settings → Sync**; each library binds to one server and a remote folder.
 - Sync is bidirectional: local imports, edits, and deletions upload automatically; remote changes are pulled to the local library.
 - Auto-sync is per library: after saving a binding it runs once immediately, then checks the server for changes on the configured poll interval; local asset changes upload about 10 seconds after they happen.
-- A toast appears in the bottom-right while syncing or when sync completes; the library switcher (top-left, next to the library name) shows a connection icon — green link = auto-sync on, grey link-off = off (hover for details).
+- A toast appears in the bottom-right while syncing or when sync completes; the library card at the bottom-left shows a connection icon — green link = auto-sync on, grey link-off = off (hover for details).
 
 ## Configure a WebDAV server (General settings)
 
-Open **General settings** → **Sync** to add a sync server:
+Open **Main menu → Settings → Sync** to add a sync server. Sync and General are separate settings categories:
 
 - **Server address**: use the WebDAV path of your NAS or shared folder, for example `https://nas.local/dav/share/`. Prefer an explicit `https://` prefix. Omitting the protocol adds `http://`; HTTP does not encrypt network traffic.
 - **Username / password**: server credentials. The password is encrypted with the system secure storage (macOS Keychain / Windows DPAPI) and never stored in plain text.

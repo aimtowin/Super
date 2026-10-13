@@ -26,16 +26,16 @@ transport 可以为 MCP SDK 保存 session，但禁止把 active library、libra
 **MCP/脚本的操作与人类的操作没有不同**：`file.import` 导入 = 人类导入，`asset.trash` 删除 = 人类删除。含义：
 
 - 领域校验与安全边界不变（Schema、计划、版本、Worker），source 只影响审计标签；
-- 副作用必须与人类操作一致：自动 AI 分析入队（`onImportCompleted` → `enqueueAutoAnalyzeAfterImport`，与桌面导入 IPC 同一函数）、Worker 操作历史回执、插件 will-hooks、桌面提示（同一套 toast，见 Super-fmbr）；
+- 副作用必须与人类操作一致：自动 AI 分析入队（`onImportCompleted` → `enqueueAutoAnalyzeAfterImport`，与桌面导入 IPC 同一函数）、Worker 操作历史回执、插件 will-hooks、桌面提示（统一完成事件及[通知目标过滤](../../../src/mcp/command-completed-filter.ts)）；
 - 不得为自动化单独造一套提示/入队/撤销机制；触发点放在统一完成点（Gateway 钩子 / 事件），而非 MCP transport 层。
 
-若发现某个人类操作的副作用在自动化路径缺失，视为 bug（Super-ihpx 即此类）。
+若发现某个人类操作的副作用在自动化路径缺失，视为 bug；核对[统一命令网关](../../../src/automation/command-gateway.ts)及其[回归测试](../../../tests/unit/automation-command-gateway.test.ts)，不能依赖未公开的内部问题编号来解释行为。
 
 ## Registry 与请求处理
 
 `src/automation/command-registry.ts` 是 MCP 工具和输入/输出 Schema 的单一来源。`src/mcp/tool-catalog.ts` 为核心工具生成静态目录，`src/mcp/call-tool.ts` 对库级调用提取并校验显式 `libraryId`，再通过 Gateway 的 `contextOverrides` 做单次目标绑定。
 
-过渡约束：插件 MCP 工具当前只在 `full-access` 档暴露（`tool-catalog.ts` 的 exposure 判断）；Auto 客户端拿不到插件工具列表。与 ADR-0025“插件与脚本/MCP 同一 Action 面”的完全对齐留待插件权限投影设计。
+过渡约束：插件 MCP 工具当前只在 `full-access` 档暴露（[工具目录实现](../../../src/mcp/tool-catalog.ts)的 exposure 判断）；Auto 客户端拿不到插件工具列表。插件权限投影尚未完全统一，不应把设计方向当作已交付行为。
 
 插件 MCP 工具也必须在每次调用的参数中携带显式 `libraryId`，并同时提供至少一个 `assetIds`、`folderIds` 或 `collectionIds`。Provider 不会从 Desktop 焦点库补全目标；插件暴露开关在 list/call 两条路径都会即时生效。
 
@@ -66,7 +66,7 @@ Permission Broker 只读取 credential 权限档，不保存 transport session g
 
 `super_ui_notify` 是非阻塞信息投影，不是权限通道，仅接受 `toast` 模式（dialog 模式已按 stateless 设计移除）。Host 或 Agent 可以用它说明“正在导入显式路径”“正在查询任务”等阶段，但不得打开选择器或用 notification 等待人类批准。
 
-库级调用的成功响应回显 `libraryId` 与 `libraryChangeSequence`（最近已知变更序号，ADR-0031 §2）；写命令自身可能滞后一个事件，后续调用与 `library.change-sequence` 提供新值。失败响应携带稳定 `code`/`message`，并按错误契约附加 `retryable`（瞬时错误）、`currentVersion`（实体版本冲突）与 `libraryId`。
+库级调用的成功响应回显 `libraryId` 与 `libraryChangeSequence`（最近已知变更序号，见[调用与响应实现](../../../src/mcp/call-tool.ts)）；写命令自身可能滞后一个事件，后续调用与 `library.change-sequence` 提供新值。失败响应携带稳定 `code`/`message`，并按错误契约附加 `retryable`（瞬时错误）、`currentVersion`（实体版本冲突）与 `libraryId`。
 
 资源库变化只发送 `notifications/message` logging notification，并携带 `libraryId` 与 `changeSequence`。MCP 发起的关闭、重命名、删除和资源库导入会通过同一 Main 生命周期投影同步 Desktop，并显示非阻塞 info toast；上下文变化不得触发核心 `tools/list_changed`，只有实际工具贡献变化才刷新工具列表。
 
@@ -87,4 +87,4 @@ Permission Broker 只读取 credential 权限档，不保存 transport session g
 
 Electron E2E 必须后台运行并隔离 `SUPER_E2E_USER_DATA_PATH`。完成大型 MCP 改动后，主 agent 还要使用真实 Super Desktop 做独立 UI/设置验收；自动化通过不能代替人眼验收。
 
-当前已有 Windows x64 定向验证记录；具体覆盖与未执行项见[2.3.17 验收](../../releases/v2.3.17-validation.md)，不能把一次专项验证写成所有 MCP 客户端或全部平台通过。审查至少覆盖 Node `path`、`fs` 原子替换、loopback 绑定、端口错误、Electron 生命周期、Windows 用户目录和 packaged 资源路径。
+Windows x64 的历史定向记录见[2.3.17 验收](../../releases/v2.3.17-validation.md)，当前应用发行边界见[2.3.21 验收](../../releases/v2.3.21-validation.md)；后者不构成全部 MCP 客户端的真实联调验收。不能把一次专项验证写成所有客户端或全部平台通过。审查至少覆盖 Node `path`、`fs` 原子替换、loopback 绑定、端口错误、Electron 生命周期、Windows 用户目录和 packaged 资源路径。

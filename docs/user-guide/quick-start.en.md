@@ -1,6 +1,6 @@
 # Quick start
 
-> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
+> Documentation reviewed for Super Lib v2.3.21 on 2026-10-13 against current source and existing [packaged acceptance evidence](../releases/v2.3.21-validation.md). This review did not rerun the application or external integrations; screenshots retain their actual capture versions.
 
 [简体中文](quick-start.md) · [User guide](README.en.md) · [Latest release](https://github.com/aimtowin/Super/releases/latest)
 
@@ -54,6 +54,8 @@ Import through the menu or by dragging files into the window. Use the link actio
 ![Super Lib workspace](../assets/ui/live-2.3.17/04-workspace.png)
 
 Navigate folders and collections on the left, browse assets in the center, and inspect details on the right. Double-click an asset to open the viewer; right-click for available actions.
+
+In 2.3.21, folder navigation prioritizes the central first page; Inspector statistics and covers load afterward. A pending Inspector does not require the canvas to wait. Pending first-page or child-folder queries show loading. Import prompts require a successful, confirmed empty scope; failed reads are not empty folders. See [loading states](basics.en.md#2321-folder-navigation-and-loading-states).
 
 - Narrow results with color, tag, and format filters: [Search and filters](search-and-filters.en.md).
 - Organize with tags and collections: [Basics](basics.en.md).

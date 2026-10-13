@@ -47,9 +47,9 @@ Super Lib itself is free. Optional third-party AI services may charge according 
 
 ## Install and use
 
-The current source targets `v2.3.20`; verified Windows x64 release attachments are listed on the release page. Download `SuperSetup.exe` for a first installation. Full update ZIPs and delta packages are update-delivery artifacts. Availability on other platforms depends on the files actually attached to a release.
+The current source targets `v2.3.21`; verified Windows x64 release artifacts are documented in the [2.3.21 validation record](docs/releases/v2.3.21-validation.md) and listed on the release page. Download `SuperSetup.exe` for a first installation. Full update ZIPs and delta packages are update-delivery artifacts. Availability on other platforms depends on the files actually attached to a release.
 
-See the [2.3.20 release notes](docs/releases/v2.3.20.md) and [validation record](docs/releases/v2.3.20-validation.md) for the sidebar loading fix. The [2.3.19 notes](docs/releases/v2.3.19.md) describe the inherited viewer and library-organization upgrades.
+See the [2.3.21 release notes](docs/releases/v2.3.21.md) for canvas-first folder navigation and correct loading/empty states. The earlier [2.3.20 notes](docs/releases/v2.3.20.md) describe the sidebar loading fix, and [2.3.19](docs/releases/v2.3.19.md) documents the viewer and library-organization upgrades.
 
 Libraries live at the location you choose. Importing copies assets into the library; linking references files at their existing location, which must remain accessible. See the [quick start](docs/user-guide/quick-start.en.md).
 
@@ -73,6 +73,8 @@ npm start
 
 Common verification and packaging commands:
 
+Packaging prerequisite: a clean checkout currently lacks `docs/internal/skills/super-automation/automation-api.d.ts`, which the packaged-runtime gate requires, and there is no usable public generation CLI. Without a matching declaration, `npm run package` fails its final gate. Do not bypass the gate or treat a private local declaration as a published SDK. Successful development startup or type checking does not establish a reproducible release build; see the [build preparation gap](docs/reference/known-issues-2.3.18.md#clean-checkout-build-gap).
+
 ```bash
 npm run lint
 npm run typecheck
@@ -86,11 +88,12 @@ On Windows, `npm run make:inno` creates `out/make/inno/SuperSetup.exe`. Reposito
 
 ## Documentation
 
-See [local completion and verification](docs/reference/completion-results-2026-10-10.md) for the current implementation. Earlier batch and pre-fix reports retain their historical context.
+See the [2.3.21 release notes](docs/releases/v2.3.21.md) and [validation record](docs/releases/v2.3.21-validation.md) for current delivery. The [October 10 completion report](docs/reference/completion-results-2026-10-10.md), earlier batch reports and pre-fix snapshots retain their historical context.
 
 | Document | Content |
 | --- | --- |
-| [Known issues](docs/reference/known-issues-2.3.18.md) · [Documentation review](docs/reference/documentation-review-2.3.18.md) | Packaged Console failure and acceptance gaps |
+| [Known issues](docs/reference/known-issues-2.3.18.md) · [Current documentation review](docs/reference/documentation-review-2.3.21.md) | Packaged Console failure, clean-checkout build preparation and verification boundaries |
+| [Local release-tool timings (Chinese)](docs/reference/release-throughput-2026-10-12.md) | A local-only benchmark; optimized source is not yet in public main, and no new release or public CLI is implied |
 | [Illustrated feature catalogue (Chinese)](docs/user-guide/features.md) | Real screenshots, entry points, instructions and limits for each user feature |
 | [Post-development decisions and milestones (Chinese)](docs/POST_DEVELOPMENT_DECISIONS.md) | Decisions, 52 version milestones, 349 conversation entries, and outstanding work |
 | [Phase 1 fixes (Chinese)](docs/reference/followup-phase1-results-2026-10-09.md) · [Phased upgrades](docs/plans/2026-10-09-followup-upgrades.md) | Historical checkpoint for eight reproduced fixes; current delivery status is in the completion results and release validation |

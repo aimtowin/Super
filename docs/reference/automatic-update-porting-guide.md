@@ -2,7 +2,7 @@
 
 > 适用对象：需要把 Super Lib 当前的 Windows 自动更新能力迁移到另一个 Electron/Node.js 应用的开发者或 AI 智能体。
 >
-> 当前核对版本：Super Lib `v2.3.18`（2026-10-10）。本文以当前源码为准；不要把历史计划文档当作运行时配置。
+> 原始模块源码核对：Super Lib `v2.3.18`（2026-10-10）；2026-10-13 复核当前 `2.3.21` 的源码入口、构建前置与发行引用。此轮未重新安装更新或连接服务器，不把文档检查当作全量更新验收；不要把历史计划文档当作运行时配置。
 
 ## 1. 模块目标与边界
 
@@ -30,7 +30,7 @@
 - 更新 UI 属于 Inno Setup 进程而不是 Electron 进程，因此应用退出后仍能持续显示真实安装进度。
 - 发布时先上传到服务器 staging 目录；只有附件集合、大小及每个远端 SHA-256 核对通过后才原子替换 `latest.json`，防止客户端看到半成品版本。
 
-当前仅完整支持 Windows x64 的“已安装发行版”增量更新；macOS/便携版可沿用完整包路径，但没有 Windows 的 Inno 安装交接和 delta 支持。
+当前仅完整支持 Windows x64 的“已安装发行版”增量更新；macOS/便携版在代码中有完整包路径，但没有 Windows 的 Inno 安装交接和 delta 支持。当前正式成品验收与发行范围仍为 Windows x64，不能据这些代码路径承诺已有可用的 macOS 安装附件或真实更新验收。
 
 ## 2. 源码地图：迁移时必须带走的文件
 
@@ -82,7 +82,7 @@
 
 服务器地址、SSH 身份、私钥路径及实际目录属于部署环境配置，不能从本文继承授权。每个新的部署任务必须由用户明确授权目标和范围。仓库清理、截图或文档维护均不授权登录 ECS、修改网站、Nginx、Docker、证书或账户。本次审查没有连接服务器。
 
-下文版本数字为协议/迁移示例，不是当前 Latest 的实时查询。正式发布状态见[2.3.18 验证记录](../releases/v2.3.18-validation.md)。
+下文版本数字为协议/迁移示例，不是当前 Latest 的实时查询。最新正式发行的记录见[2.3.21 验证记录](../releases/v2.3.21-validation.md)，其中云端上线结果是对应发行时的历史证据，不是本轮重新检查线上状态。
 
 ## 4. 服务端协议
 
@@ -318,13 +318,20 @@ Windows 安装包 ZIP 必须只解出名为 `SuperSetup.exe`（迁移后改成�
 - 已安装 Electron Forge、Inno Setup 7；默认 Inno 路径是 `%LOCALAPPDATA%\\SuperTools\\inno\\tools\\ISCC.exe`，也可通过 `SUPER_INNO_TOOLS` 指定目录。
 - 打包输出使用“文件树”布局而非单一 `app.asar`；否则小改动也会让 delta 近似完整包。
 - 打包前仍有已发布版本的 `release/baselines/<fromVersion>.json`，不能覆盖或丢失。
+- 干净 Super checkout 目前缺少成品校验要求的完整 `automation-api.d.ts`，且无有效公开生成 CLI，见[构建准备缺口](known-issues-2.3.18.md#clean-checkout-build-gap)。本指南不能补齐该输入；迁移项目需实现自己匹配 API 的声明生成及交付流程，不能复制旧私有声明、绕过成品校验或宣称 `npm ci` 后可直接打包。
 - 发布主机能通过 SSH/SCP 访问 ECS；私钥只保存在受控本机或密钥管理系统。
 
 ### 8.2 每次发行命令（PowerShell 示例）
 
 以下以 `2.2.3 -> 2.2.4` 为例。先只修改新项目自己的 `package.json` 和 lockfile 版本；不要从 Super 的版本号直接照搬。
 
+这些是分阶段命令，不是任意工作区可直接发布的捷径：先满足上一节所有构建输入，再完成开发门禁和媒体准备。`release:package` 本身不包含这两个阶段；本地全流程入口是 `release:local`，不得在正式交付时用 skip 参数冒充全部通过。
+
 ```powershell
+# 0. 开发门禁和可信媒体准备（声明等构建输入必须已具备）
+npm run release:verify
+npm run release:media
+
 # 1. 打包、校验，生成 out/<Product>-win32-x64
 npm run release:package
 
@@ -369,6 +376,8 @@ node scripts/release/publish-ecs-update.mjs
 本地校验 ZIP、EXE、.sha256
   -> SSH 创建 /remote/.staging-<version>-<uuid>
   -> SCP 上传完整包、安装器、sidecar、manifest、全部 delta
+  -> 在 staging 逐文件核对远端 SHA-256，全部一致才继续
+  -> 确认同版本目标目录不存在，拒绝覆盖已发行字节
   -> mv 到 /remote/releases/<version>/
   -> 最后 mv manifest 为 /remote/latest.json
   -> 清理 staging；按保留策略删除旧 release 目录

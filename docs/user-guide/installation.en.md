@@ -1,8 +1,8 @@
 # Installation
 
-> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
+> Documentation reviewed for Super Lib v2.3.21 on 2026-10-13 against current source and existing [packaged acceptance evidence](../releases/v2.3.21-validation.md). This review did not rerun the application or external integrations; screenshots retain their actual capture versions.
 
-Super Lib is free. Download it from the [latest Super Release](https://github.com/aimtowin/Super/releases/latest). The repository and the 2.3.18 release are public; installer downloads are publicly available. Source remains MIT licensed; external AI providers may charge separately. New users can follow the [quick start](quick-start.en.md).
+Super Lib is free. Download it from the [latest Super Release](https://github.com/aimtowin/Super/releases/latest). The repository and the 2.3.21 release are public; see the [release acceptance record](../releases/v2.3.21-validation.md). Source remains MIT licensed; external AI providers may charge separately. New users can follow the [quick start](quick-start.en.md).
 
 ## Requirements
 
@@ -13,7 +13,7 @@ Use [Super Releases](https://github.com/aimtowin/Super/releases) for the current
 
 ## Other platforms
 
-The current `v2.3.18` release provides a Windows x64 installer. Check the actual release attachments for availability on other platforms.
+The current `v2.3.21` release provides a Windows x64 installer. Check the actual release attachments for availability on other platforms.
 
 ## Windows
 
@@ -30,4 +30,4 @@ Libraries and user configuration live outside the installation directory; back u
 
 ## Library versions and downgrade
 
-2.3.18 includes database schema migrations 50/51. Fully quit and back up the whole library before its first upgrade. An older app may not read the upgraded library. Downgrade using a separate pre-upgrade copy, then check assets and metadata; do not point the old app at your only upgraded library.
+2.3.21 supports database schema 52: 2.3.18 introduced migrations 50/51, 2.3.19 added migration 52, and 2.3.20/21 retain that schema. Fully quit and back up the whole library before its first upgrade. An older app may not read the upgraded library. Downgrade using a separate pre-upgrade copy, then check assets and metadata; do not point the old app at your only upgraded library.

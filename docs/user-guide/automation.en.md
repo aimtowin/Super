@@ -1,6 +1,6 @@
 # Automation
 
-> Reviewed for Super Lib v2.3.18 (2026-10-10). Screenshots retain their recorded versions; external integrations require separate acceptance.
+> Documentation reviewed for Super Lib v2.3.21 on 2026-10-13 against current source and existing [packaged acceptance evidence](../releases/v2.3.21-validation.md). This review did not rerun the application or external integrations; screenshots retain their actual capture versions.
 
 Super offers two kinds of automation: scripts for batch organization, and MCP for connecting an external AI tool to Super. Normal browsing, importing, and viewing do not require either one.
 
@@ -43,4 +43,4 @@ For complete commands, development guidance, and integration examples, see the [
 
 ## Current packaged Console limitation
 
-An isolated **2.3.18** packaged run on 2026-10-10 again failed with `RUNTIME_PROCESS_EXITED`: the utility process cannot resolve `typescript`. Console execution is currently blocked. The UI entry and source API do not establish successful packaged execution. See [K01 and the actual 2.3.18 screenshot](../reference/known-issues-2.3.18.md). No binary fix or re-release was made in this documentation task.
+An isolated **2.3.18** packaged run on 2026-10-10 again failed with `RUNTIME_PROCESS_EXITED`: the utility process cannot resolve `typescript`; this remains historical runtime evidence. **The 2.3.21 packaged acceptance still found the dependency missing in static inspection and did not rerun Console scripts, so K01 remains open.** Console execution is currently blocked. The UI entry and source API do not establish successful packaged execution. See [K01 and the actual 2.3.18 screenshot](../reference/known-issues-2.3.18.md) and [2.3.21 acceptance](../releases/v2.3.21-validation.md). No binary fix or re-release was made in this documentation task.

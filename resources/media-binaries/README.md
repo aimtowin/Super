@@ -1,7 +1,10 @@
 # Super media binary bundles
 
-This directory contains trust metadata and bundled license notices. Large executables are never copied
-from a developer's `PATH` and are intentionally ignored by Git.
+This directory contains trust metadata and bundled license notices. Media tools are never copied
+from a developer's `PATH`. The controlled Windows x64 FFmpeg, ffprobe and oiiotool executables,
+their manifest and acquisition receipt, and the ZIP/hash files under `artifacts/media-binaries/`
+are tracked by Git. Other platform runtime directories and local vcpkg build trees are ignored;
+the Windows paths are explicit exceptions in `.gitignore`.
 
 Supported release bundle keys are `darwin-arm64` and `win32-x64`. A prepared
 resource tree has this shape:
@@ -37,10 +40,9 @@ resources/
    every target-package copyright plus its installed version into the dependency
    notice, then runs the manifest and verification gates.
 4. The scripts create a ZIP, its SHA-256, and the generated manifest SHA-256
-   under `artifacts/media-binaries/`.
-   `.github/workflows/media-binary-bundles.yml` performs both clean builds and
-   uploads these candidates as short-lived workflow artifacts. It does not
-   publish a GitHub Release.
+   under `artifacts/media-binaries/`. This public checkout does not contain a
+   media-build GitHub Actions workflow; use the platform scripts above rather
+   than assuming an unavailable workflow can be triggered from this repository.
 5. Put the immutable HTTPS URL, ZIP SHA-256, and manifest SHA-256 in
    `bundle-lock.json`, changing its status to `ready`. A clean checkout can then run
    `npm run media:acquire -- --platform <platform>`.
@@ -49,15 +51,21 @@ resources/
    a local manifest cannot turn locally substituted binaries into a release bundle.
 7. Forge's own `prePackage` hook runs the equivalent of `media:ensure`: when the
    promoted bundle or receipt is absent or invalid, it reacquires the pinned
-   Super-Build release and verifies it before packaging. Set
+   HTTPS URL for that platform from `bundle-lock.json` and verifies it before packaging. Set
    `SUPER_MEDIA_AUTO_ACQUIRE=0` to keep an offline build fail-closed. Forge
    copies `resources/` outside ASAR. Its `postPackage` hook repeats hash,
    provenance, executable, version, license and FFmpeg configuration checks
    against every packaged output.
 
-As reviewed on 2026-10-10, both `darwin-arm64` and `win32-x64` entries in
+As reviewed on 2026-10-13, both `darwin-arm64` and `win32-x64` entries in
 `bundle-lock.json` are `ready`, with immutable URLs and ZIP/manifest hashes.
-This records promoted inputs, not completed macOS application acceptance.
+Windows x64 has tracked tools and a receipt; macOS arm64 is acquired from its
+locked remote bundle when the verified local tree is unavailable. The release
+pipeline's `media` phase explicitly runs acquisition, so vendored Windows tools
+do not imply every build command is offline. Dependency installation, missing
+inputs and other packaging prerequisites still need separate preparation.
+This records promoted inputs, not completed macOS application acceptance or a
+guarantee that a clean checkout can immediately pass all application build gates.
 A new or unpromoted bundle marked `build-required` still blocks release; do not
 substitute Homebrew, Chocolatey, `ffmpeg-static`, or an unverified download.
 

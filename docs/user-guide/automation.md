@@ -1,6 +1,6 @@
 # 自动化功能
 
-> 核对版本：Super Lib v2.3.18（2026-10-10）；配图保留实际拍摄版本，外部服务需另行验收。
+> 文档核对：Super Lib v2.3.21（2026-10-13），依据当前源码及既有[成品验收记录](../releases/v2.3.21-validation.md)。本轮未重新运行软件或外部服务；配图保留实际拍摄版本。
 
 Super 提供两种自动化方式：用脚本批量整理资产，或让外部 AI 工具通过 MCP 连接 Super。普通浏览、导入和查看不需要使用这些功能。
 
@@ -43,4 +43,4 @@ Agent 连接后会从 MCP 的服务器说明和 `tools/list` 自动获知基本�
 
 ## 当前成品脚本限制
 
-2026-10-10 在隔离的 **2.3.18 成品**中再次运行只读脚本，仍发生 `RUNTIME_PROCESS_EXITED`，UtilityProcess 无法解析 `typescript`。Console 当前执行受阻，入口和源码 API 不代表成品执行成功。见[当前 K01 与 2.3.18 实拍](../reference/known-issues-2.3.18.md)。本轮仅修订文档，没有修复或重新发布安装包。
+2026-10-10 在隔离的 **2.3.18 成品**中再次运行只读脚本，仍发生 `RUNTIME_PROCESS_EXITED`，UtilityProcess 无法解析 `typescript`；这是保留的历史运行证据。**2.3.21 成品验收仍静态确认该依赖缺失，没有重新执行 Console 脚本，K01 保持开放**。Console 当前执行受阻，入口和源码 API 不代表成品执行成功。见[当前 K01 与 2.3.18 实拍](../reference/known-issues-2.3.18.md)及[2.3.21 验收](../releases/v2.3.21-validation.md)。本轮仅修订文档，没有修复或重新发布安装包。
