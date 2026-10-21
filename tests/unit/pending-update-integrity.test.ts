@@ -42,9 +42,9 @@ async function updateFixture() {
   archive.addFile('SuperSetup.exe', installerBytes);
   const archiveBytes = archive.toBuffer();
   const assetName = 'Super-win-x86-64-0.1.3-setup.zip';
-  const assetUrl = `https://liuyangyang.me/downloads/super/releases/0.1.3/${assetName}`;
+  const assetUrl = `https://liuyangyang.online/downloads/super/releases/0.1.3/${assetName}`;
   const manifest = {
-    tag_name: 'v0.1.3', html_url: 'https://liuyangyang.me/downloads/super/',
+    tag_name: 'v0.1.3', html_url: 'https://liuyangyang.online/downloads/super/',
     draft: false, prerelease: false, body: 'Verified fixture release notes',
     assets: [{ name: assetName, browser_download_url: assetUrl, size: archiveBytes.length,
       digest: `sha256:${digest(archiveBytes)}` }],
