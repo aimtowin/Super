@@ -4,7 +4,7 @@
 
 </div>
 
-# Super Lib v2.4.0
+# Super Lib v2.4.1
 
 <div align="center">
 
@@ -47,7 +47,7 @@ Super Lib 是一款完全免费的本地素材管理应用。把图片、视频�
 
 ## 安装与使用
 
-本次源码版本为 `v2.4.0`，实际发行状态见[验收记录](docs/releases/v2.4.0-validation.md)。更新源已改为服务器 IP 直连（`https://43.142.93.106`），2.4.0 只提供完整更新包与安装器，不再生成增量包。首次安装请下载 `SuperSetup.exe`；2.3.21 及更早版本无法自动拉到 2.4.0，需要手动覆盖安装。其他平台的安装包以发布页实际附件为准。
+本次源码版本为 `v2.4.1`，实际发行状态见[验收记录](docs/releases/v2.4.1-validation.md)。更新源为服务器 IP 直连（`https://43.142.93.106`）；2.4.0 起可自动更新，2.4.1 恢复 `2.4.0 → 2.4.1` 增量包。首次安装请下载 `SuperSetup.exe`；2.3.21 及更早版本无法自动发现新版本，需要手动覆盖安装一次。其他平台的安装包以发布页实际附件为准。
 
 资产库保存在创建时选择的位置。导入会复制素材进入库；链接文件夹会引用原位置的文件，原目录需要保持可访问。详情见[快速上手](docs/user-guide/quick-start.md)。
 
@@ -86,7 +86,7 @@ npm run make:inno
 
 ## 文档
 
-更新源 IP 直连与旧版本下线见[2.4.0 更新说明](docs/releases/v2.4.0.md)与[验收记录](docs/releases/v2.4.0-validation.md)；此前[2.3.21 画布优先修复](docs/releases/v2.3.21.md)保留历史记录。此前[2.3.20 侧栏修复](docs/releases/v2.3.20.md)及[2.3.19 查看器升级](docs/releases/v2.3.19.md)保留历史记录。前轮[软件本体补齐结果](docs/reference/completion-results-2026-10-10.md)及首批结果保留历史语境。
+自动更新验证与 2.3.21 性能改进见[2.4.1 更新公告](docs/releases/v2.4.1-announcement.md)与[验收记录](docs/releases/v2.4.1-validation.md)；[2.4.0 换源说明](docs/releases/v2.4.0.md)及[2.3.21 画布优先修复](docs/releases/v2.3.21.md)保留历史记录。此前[2.3.20 侧栏修复](docs/releases/v2.3.20.md)及[2.3.19 查看器升级](docs/releases/v2.3.19.md)保留历史记录。前轮[软件本体补齐结果](docs/reference/completion-results-2026-10-10.md)及首批结果保留历史语境。
 
 | 文档 | 内容 |
 | --- | --- |
