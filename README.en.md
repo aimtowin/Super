@@ -47,9 +47,9 @@ Super Lib itself is free. Optional third-party AI services may charge according 
 
 ## Install and use
 
-The current source targets `v2.3.21`; verified Windows x64 release artifacts are documented in the [2.3.21 validation record](docs/releases/v2.3.21-validation.md) and listed on the release page. Download `SuperSetup.exe` for a first installation. Full update ZIPs and delta packages are update-delivery artifacts. Availability on other platforms depends on the files actually attached to a release.
+The current source targets `v2.4.0`; verified Windows x64 release artifacts are documented in the [2.4.0 validation record](docs/releases/v2.4.0-validation.md). The update source is now reached by server IP (`https://43.142.93.106`); 2.4.0 ships only a full update ZIP and installer, with no delta packages. Download `SuperSetup.exe` for a first installation. Availability on other platforms depends on the files actually attached to a release.
 
-See the [2.3.21 release notes](docs/releases/v2.3.21.md) for canvas-first folder navigation and correct loading/empty states. The earlier [2.3.20 notes](docs/releases/v2.3.20.md) describe the sidebar loading fix, and [2.3.19](docs/releases/v2.3.19.md) documents the viewer and library-organization upgrades.
+See the [2.4.0 release notes](docs/releases/v2.4.0.md) for the IP-direct update source and the removal of older releases. The earlier [2.3.20 notes](docs/releases/v2.3.20.md) describe the sidebar loading fix, and [2.3.19](docs/releases/v2.3.19.md) documents the viewer and library-organization upgrades.
 
 Libraries live at the location you choose. Importing copies assets into the library; linking references files at their existing location, which must remain accessible. See the [quick start](docs/user-guide/quick-start.en.md).
 
@@ -88,7 +88,7 @@ On Windows, `npm run make:inno` creates `out/make/inno/SuperSetup.exe`. Reposito
 
 ## Documentation
 
-See the [2.3.21 release notes](docs/releases/v2.3.21.md) and [validation record](docs/releases/v2.3.21-validation.md) for current delivery. The [October 10 completion report](docs/reference/completion-results-2026-10-10.md), earlier batch reports and pre-fix snapshots retain their historical context.
+See the [2.4.0 release notes](docs/releases/v2.4.0.md) and [validation record](docs/releases/v2.4.0-validation.md) for current delivery. The [October 10 completion report](docs/reference/completion-results-2026-10-10.md), earlier batch reports and pre-fix snapshots retain their historical context.
 
 | Document | Content |
 | --- | --- |

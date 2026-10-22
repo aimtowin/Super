@@ -22,14 +22,14 @@ import {
 function releasePayload(overrides: Record<string, unknown> = {}) {
   return {
     tag_name: 'v0.1.3',
-    html_url: 'https://liuyangyang.online/downloads/super/',
+    html_url: 'https://43.142.93.106/downloads/super/',
     draft: false,
     prerelease: false,
     body: 'Release notes',
     assets: [
       {
         name: 'Super-darwin-arm64-0.1.3-package.dmg',
-        browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-darwin-arm64-0.1.3-package.dmg',
+        browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-darwin-arm64-0.1.3-package.dmg',
         size: 123,
         digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       },
@@ -158,7 +158,7 @@ describe('Super app update release contract', () => {
         ...releasePayload(),
         assets: [{
           name: 'Super-darwin-arm64-0.1.3-package.dmg',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-darwin-arm64-0.1.3-package.dmg',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-darwin-arm64-0.1.3-package.dmg',
           size: 123,
         }],
       })!,
@@ -309,7 +309,7 @@ describe('Super app update release contract', () => {
       fetchImpl: async () => new Response(JSON.stringify(releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-setup.zip',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
           size: 123,
           digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         }],
@@ -364,11 +364,11 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-portable.zip',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip',
           size: portableBytes.byteLength,
         }, {
           name: 'Super-win-x86-64-0.1.3-portable.zip.sha256',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip.sha256',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip.sha256',
           size: checksum.length,
         }],
       });
@@ -414,11 +414,11 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-portable.zip',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip',
           size: portableBytes.byteLength,
         }, {
           name: 'Super-win-x86-64-0.1.3-portable.zip.sha256',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip.sha256',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip.sha256',
           size: checksum.length,
         }],
       });
@@ -465,11 +465,11 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-portable.zip',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip',
           size: portableBytes.byteLength,
         }, {
           name: 'Super-win-x86-64-0.1.3-portable.zip.sha256',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip.sha256',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip.sha256',
           size: checksum.length,
         }],
       });
@@ -560,7 +560,7 @@ describe('Super app update release contract', () => {
     const portableBytes = Buffer.from('portable update bytes returned in full after a stale range');
     const checksum = createHash('sha256').update(portableBytes).digest('hex');
     const root = await mkdtemp(path.join(tmpdir(), 'super-app-update-range-fallback-test-'));
-    const assetUrl = 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip';
+    const assetUrl = 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-portable.zip';
     const partialBytes = portableBytes.subarray(0, 11);
     const updateDirectory = path.join(root, 'updates');
     const partialKey = createHash('sha256')
@@ -633,7 +633,7 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-darwin-arm64-0.1.3-package.dmg',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-darwin-arm64-0.1.3-package.dmg',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-darwin-arm64-0.1.3-package.dmg',
           size: installerBytes.byteLength,
           digest: `sha256:${checksum}`,
         }],
@@ -672,7 +672,7 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-setup.zip',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
           size: archiveBytes.byteLength,
           digest: `sha256:${checksum}`,
         }],
@@ -715,11 +715,11 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-setup.zip',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
           size: archiveBytes.byteLength,
         }, {
           name: 'Super-win-x86-64-0.1.3-setup.zip.sha256',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
           size: checksum.length,
         }],
       });
@@ -774,11 +774,11 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-setup.zip',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
           size: archiveBytes.byteLength,
         }, {
           name: 'Super-win-x86-64-0.1.3-setup.zip.sha256',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
           size: checksum.length,
         }],
       });
@@ -847,11 +847,11 @@ describe('Super app update release contract', () => {
       const payload = releasePayload({
         assets: [{
           name: 'Super-win-x86-64-0.1.3-setup.zip',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip',
           size: archiveBytes.byteLength,
         }, {
           name: 'Super-win-x86-64-0.1.3-setup.zip.sha256',
-          browser_download_url: 'https://liuyangyang.online/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
+          browser_download_url: 'https://43.142.93.106/downloads/super/releases/0.1.3/Super-win-x86-64-0.1.3-setup.zip.sha256',
           size: checksum.length,
         }],
       });

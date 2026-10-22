@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DELTA_PACKAGE_RETENTION,
   DELTA_SOURCE_RETENTION,
   FULL_RELEASE_RETENTION,
   MAX_DELTA_TO_FULL_RATIO,
@@ -10,9 +11,10 @@ import {
 } from '../../scripts/release/update-retention-policy.mjs';
 
 describe('release update retention policy', () => {
-  it('keeps five complete release directories and twenty direct delta sources', () => {
-    expect(FULL_RELEASE_RETENTION).toBe(5);
+  it('keeps two complete release directories and twenty delta packages', () => {
+    expect(FULL_RELEASE_RETENTION).toBe(2);
     expect(DELTA_SOURCE_RETENTION).toBe(20);
+    expect(DELTA_PACKAGE_RETENTION).toBe(20);
   });
 
   it('selects the twenty newest valid versions strictly below the current release', () => {

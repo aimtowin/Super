@@ -34,7 +34,9 @@ import type {
 } from '../shared/app-update';
 import { pendingUpdateSchema, type InstallerReceipt, type PendingAppUpdate } from './pending-app-update';
 
-export const SUPER_UPDATE_PUBLIC_ORIGIN = 'https://liuyangyang.online';
+// 2.4.0：更新源改为服务器 IP 直连（域名未完成 ICP 备案，暂不可用）。
+// 服务器已为 IP 签发受信任证书，客户端仍按 HTTPS + SHA-256 校验下载内容。
+export const SUPER_UPDATE_PUBLIC_ORIGIN = 'https://43.142.93.106';
 export const SUPER_UPDATE_MANIFEST_URL =
   `${SUPER_UPDATE_PUBLIC_ORIGIN}/downloads/super/latest.json`;
 const SUPER_LEGACY_UPDATE_MANIFEST_URL =

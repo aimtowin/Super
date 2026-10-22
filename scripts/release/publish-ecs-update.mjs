@@ -9,7 +9,8 @@
  *   SUPER_UPDATE_SSH_PORT      SSH port (default: 22)
  *   SUPER_UPDATE_SSH_IDENTITY_FILE  explicit PEM/private-key path
  *   SUPER_UPDATE_REMOTE_DIR    ECS update volume (default: /www/wwwroot/resource/data/super-updates)
- *   SUPER_UPDATE_RETAIN_RELEASES  Number of newest complete release directories to retain (1-5; default: 5)
+ *   SUPER_UPDATE_RETAIN_RELEASES  Number of newest complete release directories to retain (1-2; default: 2)
+ *   Delta packages are capped at 20 files across retained releases; older ones are deleted.
  *   SUPER_UPDATE_NOTES         bounded release notes shown in Super
  *
  * The server image serves `latest.json` and `releases/<version>/...` from
@@ -24,6 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  DELTA_PACKAGE_RETENTION,
   DELTA_SOURCE_RETENTION,
   FULL_RELEASE_RETENTION,
   compareReleaseVersions,
@@ -86,7 +88,9 @@ function parsePort(value) {
 
 function parseReleaseRetention(value) {
   if (value === undefined || value.trim() === '') return FULL_RELEASE_RETENTION;
-  if (!/^[1-5]$/u.test(value.trim())) fail(`SUPER_UPDATE_RETAIN_RELEASES must be an integer from 1 to ${FULL_RELEASE_RETENTION}.`);
+  if (!/^[1-9]$/u.test(value.trim()) || Number(value.trim()) > FULL_RELEASE_RETENTION) {
+    fail(`SUPER_UPDATE_RETAIN_RELEASES must be an integer from 1 to ${FULL_RELEASE_RETENTION}.`);
+  }
   return Number(value.trim());
 }
 
@@ -234,6 +238,9 @@ async function main() {
     // Keep the newest N semver directories; clients always use latest.json, so older
     // installers are not needed for normal update delivery.
     `find ${quoteRemotePath(`${remoteDirectory}/releases`)} -mindepth 1 -maxdepth 1 -type d -printf '%f\\n' | grep -E '^[0-9]+\\.[0-9]+\\.[0-9]+$' | sort -V | head -n -${releaseRetention} | while IFS= read -r oldVersion; do rm -rf ${quoteRemotePath(`${remoteDirectory}/releases`)}/"$oldVersion"; done`,
+    // Delta packages are optional accelerators: keep only the newest DELTA_PACKAGE_RETENTION
+    // files across all retained releases and delete the oldest beyond that cap.
+    `find ${quoteRemotePath(`${remoteDirectory}/releases`)} -mindepth 2 -maxdepth 2 -type f -name '*-delta.zip' -printf '%T@ %p\\n' | sort -rn | tail -n +${DELTA_PACKAGE_RETENTION + 1} | cut -d' ' -f2- | while IFS= read -r staleDelta; do rm -f "$staleDelta"; done`,
   ].join('; ');
   await run('ssh', [...sshOptions, destination, moveCommand]);
   console.log(`[publish-ecs-update] Published Super ${version} to ${destination}:${remoteDirectory}`);

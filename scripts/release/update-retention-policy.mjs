@@ -1,6 +1,8 @@
 /** Shared release-retention policy for Super's complete and delta packages. */
-export const FULL_RELEASE_RETENTION = 5;
+export const FULL_RELEASE_RETENTION = 2;
 export const DELTA_SOURCE_RETENTION = 20;
+/** 服务器上保留的增量包文件总数上限；超出时按发布时间删除最旧的增量包。 */
+export const DELTA_PACKAGE_RETENTION = 20;
 export const MAX_DELTA_TO_FULL_RATIO = 0.6;
 
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/u;
