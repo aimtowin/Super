@@ -19,7 +19,7 @@
  * `useToastNotifications`.
  */
 
-export type ToastKind = "notice" | "warning" | "error";
+export type ToastKind = "notice" | "warning" | "error" | "progress";
 
 /** Full severity ladder including the blocking fatal modal channel. */
 export type ToastSeverity = "info" | "warning" | "error" | "fatal";
@@ -61,6 +61,7 @@ export interface ToastSnapshot {
   closingIds: readonly number[];
 }
 
+/** A progress entry is a persistent status line: it never expires on its own. */
 export const TOAST_NOTICE_DURATION_MS = 5_000;
 export const TOAST_WARNING_DURATION_MS = 10_000;
 export const TOAST_ERROR_DURATION_MS = 10_000;
@@ -75,6 +76,12 @@ export interface ToastNotifications {
   setError(text: string | null): void;
   setWarning(text: string | null): void;
   setNotice(text: string | null, historyEntryId?: string): void;
+  /**
+   * Persistent work-in-progress status (e.g. a disk-change scan). Unlike the
+   * severity channels it never auto-dismisses; the caller must clear it when
+   * the work settles, otherwise it would outlive the operation.
+   */
+  setProgress(text: string | null): void;
   setFatal(text: string | null): void;
   /** Start closing the highest-severity visible toast. */
   dismissVisible(): void;
@@ -82,6 +89,11 @@ export interface ToastNotifications {
   dismissToast(id: number): void;
   finishExit(id?: number): void;
   dispose(): void;
+}
+
+/** Progress is an info-level status entry, not a warning/error severity. */
+function toastSeverity(kind: ToastKind): ToastSeverity {
+  return kind === "warning" || kind === "error" ? kind : "info";
 }
 
 export function createToastNotifications(): ToastNotifications {
@@ -109,12 +121,8 @@ export function createToastNotifications(): ToastNotifications {
     for (const candidate of candidates) {
       if (
         result === null ||
-        TOAST_SEVERITY_RANK[
-          candidate.kind === "notice" ? "info" : candidate.kind
-        ] >
-          TOAST_SEVERITY_RANK[
-            result.kind === "notice" ? "info" : result.kind
-          ]
+        TOAST_SEVERITY_RANK[toastSeverity(candidate.kind)] >
+          TOAST_SEVERITY_RANK[toastSeverity(result.kind)]
       ) {
         result = candidate;
       }
@@ -214,11 +222,13 @@ export function createToastNotifications(): ToastNotifications {
     }
     const id = nextId++;
     const duration =
-      kind === "notice"
-        ? TOAST_NOTICE_DURATION_MS
-        : kind === "warning"
-          ? TOAST_WARNING_DURATION_MS
-          : TOAST_ERROR_DURATION_MS;
+      kind === "progress"
+        ? undefined
+        : kind === "notice"
+          ? TOAST_NOTICE_DURATION_MS
+          : kind === "warning"
+            ? TOAST_WARNING_DURATION_MS
+            : TOAST_ERROR_DURATION_MS;
     entries = [
       {
         id,
@@ -229,7 +239,9 @@ export function createToastNotifications(): ToastNotifications {
       },
       ...entries,
     ];
-    dismissTimers.set(id, setTimeout(() => startClosing(id), duration));
+    if (duration !== undefined) {
+      dismissTimers.set(id, setTimeout(() => startClosing(id), duration));
+    }
     commit();
   }
 
@@ -237,6 +249,15 @@ export function createToastNotifications(): ToastNotifications {
   const setWarning = (text: string | null) => setToast("warning", text);
   const setNotice = (text: string | null, historyEntryId?: string) =>
     setToast("notice", text, historyEntryId);
+  function setProgress(text: string | null): void {
+    // One status line at a time: a newer phase replaces the previous entry
+    // instead of stacking spinners.
+    for (const entry of entries) {
+      if (entry.kind === "progress" && !entry.closing) startClosing(entry.id);
+    }
+    setToast("progress", text);
+    commit();
+  }
 
   function setFatal(text: string | null): void {
     // Fatal never auto-dismisses; lower toast channels cannot clear it.
@@ -278,6 +299,7 @@ export function createToastNotifications(): ToastNotifications {
     setError,
     setWarning,
     setNotice,
+    setProgress,
     setFatal,
     dismissVisible,
     dismissToast,

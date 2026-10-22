@@ -2026,6 +2026,7 @@ export const zhCN = {
     importCancelled: "导入已取消。",
     zipImportFailed: "ZIP 导入失败。",
     libraryImportComplete: "已导入并打开「{name}」。",
+    diskSyncChecking: "正在同步磁盘变化…",
     diskSyncedAuto: "已自动同步 {count} 项磁盘变化{missing}。",
     diskSyncedMissing: "，其中已移除 {count} 项",
     textFileSaved: "文件已保存。",

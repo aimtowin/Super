@@ -184,6 +184,8 @@ function fixture(primaryDeferred = false) {
     useEffect, createCoalescedRefresh, nextAssetNotificationCandidate, invalidateChangedAssetArtifacts, shouldRefreshContentForLibraryChange,
     window,
     selectedAssetIdRef: { current: undefined }, uiStateRef: { current: "ready" }, importProgressRef: { current: null },
+    // Disk-sync status port: the effect retires its "checking" toast here.
+    diskSyncProgressOwnerRef: { current: undefined }, setProgress: vi.fn(),
     NETWORK_LIBRARY_RELOAD_INTERVAL_MS: 750, refreshOperationHistory: vi.fn(async () => undefined),
   });
   bindings.backgroundLibraryId = library.libraryId;

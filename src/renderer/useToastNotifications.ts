@@ -17,6 +17,8 @@ export interface UseToastNotificationsReturn extends ToastSnapshot {
   setWarning: (text: string | null) => void;
   /** Drop-in replacement for the former `setNotice` state setter. */
   setNotice: (text: string | null, historyEntryId?: string) => void;
+  /** Persistent work-in-progress status; cleared by the caller when done. */
+  setProgress: (text: string | null) => void;
   /** Blocking fatal modal body; null clears. */
   setFatal: (text: string | null) => void;
   /** Start closing the highest-severity visible toast. */
@@ -57,6 +59,7 @@ export function useToastNotifications(): UseToastNotificationsReturn {
     setError: controller.setError,
     setWarning: controller.setWarning,
     setNotice: controller.setNotice,
+    setProgress: controller.setProgress,
     setFatal: controller.setFatal,
     dismissVisible: controller.dismissVisible,
     dismissToast: controller.dismissToast,

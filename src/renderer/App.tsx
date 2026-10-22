@@ -486,6 +486,13 @@ const IS_WINDOWS_PLATFORM =
 
 const SHORTCUT_PLATFORM: CommandPlatform = IS_MAC_PLATFORM ? "mac" : "windows";
 const NETWORK_LIBRARY_RELOAD_INTERVAL_MS = 750;
+/**
+ * A restore after this hidden window makes the Worker replay queued watcher
+ * changes, so the UI announces the pending check instead of staying silent.
+ */
+const DISK_SYNC_RESUME_NOTICE_AFTER_MS = 60_000;
+/** Safety net: retire the status line if no completion notice ever arrives. */
+const DISK_SYNC_PROGRESS_TIMEOUT_MS = 20_000;
 
 type RendererWindow = Window & {
   super?: {
@@ -718,6 +725,9 @@ function AppInner() {
   });
   const [uiState, setUiState] = useState<UiState>("booting");
   const uiStateRef = useRef(uiState);
+  /** Which flow owns the disk-sync status line, so a stale timer cannot clear
+   *  another flow's progress entry. */
+  const diskSyncProgressOwnerRef = useRef<"manual" | "resume" | undefined>(undefined);
   uiStateRef.current = uiState;
   const busy = [
     "booting",
@@ -735,6 +745,7 @@ function AppInner() {
     setError,
     setWarning,
     setNotice,
+    setProgress,
     setFatal,
     dismissToast,
     handleToastTransitionEnd,
@@ -6885,8 +6896,51 @@ function AppInner() {
     }
   }
 
+  // A long-hidden window replays queued watcher changes once the Worker
+  // leaves background mode. Announce the check before the scan starts, so a
+  // restore never looks idle; the completion notice or the safety timer then
+  // retires the status line.
+  useEffect(() => {
+    if (!library) return;
+    let hiddenAt: number | undefined;
+    let progressTimer: number | undefined;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      if (hiddenAt === undefined) return;
+      const hiddenForMs = Date.now() - hiddenAt;
+      hiddenAt = undefined;
+      if (hiddenForMs < DISK_SYNC_RESUME_NOTICE_AFTER_MS) return;
+      diskSyncProgressOwnerRef.current = "resume";
+      setProgress(t("toast.diskSyncChecking"));
+      if (progressTimer !== undefined) window.clearTimeout(progressTimer);
+      progressTimer = window.setTimeout(() => {
+        progressTimer = undefined;
+        if (diskSyncProgressOwnerRef.current !== "resume") return;
+        diskSyncProgressOwnerRef.current = undefined;
+        setProgress(null);
+      }, DISK_SYNC_PROGRESS_TIMEOUT_MS);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (progressTimer !== undefined) window.clearTimeout(progressTimer);
+      // Switching/closing the library retires its pending status line.
+      if (diskSyncProgressOwnerRef.current === "resume") {
+        diskSyncProgressOwnerRef.current = undefined;
+        setProgress(null);
+      }
+    };
+  }, [library, locale, setProgress, t]);
+
   async function refreshAssets() {
     if (!api || !library) return;
+    // Announce the manual scan immediately: the Worker may take seconds, and a
+    // silent canvas reads as a frozen app.
+    diskSyncProgressOwnerRef.current = "manual";
+    setProgress(t("toast.diskSyncChecking"));
     setUiState("loading");
     try {
       const result = await api.refreshAssets({ libraryId: library.libraryId });
@@ -6900,6 +6954,10 @@ function AppInner() {
     } catch (caught) {
       setError(toMessage(caught, t("toast.refreshFailed"), locale));
     } finally {
+      if (diskSyncProgressOwnerRef.current === "manual") {
+        diskSyncProgressOwnerRef.current = undefined;
+        setProgress(null);
+      }
       setUiState("ready");
     }
   }
@@ -8163,6 +8221,12 @@ function AppInner() {
       }
       if (!isCurrent() || !notification) return;
       const { t, setNotice } = backgroundContentPortsRef.current;
+      // The scan announced by the status line has settled: retire it before
+      // the result notice takes over the stack.
+      if (diskSyncProgressOwnerRef.current === "resume") {
+        diskSyncProgressOwnerRef.current = undefined;
+        setProgress(null);
+      }
       if (notification.source === "text-save") {
         setNotice(t("toast.textFileSaved"));
       } else if (notification.source === "watcher") {
@@ -8306,7 +8370,7 @@ function AppInner() {
       unsubscribe();
       unsubscribeLibraryChanged();
     };
-  }, [api, backgroundLibraryId, metadataController, metadataSession, refreshOperationHistory]);
+  }, [api, backgroundLibraryId, metadataController, metadataSession, refreshOperationHistory, setProgress]);
 
   useEffect(() => {
     if (!api) return;

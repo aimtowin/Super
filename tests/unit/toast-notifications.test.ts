@@ -348,4 +348,36 @@ describe('createToastNotifications', () => {
     expect(listener.mock.calls.length).toBe(callsAfterUnsubscribe);
     toast.dispose();
   });
+
+  it('keeps a progress entry until the caller clears it', () => {
+    const toast = createToastNotifications();
+    toast.setProgress('正在同步磁盘变化…');
+
+    // Progress never expires on the notice/warning/error timers.
+    vi.advanceTimersByTime(TOAST_NOTICE_DURATION_MS * 3);
+    expect(
+      toast.getSnapshot().renderedStack.map(({ kind, text }) => ({ kind, text })),
+    ).toEqual([{ kind: 'progress', text: '正在同步磁盘变化…' }]);
+
+    // A newer phase replaces the previous status line instead of stacking.
+    toast.setProgress('已读取磁盘变化，正在刷新界面…');
+    const active = toast
+      .getSnapshot()
+      .renderedStack.filter(({ kind, closing }) => kind === 'progress' && !closing);
+    expect(active).toHaveLength(1);
+    expect(active[0]!.text).toBe('已读取磁盘变化，正在刷新界面…');
+
+    // Clearing follows the same exit-transition lifecycle as other toasts.
+    toast.setProgress(null);
+    expect(
+      toast
+        .getSnapshot()
+        .renderedStack.filter(({ kind, closing }) => kind === 'progress' && !closing),
+    ).toHaveLength(0);
+    vi.advanceTimersByTime(EXIT_FALLBACK_MS);
+    expect(
+      toast.getSnapshot().renderedStack.filter(({ kind }) => kind === 'progress'),
+    ).toHaveLength(0);
+    toast.dispose();
+  });
 });

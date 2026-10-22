@@ -2041,6 +2041,7 @@ export const en = {
     importCancelled: "Import cancelled.",
     zipImportFailed: "ZIP import failed.",
     libraryImportComplete: "Imported and opened “{name}”.",
+    diskSyncChecking: "Syncing disk changes…",
     diskSyncedAuto: "Automatically synced {count} disk changes{missing}.",
     diskSyncedMissing: ", including {count} removed",
     textFileSaved: "File saved.",

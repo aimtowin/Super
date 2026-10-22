@@ -27,8 +27,13 @@ export function WorkspaceNoticeBanner({
   onTransitionEnd,
 }: WorkspaceNoticeBannerProps) {
   const t = useT();
+  const isProgress = message.kind === "progress";
   const iconName =
     message.kind === "error" || message.kind === "warning" ? "warning" : "info";
+  const tone: "info" | "warning" | "error" =
+    message.kind === "warning" || message.kind === "error"
+      ? message.kind
+      : "info";
   return (
     <Notice
       actions={(
@@ -46,18 +51,22 @@ export function WorkspaceNoticeBanner({
       )}
       className={`workspace-notice-item${closing ? ' is-closing' : ''}`}
       data-toast-id={toastId}
-      dismissLabel={t('common.closeHint')}
-      dismissible
+      dismissLabel={isProgress ? undefined : t('common.closeHint')}
+      dismissible={!isProgress}
       liveRegion={false}
       leading={(
         <span className="workspace-notice-icon" aria-hidden>
-          <Icon name={iconName} size={15} />
+          {isProgress ? (
+            <span className="workspace-notice-spinner" />
+          ) : (
+            <Icon name={iconName} size={15} />
+          )}
         </span>
       )}
       message={message.text}
       onTransitionEnd={onTransitionEnd}
       onDismiss={onDismiss}
-      tone={message.kind === "notice" ? "info" : message.kind}
+      tone={tone}
     >
     </Notice>
   );
