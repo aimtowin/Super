@@ -2,7 +2,23 @@
 
 > 适用对象：需要把 Super Lib 当前的 Windows 自动更新能力迁移到另一个 Electron/Node.js 应用的开发者或 AI 智能体。
 >
-> 原始模块源码核对：Super Lib `v2.3.18`（2026-10-10）；2026-10-13 复核当前 `2.3.21` 的源码入口、构建前置与发行引用。此轮未重新安装更新或连接服务器，不把文档检查当作全量更新验收；不要把历史计划文档当作运行时配置。
+> 原始模块源码核对：Super Lib `v2.3.18`（2026-10-10）；2026-10-13 复核 `2.3.21` 的源码入口、构建前置与发行引用；2026-10-22 按 `2.4.1` 更新源切换（域名改为服务器 IP 直连）修订第 0、3、8 节的当前配置。各轮均未重新执行客户端全量更新验收；不要把历史计划文档当作运行时配置。
+
+## 0. 当前更新源（2026-10-22，以 2.4.1 为准）
+
+| 项 | 当前值 | 说明 |
+| --- | --- | --- |
+| 客户端固定 origin | `https://43.142.93.106` | 源码常量 `SUPER_UPDATE_PUBLIC_ORIGIN`；主域名未完成 ICP 备案，因此直连 IP，不依赖域名解析 |
+| 证书 | 受信任 CA 签发的**IP SAN 证书** | 仍强制 `https`，不接受自签名或 http；证书续期由服务器定时任务负责 |
+| manifest | `/downloads/super/latest.json` | 唯一可变入口，最后原子替换 |
+| 下载前缀 | `/downloads/super/` | 服务器目录 `/var/www/super-updates`（Apache `Alias` + `ProxyPass ... !` 绕过应用反向代理） |
+| 完整发行目录保留 | **2** 个（`releases/<version>/`） | 由 `scripts/release/update-retention-policy.mjs` 的 `FULL_RELEASE_RETENTION` 控制 |
+| 增量包保留 | 增量**来源**最多 20 个；服务器 `releases/*/*-delta.zip` 文件上限 **20** 个，超出自动删除最旧 | `DELTA_SOURCE_RETENTION` / `DELTA_PACKAGE_RETENTION` |
+| 版本基线 | `release/baselines/` 现存 `2.4.0`、`2.4.1` | 更早基线已按发行清理删除；缺少基线时只能回退完整包 |
+
+迁移到新应用时不要照抄这个 IP：给自己的应用使用**自有域名 + 受信任证书**；只有域名不可用（如未备案）时才用 IP 直连，并单独确认 IP 证书链与续期。
+
+另外，2.3.21 及更早版本的客户端写死了旧域名，**必须手动全量安装一次 2.4.x**，之后才能重新获得增量更新能力；2.4.0 → 2.4.1 的增量包约 2 MB。
 
 ## 1. 模块目标与边界
 
@@ -24,7 +40,7 @@
 
 关键设计取舍：
 
-- 更新源只信任一个固定 HTTPS 域名和下载路径前缀，**不信任服务端返回的任意 URL**。
+- 更新源只信任一个固定 HTTPS 源（域名或 IP）和下载路径前缀，**不信任服务端返回的任意 URL**。
 - 完整包永远存在；增量包只是优化。增量包下载、校验或解压准备失败时，自动回退一次完整包；安装器已经接管后的失败需另行诊断，不能承诺后台自动重新下载。
 - 下载成功不等于安装：安装器先持久化到用户目录，用户再决定何时重启安装。
 - 更新 UI 属于 Inno Setup 进程而不是 Electron 进程，因此应用退出后仍能持续显示真实安装进度。
@@ -68,21 +84,21 @@
 | 已安装标记 | `.super-installed` | 建议改为 `.<product>-installed` |
 | 用户缓存目录 | `%APPDATA%\\Super\\updates` | `%APPDATA%\\<Product>\\updates` |
 | relay 临时文件 | `%LOCALAPPDATA%\\Temp\\SuperLib-update-relay.exe` | 唯一的新产品 relay 文件名 |
-| 公共更新域名 | `https://liuyangyang.me` | 新应用独有的 HTTPS 域名 |
+| 公共更新源 | `https://43.142.93.106`（2.4.0 起；此前为 `https://liuyangyang.me`） | 新应用自有的 HTTPS 域名；仅在域名不可用时改用 IP 直连 |
 | 静态 manifest | `/downloads/super/latest.json` | `/downloads/<product>/latest.json` |
 | 旧 API fallback | `/api/super/updates/latest` | `/api/<product>/updates/latest`，或删除 fallback |
 | 允许下载前缀 | `/downloads/super/` | `/downloads/<product>/` |
-| ECS 持久化目录 | `/www/wwwroot/resource/data/super-updates` | 新产品专属绝对目录 |
+| 服务器持久化目录 | `/var/www/super-updates`（新服务器 2.4.0 起；旧服务器为 `/www/wwwroot/resource/data/super-updates`） | 新产品专属绝对目录 |
 
 不要把 PEM 私钥、SSH 密码、云主机登录信息写进源码、`package.json`、发布说明或本文档。发布脚本只从环境变量读取私钥文件路径。
 
 ### 3.1 发布配置与授权边界
 
-客户端当前固定 HTTPS origin 为 `https://liuyangyang.me`，优先入口是 `/downloads/super/latest.json`，下载前缀为 `/downloads/super/`。旧 `/api/super/updates/latest` 只是兼容代码路径；最近发行验证记录显示其返回 404，不能当作有效发布入口。
+客户端当前固定 HTTPS origin 为 `https://43.142.93.106`（2.4.0 起；2.3.21 及更早为 `https://liuyangyang.me`），优先入口是 `/downloads/super/latest.json`，下载前缀为 `/downloads/super/`。旧 `/api/super/updates/latest` 只是兼容代码路径；历史发行验证记录显示其返回 404，不能当作有效发布入口。
 
 服务器地址、SSH 身份、私钥路径及实际目录属于部署环境配置，不能从本文继承授权。每个新的部署任务必须由用户明确授权目标和范围。仓库清理、截图或文档维护均不授权登录 ECS、修改网站、Nginx、Docker、证书或账户。本次审查没有连接服务器。
 
-下文版本数字为协议/迁移示例，不是当前 Latest 的实时查询。最新正式发行的记录见[2.3.21 验证记录](../releases/v2.3.21-validation.md)，其中云端上线结果是对应发行时的历史证据，不是本轮重新检查线上状态。
+下文版本数字为协议/迁移示例，不是当前 Latest 的实时查询。最新正式发行的记录见[2.4.1 验证记录](../releases/v2.4.1-validation.md)，其中云端上线结果是对应发行时的历史证据，不是本轮重新检查线上状态。
 
 ## 4. 服务端协议
 
@@ -359,8 +375,8 @@ node scripts/release/publish-ecs-update.mjs --dry-run
 | `SUPER_UPDATE_SSH_USER` | 否 | `root` | SSH 用户 |
 | `SUPER_UPDATE_SSH_PORT` | 否 | `22` | 1–65535 |
 | `SUPER_UPDATE_SSH_IDENTITY_FILE` | 否但推荐 | SSH 默认行为 | PEM/私钥文件绝对路径；不得打印内容 |
-| `SUPER_UPDATE_REMOTE_DIR` | 否 | `/www/wwwroot/resource/data/super-updates` | ECS 持久卷绝对路径 |
-| `SUPER_UPDATE_RETAIN_RELEASES` | 否 | `5` | 仅保留最近 1–5 个完整发行目录；不能提高到 5 以上 |
+| `SUPER_UPDATE_REMOTE_DIR` | 否 | `/var/www/super-updates` | 服务器持久卷绝对路径（旧服务器为 `/www/wwwroot/resource/data/super-updates`） |
+| `SUPER_UPDATE_RETAIN_RELEASES` | 否 | `2` | 仅保留最近 1–2 个完整发行目录；不能提高到 2 以上 |
 | `SUPER_UPDATE_NOTES` | 否 | `Super <version>` | 最长 12,000 字符 |
 
 ```powershell
@@ -383,7 +399,7 @@ node scripts/release/publish-ecs-update.mjs
   -> 清理 staging；按保留策略删除旧 release 目录
 ```
 
-完整包与 delta 的保留策略独立：服务器只保留最新 5 个完整发行目录；每个最新 manifest 最多列出 20 个“旧版本直接升级到当前版本”的 delta。生成该 20 个 delta 依赖 `release/baselines/` 中的长期基线清单，不能依赖可能被清理的 `out/`。版本不在最近 20 个有效基线内，或 delta 超过完整包 60% 时，客户端安全地改用完整包。
+完整包与 delta 的保留策略独立：服务器只保留最新 **2** 个完整发行目录；每个最新 manifest 最多列出 20 个“旧版本直接升级到当前版本”的 delta，且服务器上的 delta 文件总数上限为 20，超出后自动删除最旧的。生成该 20 个 delta 依赖 `release/baselines/` 中的长期基线清单，不能依赖可能被清理的 `out/`。版本不在最近 20 个有效基线内，或 delta 超过完整包 60% 时，客户端安全地改用完整包。
 
 ## 9. ECS/静态站点部署约定
 

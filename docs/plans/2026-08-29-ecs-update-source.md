@@ -1,5 +1,7 @@
 # ECS Update Source Implementation Plan
 
+> **已被取代（2026-10-22）**：本计划描述的是把更新源从 GitHub Releases 迁到 `liuyangyang.me` 的 ECS 服务，其中域名与 `/api/super/updates/latest` 入口均已不再使用。2.4.0 起实际方案为**服务器 IP 直连 + 静态 manifest**（`https://43.142.93.106/downloads/super/latest.json`），现行配置以[自动更新模块迁移参考](../reference/automatic-update-porting-guide.md)第 0、3、8 节为准。本文仅作历史决策记录，不得据此执行发布或连接服务器。
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Move Super's desktop-update discovery and binary delivery from private GitHub Releases to the existing HTTPS ECS service at `liuyangyang.me`.

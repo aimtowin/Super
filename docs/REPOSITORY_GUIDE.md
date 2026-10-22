@@ -27,12 +27,15 @@
 | `scripts/release/` | Inno 安装器、文件清单、增量包、校验和、ECS 发布和版本保留策略。 |
 | `assets/` | 应用图标、Inno Setup 脚本和随安装器使用的静态资源。 |
 | `resources/` | 随应用发布的媒体二进制、许可证和锁定清单。 |
-| `release/baselines/` | 紧凑的历史安装包文件清单；用于构建旧版本到最新版的直达增量包。保留它，不要和 `out/` 一同清空。 |
+| `release/baselines/` | 紧凑的历史安装包文件清单；用于构建旧版本到最新版的直达增量包。保留它，不要和 `out/` 一同清空。2.4.0 之前的旧基线已随旧发行目录清理，当前只保留 `2.4.0`、`2.4.1`。 |
 | `artifacts/` | 可复现的媒体包等受控构建输入；是否跟踪以 `.gitignore` 的例外规则为准。 |
 
 发布入口为 `npm run release:local`，ECS 发布入口为
 `npm run release:publish-ecs`。服务器保留策略与本地基线数量由发布脚本管理；
 完整安装包和增量 ZIP 都属于发布产物，不属于源码。
+
+当前自动更新源为服务器 IP 直连 `https://43.142.93.106/downloads/super/`，服务器目录
+`/var/www/super-updates`，完整发行目录保留 2 个、增量包文件上限 20 个；详见[自动更新模块迁移参考](reference/automatic-update-porting-guide.md)。
 
 ### 当前构建前置边界
 

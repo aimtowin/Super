@@ -66,7 +66,7 @@
 ## 发布范围
 
 **2.3.18 已正式发布**：[GitHub Release](https://github.com/aimtowin/Super/releases/tag/v2.3.18)
-及用户确认的[旧 ECS 更新源](https://liuyangyang.me/downloads/super/latest.json)。
+及用户确认的旧 ECS 更新源（`https://liuyangyang.me/downloads/super/latest.json`；该域名与地址已于 2.4.0 停用，现为服务器 IP 直连）。
 46 个 GitHub 附件的名称、大小和服务端 SHA-256 全部匹配；20 个增量覆盖
 2.2.7、2.2.8、2.3.0–2.3.17，最近版本增量约 3.4 MiB。ECS staging 全部校验后
 提升，公网完整包和最近版本增量实际下载哈希通过。源码、文档、基线已推送，
