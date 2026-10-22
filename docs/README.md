@@ -11,6 +11,7 @@
 | [当前已知问题](reference/known-issues-2.3.18.md) · [当前文档审查](reference/documentation-review-2.3.21.md) | 成品 Console 实际失败、构建准备缺口与修订依据 |
 | [2.4.1 更新说明](releases/v2.4.1.md) · [验收记录](releases/v2.4.1-validation.md) · [更新公告](releases/v2.4.1-announcement.md) | 更新源迁移后的自动更新验证版（功能同 2.4.0）；增量包约 2 MB |
 | [更新源迁移完成公告](releases/2026-10-22-update-source-migration-complete.md) | 宣布迁移完成：完成范围、对用户的影响与后续安排 |
+| [磁盘变化同步问题记录（2026-10-22）](reference/disk-sync-issues-2026-10-22.md) | 本轮两个同步提示问题：已修复部分、仍开放的相互阻塞、复现与验证待办 |
 | [2.4.0 更新说明](releases/v2.4.0.md) · [验收记录](releases/v2.4.0-validation.md) | 更新源改为服务器 IP 直连；2.3.21 及更早需全量安装一次 |
 | [2.3.21 更新说明](releases/v2.3.21.md) · [验收记录](releases/v2.3.21-validation.md) | 画布优先、正确加载状态与目录查询修复（功能基线） |
 | [2.3.20 更新说明](releases/v2.3.20.md) · [验收记录](releases/v2.3.20-validation.md) | 此前侧栏独立加载、恢复排序和全库计数修复；保留原发行证据 |
