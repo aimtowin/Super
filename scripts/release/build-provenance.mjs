@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, open, readdir, readFile, readlink, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
+
+import { mapBounded } from './bounded-map.mjs';
 
 const SHA256 = /^[a-f0-9]{64}$/u;
 const HEAD = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u;
@@ -10,6 +13,9 @@ const PLATFORMS = new Set(['win32-x64', 'darwin-arm64']);
 const INPUT_DIRECTORIES = new Set(['src', 'extension', 'scripts', 'assets', 'resources']);
 const TOOL_KEYS = new Set(['node', 'electron', 'forge', 'inno']);
 const CONFIGURATION_KEYS = new Set(['asar', 'prune', 'vcpkgEnabled']);
+// Conservative default: overlap filesystem latency without multiplying compiler
+// processes or caching any proof. At most four guarded streams per verification.
+const HASH_CONCURRENCY = 4;
 const comparePaths = (left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0;
 const fingerprint = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const record = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -257,8 +263,7 @@ async function captureInputs(root, platform) {
   const generated = new Set(mediaPaths(platform).executables.map((relative) => `resources/${relative}`));
   generated.add(mediaPaths(platform).acquisition);
   const files = (await walk(root)).filter((relative) => !generated.has(relative));
-  const inputs = [];
-  for (const relative of files) inputs.push(await digestFile(root, relative));
+  const inputs = await mapBounded(files, HASH_CONCURRENCY, (relative) => digestFile(root, relative));
   return inputs.sort(comparePaths);
 }
 
@@ -442,18 +447,48 @@ async function packageVersion(root, platform) {
   return manifest.version;
 }
 
-async function packageFiles(root, platform) {
-  const files = [];
-  for (const member of await walkPackage(root, platform)) {
-    files.push(member.kind === 'symlink' ? member : await digestFile(root, member.path));
-  }
+async function inspectPayload(root, platform, concurrency) {
+  const started = performance.now();
+  const members = await walkPackage(root, platform);
+  const walked = performance.now();
+  const files = await mapBounded(members, concurrency, (member) =>
+    member.kind === 'symlink' ? member : digestFile(root, member.path));
+  const hashed = performance.now();
   // Linking must still be safe/current after streaming the regular payloads.
   for (const member of files) {
     if (member.kind === 'symlink' && JSON.stringify(await packageLink(root, member.path)) !== JSON.stringify(member)) {
       throw unverified(`Package symlink changed during payload hashing: ${member.path}`);
     }
   }
-  return files.sort(comparePaths);
+  files.sort(comparePaths);
+  const finished = performance.now();
+  return {
+    files,
+    metrics: {
+      concurrency, fileCount: files.filter((member) => member.kind !== 'symlink').length,
+      linkCount: files.filter((member) => member.kind === 'symlink').length,
+      bytes: files.reduce((total, member) => total + (member.bytes ?? 0), 0),
+      walkMs: walked - started, hashMs: hashed - walked,
+      finalizeMs: finished - hashed, totalMs: finished - started,
+    },
+  };
+}
+
+async function packageFiles(root, platform) {
+  return (await inspectPayload(root, platform, HASH_CONCURRENCY)).files;
+}
+
+/**
+ * Read-only performance inspection, NOT build provenance. Does not verify
+ * source inputs, produce a receipt, reuse hashes or authorize any derivative.
+ */
+export async function inspectPackagePayload({ repoRoot, packageRoot, platform, concurrency = HASH_CONCURRENCY }) {
+  if (!PLATFORMS.has(platform)) throw unverified('Unsupported payload inspection platform.');
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 8) {
+    throw unverified('Payload inspection concurrency must be an integer from 1 to 8.');
+  }
+  const location = await packageLocation(repoRoot, packageRoot);
+  return inspectPayload(location.packaged, platform, concurrency);
 }
 
 function assertTarget(receipt, targetVersion, platform) {

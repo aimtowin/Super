@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
-  bindPackageProvenance, captureBuildProvenance, verifyPackageProvenance,
+  bindPackageProvenance, captureBuildProvenance, inspectPackagePayload, verifyPackageProvenance,
 } from '../../scripts/release/build-provenance.mjs';
 
 const roots: string[] = [];
@@ -127,6 +127,20 @@ describe('A1b macOS framework symlink receipt contract (test-only, no package ex
     // cannot make these two differently targeted link receipts equivalent.
     const rebound = await bindPackageProvenance({ ...ports, receiptPath: path.join(ports.repoRoot, 'tmp/rebound.json') });
     expect(rebound.package.fingerprint).not.toBe(fingerprint);
+  });
+
+  it('produces identical contained framework link and regular-file records with serial, four and eight hash streams', async () => {
+    const ports = await fixture();
+    await relativeLink(ports.packageRoot, `${framework}/Versions/Current`, 'A', 'dir');
+    await relativeLink(ports.packageRoot, `${framework}/Electron Framework`, 'Versions/Current/Electron Framework', 'file');
+    await relativeLink(ports.packageRoot, `${framework}/Resources`, 'Versions/Current/Resources', 'dir');
+    const serial = await inspectPackagePayload({ ...ports, concurrency: 1 });
+    for (const concurrency of [4, 8]) {
+      const concurrent = await inspectPackagePayload({ ...ports, concurrency });
+      expect(concurrent.files).toEqual(serial.files);
+      expect(concurrent.metrics.linkCount).toBe(3);
+      expect(concurrent.metrics.bytes).toBe(serial.metrics.bytes);
+    }
   });
 
   it('still hashes regular framework targets, rejecting a binary mutation behind a contained link', async () => {

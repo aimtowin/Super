@@ -7,6 +7,7 @@
 import { spawn } from 'node:child_process';
 import { access, readdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { loadArtifactDerivative, validateLegacyBaseline } from './artifact-manifest.mjs';
 import { loadPackageBuildProvenance } from './build-with-provenance.mjs';
@@ -151,6 +152,7 @@ export async function buildRetainedDeltas(options = {}) {
   await removePreviousTargetDeltas(root, outputDirectory, version);
   const runner = options.run ?? run;
   for (const sourceVersion of sources) {
+    const producerStarted = performance.now();
     const result = await runner(process.execPath, [
       root === repoRoot ? buildDeltaScript : path.join(root, 'scripts/release/build-inno-delta.mjs'),
       '--from-version', sourceVersion,
@@ -159,12 +161,16 @@ export async function buildRetainedDeltas(options = {}) {
       '--package-dir', packageDirectory,
       '--output-dir', outputDirectory,
     ], { cwd: root, shell: false, stdio: 'inherit', env: options.env ?? process.env });
+    const producerMs = performance.now() - producerStarted;
     if (result?.error || result?.status !== 0) throw unverified(`Delta child failed: ${result?.error?.message ?? String(result?.status)}`);
     const stem = deltaStem(sourceVersion, version);
     const metadataPath = path.join(outputDirectory, `${stem}.json`);
     const archivePath = path.join(outputDirectory, `${stem}.zip`);
     const metadata = JSON.parse(await readFile(await ownedPath(root, metadataPath), 'utf8'));
+    const verificationStarted = performance.now();
     const proof = await loadArtifactDerivative({ ...ports, artifactPath: archivePath });
+    console.log(`[build-retained-deltas:timing] ${JSON.stringify({ fromVersion: sourceVersion, toVersion: version,
+      producerMs: Math.round(producerMs), parentVerificationMs: Math.round(performance.now() - verificationStarted) })}`);
     const archiveBytes = proof.artifact.bytes;
     if (metadata?.fromVersion !== sourceVersion || metadata?.toVersion !== version || metadata?.size !== archiveBytes) {
       fail(`Generated delta metadata is invalid: ${metadataPath}`);

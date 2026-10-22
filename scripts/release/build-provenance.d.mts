@@ -43,6 +43,19 @@ export type CaptureBuildOptions = {
 export type BuildInputPorts = { repoRoot: string; receipt: BuildReceipt };
 export type PackageBuildPorts = BuildInputPorts & { packageRoot: string; targetVersion: string; platform: string };
 
+export type PackageInspection = {
+  files: PackagePayloadMember[];
+  metrics: {
+    concurrency: number; fileCount: number; linkCount: number; bytes: number;
+    walkMs: number; hashMs: number; finalizeMs: number; totalMs: number;
+  };
+};
+
+/** Read-only timings and fresh payload hashes; NOT a source/build provenance proof. */
+export function inspectPackagePayload(options: {
+  repoRoot: string; packageRoot: string; platform: string; concurrency?: number;
+}): Promise<PackageInspection>;
+
 export function captureBuildProvenance(options: CaptureBuildOptions): Promise<InputBuildReceipt>;
 /** Read-only pre-producer guard; does not certify complete generated media. */
 export function verifyImmutableBuildInputs(options: BuildInputPorts): Promise<void>;
