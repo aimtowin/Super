@@ -4,11 +4,12 @@
 
 ## 交付文档
 
-当前正式发行：**2.4.1**，以[2.4.1 验收](releases/v2.4.1-validation.md)和 GitHub／更新服务器实际附件为准；2.4.1 是更新源切换后的自动更新验证版，功能与 2.4.0 相同。[10 月 10 日本体补齐记录](reference/completion-results-2026-10-10.md)保留历史语境。F15 账号/官方目录/社区继续暂停；更新源已于 2.4.0 迁至新服务器 IP 直连，**迁移已完成并宣布**（见[更新源迁移完成公告](releases/2026-10-22-update-source-migration-complete.md)）；2.3.21 及更早版本需手动全量安装一次后才能恢复增量更新。旧域名与旧 ECS 路径只作为历史事实保留，不构成当前部署授权。
+当前正式发行：**2.4.2**，以[2.4.2 验收](releases/v2.4.2-validation.md)和 GitHub／更新服务器实际附件为准；2.4.2 为启动、50k 资源库布局与 3D/PDF 查看器按需加载版本，2.4.0/2.4.1 可增量升级。[10 月 10 日本体补齐记录](reference/completion-results-2026-10-10.md)保留历史语境。F15 账号/官方目录/社区继续暂停；更新源已于 2.4.0 迁至新服务器 IP 直连，**迁移已完成并宣布**（见[更新源迁移完成公告](releases/2026-10-22-update-source-migration-complete.md)）；2.3.21 及更早版本需手动全量安装一次后才能恢复增量更新。旧域名与旧 ECS 路径只作为历史事实保留，不构成当前部署授权。
 
 | 文档 | 内容 |
 | --- | --- |
 | [当前已知问题](reference/known-issues-2.3.18.md) · [当前文档审查](reference/documentation-review-2.3.21.md) | 成品 Console 实际失败、构建准备缺口与修订依据 |
+| [2.4.2 更新说明](releases/v2.4.2.md) · [验收记录](releases/v2.4.2-validation.md) | 启动、50k 资源库布局与 3D/PDF 按需加载；增量约 3.5 MB |
 | [2.4.1 更新说明](releases/v2.4.1.md) · [验收记录](releases/v2.4.1-validation.md) · [更新公告](releases/v2.4.1-announcement.md) | 更新源迁移后的自动更新验证版（功能同 2.4.0）；增量包约 2 MB |
 | [更新源迁移完成公告](releases/2026-10-22-update-source-migration-complete.md) | 宣布迁移完成：完成范围、对用户的影响与后续安排 |
 | [磁盘变化同步问题记录（2026-10-22）](reference/disk-sync-issues-2026-10-22.md) | 本轮两个同步提示问题：已修复部分、仍开放的相互阻塞、复现与验证待办 |
