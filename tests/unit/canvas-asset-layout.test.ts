@@ -2,10 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import type { AssetSummary } from "../../src/shared/asset-types";
 import {
+  aspectRatioForAsset,
+  countFittingColumns,
+  distributeMasonryItems,
+  layoutJustifiedRows,
+} from "../../src/renderer/asset-grid-layout";
+import {
   estimateMasonryCardBodyPx,
   hitTestCanvasAssetLayout,
   layoutJustifiedAssetRects,
   layoutMasonryAssetRects,
+  layoutMasonryAssetRectsFromColumns,
+  masonryColumnWidthPx,
   MASONRY_CAPTION_BAND_PX,
   MASONRY_DIMENSIONS_CAPTION_BAND_PX,
   stackItemHeights,
@@ -100,5 +108,39 @@ describe("canvas asset layout", () => {
 
   it("keeps trailing gap out of the last stacked item", () => {
     expect(stackItemHeights([100, 100, 100])).toEqual([114, 114, 100]);
+  });
+
+  it("reuses precomputed justified rows without changing rects", () => {
+    const assets = [
+      asset("wide", 400, 100),
+      asset("tall", 100, 400),
+      asset("square", 200, 200),
+      asset("wide-2", 640, 360),
+    ];
+    const rows = layoutJustifiedRows(
+      assets.map((item) => ({
+        id: item.assetId,
+        aspectRatio: aspectRatioForAsset(item.width, item.height),
+      })),
+      640,
+      160,
+      14,
+    );
+    expect(layoutJustifiedAssetRects(assets, 640, 160, undefined, rows))
+      .toEqual(layoutJustifiedAssetRects(assets, 640, 160));
+  });
+
+  it("reuses precomputed masonry columns and bodies without changing rects", () => {
+    const assets = Array.from({ length: 12 }, (_, index) =>
+      asset(`m${index}`, index % 2 === 0 ? 120 : 200, index % 3 === 0 ? 300 : 100),
+    );
+    const columnCount = countFittingColumns(400, 120);
+    const columnWidth = masonryColumnWidthPx(400, columnCount);
+    const columns = distributeMasonryItems(assets, columnCount, (item) =>
+      estimateMasonryCardBodyPx(item, columnWidth, false));
+    const bodies = columns.map((column) => column.items.map((item) =>
+      estimateMasonryCardBodyPx(item, columnWidth, false)));
+    expect(layoutMasonryAssetRectsFromColumns(columns, columnWidth, bodies))
+      .toEqual(layoutMasonryAssetRects(assets, 400, 120, false));
   });
 });

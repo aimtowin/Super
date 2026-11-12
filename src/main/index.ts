@@ -594,6 +594,16 @@ function initializePreviewCache(): void {
 let offscreenThumbnailRenderer: OffscreenThumbnailRenderer | undefined;
 let quitAfterShutdown = false;
 let startupComplete = false;
+/** Main-process startup timeline, used by stage logs and deferred initialization. */
+let startupBeganAt = 0;
+/** Resolves when the Library Worker handshake finishes; rejects on startup failure. */
+let workerStartPromise: Promise<void> | undefined;
+/**
+ * Resolves when startup library initialization (Worker ready, global plugin
+ * activation, recent-library reopen) has been attempted. Renderer library
+ * requests await it so an early `listOpen` cannot race an empty list.
+ */
+let startupLibraryReady: Promise<void> | undefined;
 let logger: AppLogger | undefined;
 const VIEWER_TIMING_LOG = process.env.SUPER_VIEWER_TIMING_LOG === "1";
 let appLogPath: string | undefined;
@@ -3832,6 +3842,15 @@ async function handleLibraryRequest(input: unknown): Promise<RendererResult> {
     | undefined;
   let previousLibraryPaths: string[] = [];
   try {
+    // The window can be painted before the Worker handshake, global plugin
+    // activation and recent-library reopen finish. Waiting here keeps the
+    // original contract for the renderer's initial listOpen without putting
+    // that work on the first-paint path.
+    if (startupLibraryReady !== undefined) {
+      await startupLibraryReady;
+    } else if (workerStartPromise !== undefined) {
+      await workerStartPromise;
+    }
     const request = parseRendererRequest(input);
 
     if (request.type === "asset.preview.float.request") {
@@ -6129,7 +6148,71 @@ function scheduleAutomaticWindowsUpdate(): void {
   }, AUTOMATIC_UPDATE_CHECK_DELAY_MS);
 }
 
+/**
+ * Startup library initialization that runs in parallel with window load.
+ *
+ * Reopening the recent library can involve a cold Worker spawn, file hashing
+ * and schema migrations. None of that may gate first paint, but the renderer's
+ * initial `listOpen` must still observe the restored library instead of racing
+ * an empty list, so library requests await this promise (see
+ * handleLibraryRequest). Global user plugins are refreshed before the restore,
+ * preserving the original startup order.
+ */
+async function initializeStartupLibrary(): Promise<void> {
+  if (workerStartPromise === undefined) {
+    throw new Error("Library Worker startup was not scheduled.");
+  }
+  await workerStartPromise;
+  logger?.info("main.startup.stage", "worker-ready", {
+    elapsedMs: Math.round(performance.now() - startupBeganAt),
+  });
+  await pluginActivationCoordinator?.refreshGlobal();
+  logger?.info("main.startup.stage", "plugins-refreshed", {
+    elapsedMs: Math.round(performance.now() - startupBeganAt),
+  });
+  syncAutoScheduler?.start();
+  const recentPath = readActiveLibraryPath(recentLibraryPath(), (error) => {
+    logger?.error("recent-library.read", error);
+  });
+  if (!recentPath) return;
+  const client = workerClient;
+  if (client === undefined) {
+    throw new Error("Library Worker is unavailable during startup.");
+  }
+  const restored = await client.request({
+    type: "library.open",
+    selectedLibraryPath: recentPath,
+  });
+  if (!restored.ok || restored.type !== "library.opened") {
+    logger?.info(
+      "recent-library.unavailable",
+      "The recent library could not be reopened.",
+      {
+        code: restored.ok ? "UNEXPECTED_RESULT" : restored.error.code,
+        reason: restored.ok ? undefined : restored.error.reason,
+      },
+    );
+    return;
+  }
+  // Startup restore bypasses handleLibraryRequest; still must activate plugins.
+  await notifyLibraryOpenedSideEffects({
+    libraryId: restored.library.libraryId,
+    libraryDirectory: restored.library.libraryPath,
+  });
+  logger?.info(
+    "recent-library.restored",
+    "Reopened the recent library and completed plugin activation request.",
+    {
+      libraryId: restored.library.libraryId,
+    },
+  );
+  logger?.info("main.startup.stage", "library-restored", {
+    elapsedMs: Math.round(performance.now() - startupBeganAt),
+  });
+}
+
 async function startApplication(): Promise<void> {
+  startupBeganAt = performance.now();
   // Super-tluf: the macOS About panel is customized here (ready-late is
   // fine for it); app.setName lives at module top level so the application
   // menu's first item shows "Super" from the very first frame.
@@ -6226,7 +6309,13 @@ async function startApplication(): Promise<void> {
     path.join(__dirname, "library_worker.js"),
     logger,
   );
-  await workerClient.start();
+  // Do not block window creation on a cold Worker spawn. Requests that need
+  // the Worker await startupLibraryReady (scheduled after the window starts
+  // loading); workerStartPromise keeps the failure observable.
+  workerStartPromise = workerClient.start();
+  void workerStartPromise.catch((error: unknown) => {
+    logger?.error("main.worker-start", error);
+  });
   const activeWorkerClient = workerClient;
   // Slice E (Super-hnmg): Main owns the shared offscreen window that renders
   // model thumbnails. The worker enqueues model jobs and asks Main to render;
@@ -7273,9 +7362,9 @@ async function startApplication(): Promise<void> {
       });
     }
   });
-  // Global user-scoped plugins have an application lifetime and must be set up
-  // before recent-library restore, including when no library can be reopened.
-  await pluginActivationCoordinator?.refreshGlobal();
+  // Global user-scoped plugins are refreshed by initializeStartupLibrary()
+  // after the window starts loading; that keeps plugin activation off the
+  // first-paint path while still running before the recent-library restore.
   workerClient.onAssetsChanged(publishAssetChange);
   workerClient.onLibraryChanged(publishLibraryChanged);
   workerClient.onProgress(publishProgress);
@@ -7300,41 +7389,10 @@ async function startApplication(): Promise<void> {
     resolveCredentials: (serverId) => resolveSyncServerCredentials(serverId),
     logger,
   });
-  syncAutoScheduler.start();
-
-  const recentPath = readActiveLibraryPath(recentLibraryPath(), (error) => {
-    logger?.error("recent-library.read", error);
-  });
-  if (recentPath) {
-    const restored = await workerClient.request({
-      type: "library.open",
-      selectedLibraryPath: recentPath,
-    });
-    if (!restored.ok || restored.type !== "library.opened") {
-      logger.info(
-        "recent-library.unavailable",
-        "The recent library could not be reopened.",
-        {
-          code: restored.ok ? "UNEXPECTED_RESULT" : restored.error.code,
-          reason: restored.ok ? undefined : restored.error.reason,
-        },
-      );
-    } else {
-      // Startup restore bypasses handleLibraryRequest; still must activate plugins.
-      // Await so contributions exist before the renderer shell lists menus/settings.
-      await notifyLibraryOpenedSideEffects({
-        libraryId: restored.library.libraryId,
-        libraryDirectory: restored.library.libraryPath,
-      });
-      logger.info(
-        "recent-library.restored",
-        "Reopened the recent library and completed plugin activation request.",
-        {
-          libraryId: restored.library.libraryId,
-        },
-      );
-    }
-  }
+  // Starting the scheduler and reopening the recent library are part of
+  // initializeStartupLibrary(): they must wait for the Worker handshake but
+  // must not delay first paint. See the startup sequence near
+  // createMainWindow() for the ordering contract.
 
   // Forward thumbnail events to the renderer
   workerClient.onThumbnailEvent((event) => {
@@ -8283,7 +8341,20 @@ async function startApplication(): Promise<void> {
     logger,
   });
 
-  await createMainWindow();
+  // Start the window first; the Worker handshake, global plugin activation and
+  // recent-library restore run in parallel (initializeStartupLibrary) so none
+  // of them can delay first paint. mainWindow is assigned synchronously before
+  // createMainWindow() reaches its first await, so startup side effects can
+  // publish once the renderer loads.
+  const windowCreation = createMainWindow();
+  startupLibraryReady = initializeStartupLibrary();
+  void startupLibraryReady.catch((error: unknown) => {
+    logger?.error("main.startup.library", error);
+  });
+  await windowCreation;
+  logger?.info("main.startup.stage", "window-created", {
+    elapsedMs: Math.round(performance.now() - startupBeganAt),
+  });
   if (pendingUpdateRecoveryNotice && mainWindow !== undefined) {
     const english = appLocale === 'en';
     // This notice never blocks library startup or attempts an automatic download.
@@ -8333,6 +8404,13 @@ async function startApplication(): Promise<void> {
 
   initializePreviewCache();
 
+  // The window is already visible; wait for the parallel library startup so
+  // "startup complete" still means the renderer's initial listOpen has a
+  // settled answer (restored library or confirmed empty).
+  await startupLibraryReady;
+  logger?.info("main.startup.stage", "startup-complete", {
+    elapsedMs: Math.round(performance.now() - startupBeganAt),
+  });
   startupComplete = true;
   scheduleAutomaticWindowsUpdate();
 }

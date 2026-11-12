@@ -5,6 +5,8 @@ import {
   countFittingColumns,
   distributeMasonryItems,
   layoutJustifiedRows,
+  type DistributedMasonryColumn,
+  type JustifiedRow,
 } from "./asset-grid-layout";
 import {
   resolveJustifiedCaptionBandPx,
@@ -86,6 +88,32 @@ export function stackItemHeights(bodies: readonly number[]): number[] {
   );
 }
 
+export function layoutMasonryAssetRectsFromColumns(
+  columns: readonly DistributedMasonryColumn<BrowseLayoutEntry>[],
+  columnWidth: number,
+  bodiesByColumn: readonly (readonly number[])[],
+): CanvasAssetLayoutRect[] {
+  const rects: CanvasAssetLayoutRect[] = [];
+  columns.forEach((column, columnIndex) => {
+    let y = 0;
+    const x = columnIndex * (columnWidth + ASSET_GRID_GAP_PX);
+    const bodies = bodiesByColumn[columnIndex] ?? [];
+    for (let index = 0; index < column.items.length; index += 1) {
+      const asset = column.items[index]!;
+      const height = bodies[index] ?? 1;
+      rects.push({
+        id: asset.assetId,
+        x,
+        y,
+        width: columnWidth,
+        height,
+      });
+      y += height + ASSET_GRID_GAP_PX;
+    }
+  });
+  return rects;
+}
+
 export function layoutMasonryAssetRects(
   assets: readonly BrowseLayoutEntry[],
   availableWidth: number,
@@ -100,29 +128,9 @@ export function layoutMasonryAssetRects(
   const columns = distributeMasonryItems(assets, columnCount, (asset) =>
     estimateMasonryCardBodyPx(asset, columnWidth, showCaption, captionBandPx),
   );
-
-  const rects: CanvasAssetLayoutRect[] = [];
-  columns.forEach((column, columnIndex) => {
-    let y = 0;
-    const x = columnIndex * (columnWidth + ASSET_GRID_GAP_PX);
-    for (const asset of column.items) {
-      const height = estimateMasonryCardBodyPx(
-        asset,
-        columnWidth,
-        showCaption,
-        captionBandPx,
-      );
-      rects.push({
-        id: asset.assetId,
-        x,
-        y,
-        width: columnWidth,
-        height,
-      });
-      y += height + ASSET_GRID_GAP_PX;
-    }
-  });
-  return rects;
+  const bodiesByColumn = columns.map((column) => column.items.map((asset) =>
+    estimateMasonryCardBodyPx(asset, columnWidth, showCaption, captionBandPx)));
+  return layoutMasonryAssetRectsFromColumns(columns, columnWidth, bodiesByColumn);
 }
 
 export function layoutJustifiedAssetRects(
@@ -130,9 +138,15 @@ export function layoutJustifiedAssetRects(
   availableWidth: number,
   cardSize: number,
   captionBandPx: number = DEFAULT_JUSTIFIED_CAPTION_BAND_PX,
+  /**
+   * Rows already produced for the same assets/width/cardSize. Callers that
+   * also render the rows pass them here so a 50k layout is not computed twice
+   * per chunk (the rect pass previously re-ran layoutJustifiedRows).
+   */
+  precomputedRows?: readonly JustifiedRow[],
 ): CanvasAssetLayoutRect[] {
   if (!(availableWidth > 0) || assets.length === 0) return [];
-  const rows = layoutJustifiedRows(
+  const rows = precomputedRows ?? layoutJustifiedRows(
     assets.map((asset) => ({
       id: asset.assetId,
       aspectRatio: aspectRatioForAsset(asset.width, asset.height),

@@ -1,5 +1,7 @@
 import {
   forwardRef,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -40,7 +42,6 @@ import { isTransientMediaPlaybackError } from "./media-seek-session";
 import { VideoPlayerControls } from "./VideoPlayerControls";
 import { AudioPlayerControls } from "./AudioPlayerControls";
 import { TextViewerControls, type TextViewerControlsHandle } from "./TextViewerControls";
-import { PdfViewerSurface } from "./PdfViewerSurface";
 import { HtmlViewerSurface } from "./HtmlViewerSurface";
 import { useViewerVolume } from "./use-viewer-volume";
 import { ZoomableImage } from "./zoomable-preview-image";
@@ -63,11 +64,22 @@ import { ProxyPlaybackNotice } from "./ProxyPlaybackNotice";
 import { createProxyFallbackRunGuard } from "./proxy-fallback-run";
 import { shouldCopyAssetOnShortcut } from "./viewer-copy-shortcut";
 import { ShellSurface, ViewerSurface } from "./ui/surfaces";
-import { ModelViewerSurface } from "./3d-viewer/viewer-surface";
 import { isMacPlatform } from "./commands/command-types";
 import { isSolidWorksExtension } from "../shared/media-formats";
 import { isMarkdownName } from './MarkdownPreview';
 import { ZipViewerSurface } from './ZipViewerSurface';
+
+// The 3D scene composer is ~700 KB and the PDF surface is only needed once the
+// viewer opens. Keeping them out of the startup module graph removes both from
+// the first-paint payload; the local chunk load on first open is sub-frame.
+const ModelViewerSurface = lazy(() =>
+  import("./3d-viewer/viewer-surface").then((module) => ({
+    default: module.ModelViewerSurface,
+  })));
+const PdfViewerSurface = lazy(() =>
+  import("./PdfViewerSurface").then((module) => ({
+    default: module.PdfViewerSurface,
+  })));
 
 interface AssetPreviewModalProps {
   api: SuperLibraryApi;
@@ -908,6 +920,16 @@ export const AssetPreviewModal = forwardRef<
       <ShellSurface className="preview-modal">
         {/* REQ-VIEW-006: no top filename/toolbar bar; nav sits on the edges. */}
         <div className={`preview-content${isTextViewer ? " is-text-mode" : ""}${isDocumentViewer ? " is-document-mode" : ""}`}>
+          <Suspense
+            fallback={(
+              <div
+                aria-busy="true"
+                aria-label={t("preview.resolving")}
+                className="preview-state is-silent"
+                role="status"
+              />
+            )}
+          >
           {isZipViewer ? (
             <ZipViewerSurface key={`${libraryId}:${asset.assetId}`} api={api} libraryId={libraryId} assetId={asset.assetId} />
           ) : primarySurface === "loading" && !placeholderUrl ? (
@@ -1134,6 +1156,7 @@ export const AssetPreviewModal = forwardRef<
               )}
             </div>
           )}
+          </Suspense>
           {proxyFallbackState === "generating" ||
           proxyFallbackState === "loading" ? (
             <div className="preview-proxy-status" role="status">

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { isInteractiveBrowseCommand } from './interactive-browse-commands';
 import { OpenReconciliationGate } from './open-reconciliation-gate';
 import { randomUUID } from 'node:crypto';
 import {
@@ -740,14 +741,6 @@ const startupBurstDrainResolvers = new Set<() => void>();
 const deferredStartupMaintenance = new Map<string, ReturnType<typeof setTimeout>>();
 const deferredOpenReconciliation = new Map<string, ReturnType<typeof setTimeout>>();
 const openReconciliationGate = new OpenReconciliationGate();
-
-function isInteractiveBrowseCommand(commandType: string): boolean {
-  return commandType === 'asset.search'
-    || commandType === 'asset.list'
-    || commandType === 'folder.browse-entries'
-    || commandType === 'collection.assets.list'
-    || commandType === 'collection.source-browse-entries';
-}
 
 function settleStartupBurstGate(commandType: string): void {
   if (

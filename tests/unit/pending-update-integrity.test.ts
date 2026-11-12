@@ -104,7 +104,11 @@ async function runActualStartup(ports: BootstrapPorts, quit: () => void) {
     expect(source).toMatch(/const pendingUpdateStartup = await resumePendingAppUpdate\(\{\s*store: pendingAppUpdateStore,\s*service: appUpdateService,/u);
     expect(source).toContain('completedAppUpdateNotice = pendingUpdateStartup.completionNotice');
     expect(source).toMatch(/if \(!pendingUpdateStartup\.continueStartup\) \{\s*setImmediate\(\(\) => app\.quit\(\)\);\s*return;/u);
-    expect(source).toMatch(/await createMainWindow\(\);\s*if \(pendingUpdateRecoveryNotice/u);
+    // The window starts first; library initialization overlaps renderer load.
+    // The recovery notice must still run after the window creation is awaited
+    // so it has a parent window.
+    expect(source).toMatch(/const windowCreation = createMainWindow\(\);[\s\S]{0,400}startupLibraryReady = initializeStartupLibrary\(\);/u);
+    expect(source).toMatch(/await windowCreation;[\s\S]{0,400}if \(pendingUpdateRecoveryNotice/u);
     const result = await exports.resumePendingAppUpdate(ports);
     if (!result.continueStartup) quit();
     return;

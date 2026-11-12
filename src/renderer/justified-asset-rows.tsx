@@ -117,8 +117,9 @@ export function JustifiedAssetRows({
       availableWidth,
       cardSize,
       captionBandPx,
+      rows,
     ),
-    [availableWidth, captionBandPx, cardSize, layoutEntries],
+    [availableWidth, captionBandPx, cardSize, layoutEntries, rows],
   );
   const rowBodies = useMemo(
     () => rows.map((row) => row.height + captionBandPx),

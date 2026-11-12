@@ -16,7 +16,7 @@ import {
 import {
   MASONRY_CAPTION_BAND_PX,
   estimateMasonryCardBodyPx,
-  layoutMasonryAssetRects,
+  layoutMasonryAssetRectsFromColumns,
   masonryColumnWidthPx,
   publishCanvasAssetLayout,
   stackItemHeights,
@@ -213,16 +213,6 @@ export function MasonryColumns({
     ),
     [columnCount, columnWidth, layoutEntries, resolvedCaptionBandPx, showCaption],
   );
-  const layoutRects = useMemo(
-    () => layoutMasonryAssetRects(
-      layoutEntries,
-      availableWidth,
-      cardSize,
-      showCaption,
-      resolvedCaptionBandPx,
-    ),
-    [availableWidth, cardSize, layoutEntries, resolvedCaptionBandPx, showCaption],
-  );
   const columnMetrics = useMemo(
     () => distributed.map((column) => ({
       bodies: column.items.map((asset) =>
@@ -236,6 +226,14 @@ export function MasonryColumns({
         estimateMasonryPreviewHeightPx(asset.width, asset.height, columnWidth)),
     })),
     [columnWidth, distributed, resolvedCaptionBandPx, showCaption],
+  );
+  const layoutRects = useMemo(
+    () => layoutMasonryAssetRectsFromColumns(
+      distributed,
+      columnWidth,
+      columnMetrics.map((column) => column.bodies),
+    ),
+    [columnMetrics, columnWidth, distributed],
   );
 
   useLayoutEffect(() => {
