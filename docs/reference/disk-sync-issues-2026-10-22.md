@@ -67,3 +67,8 @@
 - 实测：`tests/e2e/tray-watcher-recovery.test.ts` 通过（800 个文件变化后 8 次目录读取 10–40 ms，最终总数 900；10.4 s）。该结果不等于真实大库/NAS 已验收。
 - 本次补齐：把漏掉的 `smart-collection.execute` 纳入交互浏览命令，分类逻辑移入 `src/worker/interactive-browse-commands.ts` 并增加单测 `tests/unit/interactive-browse-commands.test.ts`；未重复添加 `asset.search` 标记。
 - 原“同步与浏览相互阻塞”仍保留实机复现待办，不以本轮 E2E 结果关闭。
+
+## 2026-11-12 2.4.2 发行
+
+- 2.4.2 已发布，包含 `smart-collection.execute` 的交互浏览分类补齐；该改动是防回归覆盖，没有单独测出端到端延迟收益。
+- “恢复后切目录卡住”仍未实机复现或关闭；后续需要真实大库/NAS 条件与埋点，不以 5k 本地 E2E 代替。

@@ -40,7 +40,7 @@
 
 当前已交付修复见[2.3.21 验收](releases/v2.3.21-validation.md)，未关闭问题见[已知问题与边界](reference/known-issues-2.3.18.md)。[本体补齐记录](reference/completion-results-2026-10-10.md)、[阶段 1 结果](reference/followup-phase1-results-2026-10-09.md)、[修复前清单](plans/confirmed-unfixed-2026-10-09.md)和旧[后续修复清单](plans/follow-up-fixes.md)保留当时语境；源码或文档修订不等于新产品已发布，未重新验收的历史项不自动关闭。
 
-使用手册当前版本入口与操作按 2.3.21 源码及既有验收复核，见[2026-10-13 文档核对](reference/documentation-review-2.3.21.md)；2.4.0/2.4.1 只改更新源与打包，未改变界面行为，故仍沿用该结论。[2.3.18 审查](reference/documentation-review-2.3.18.md)与[2.3.17 审查](reference/documentation-review-2.3.17.md)保留原证据；2.3.17／2.3.18／2.3.19 配图仍标实际拍摄版本，本轮没有重新拍摄。`plans/`、产品简报、架构快照与历史验证记录保留当时语境，不代表所有计划已实现或历史失败已消失。外部 AI、WebDAV、MCP Agent 与第三方插件不因截图或本次文档检查而视为验收通过。
+使用手册当前版本入口与操作按 2.3.21 源码及既有验收复核，见[2026-10-13 文档核对](reference/documentation-review-2.3.21.md)；2.4.0/2.4.1 只改更新源与打包，2.4.2 只改启动、布局与查看器按需加载，均未改变界面行为，故仍沿用该结论。[2.3.18 审查](reference/documentation-review-2.3.18.md)与[2.3.17 审查](reference/documentation-review-2.3.17.md)保留原证据；2.3.17／2.3.18／2.3.19 配图仍标实际拍摄版本，本轮没有重新拍摄。`plans/`、产品简报、架构快照与历史验证记录保留当时语境，不代表所有计划已实现或历史失败已消失。外部 AI、WebDAV、MCP Agent 与第三方插件不因截图或本次文档检查而视为验收通过。
 
 - 用户可执行的步骤必须以当前产品界面和已发布能力为准。
 - 扩展 API 以 [扩展作者手册](manual/README.md)中的 API 参考为准；示例不得要求访问内部数据库、绝对路径或未公开的运行时句柄。

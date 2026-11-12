@@ -170,7 +170,7 @@ Display rotation/mirroring does not write files. Explicit write-back is limited 
 - Viewer `Delete` targets only the current asset. Managed `Shift+Delete` retains confirmation; linked assets do not expose that permanent-delete key. Text input and unsaved drafts stay protected.
 - Native open/import/save dialogs remember the most recent successful directory, respect explicit paths and do not update on cancel. Newly generated video posters prefer the 25% frame, with bounded fallback; existing posters are not regenerated in bulk.
 
-Back up the complete library before upgrading: 2.3.19 added schema migration 52, which 2.3.21 retains. Do not let older apps that do not support this schema write the upgraded database. See [release notes](../releases/v2.3.19.md) and [packaged screenshots](features.md#2319-查看器与资源组织).
+Back up the complete library before upgrading: 2.3.19 added schema migration 52, which 2.4.x retains. Do not let older apps that do not support this schema write the upgraded database. See [release notes](../releases/v2.3.19.md) and [packaged screenshots](features.md#2319-查看器与资源组织).
 
 ## 2.3.21 folder navigation and loading states
 
