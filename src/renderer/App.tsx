@@ -367,6 +367,7 @@ import type {
   LinkedFolderIndexJobStatus,
 } from "../shared/library-api";
 import type { SuperShellApi } from "../shared/external-url";
+import type { SuperWindowStateApi } from "../shared/window-state";
 import type { SuperAutomationScriptApi } from '../shared/automation-script-api';
 import type { SuperPluginManagerApi } from '../shared/plugin-manager-api';
 import type { PluginContributionContext } from "../plugins/plugin-context";
@@ -498,6 +499,7 @@ type RendererWindow = Window & {
   super?: {
     library?: SuperLibraryApi;
     shell?: SuperShellApi;
+    windowState?: SuperWindowStateApi;
     appUpdate?: SuperAppUpdateApi;
     automation?: SuperAutomationScriptApi;
     plugins?: SuperPluginManagerApi;
@@ -1638,6 +1640,32 @@ function AppInner() {
   const [imageSequencePrefs, setImageSequencePrefs] = useState(() =>
     loadImageSequencePreferences(),
   );
+  const windowStateApi = (window as RendererWindow).super?.windowState;
+  const [rememberWindowState, setRememberWindowState] = useState(true);
+  useEffect(() => {
+    if (windowStateApi === undefined) return;
+    let cancelled = false;
+    void windowStateApi.getPreferences().then(
+      (prefs) => {
+        if (!cancelled) setRememberWindowState(prefs.rememberWindowState);
+      },
+      () => {
+        // Keep the in-memory default if the Main preference is unavailable.
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [windowStateApi]);
+  const toggleRememberWindowState = useCallback(() => {
+    if (windowStateApi === undefined) return;
+    const next = !rememberWindowState;
+    setRememberWindowState(next);
+    void windowStateApi.setRememberWindowState(next).then(
+      (prefs) => setRememberWindowState(prefs.rememberWindowState),
+      () => setRememberWindowState(!next),
+    );
+  }, [rememberWindowState, windowStateApi]);
   // Hover live previews (audio/video) carry the viewer volume preference over.
   const {
     volume: viewerVolume,
@@ -12379,6 +12407,7 @@ function AppInner() {
         }
         aiUiPrefs={aiUiPrefs}
         autoDetectImageSequences={imageSequencePrefs.autoDetectOnImport}
+        rememberWindowState={rememberWindowState}
         canvasPrefs={canvasPrefs}
         onActiveCategoryChange={setAppSettingsCategory}
         onClose={() => {
@@ -12412,6 +12441,7 @@ function AppInner() {
             autoDetectOnImport: !p.autoDetectOnImport,
           }));
         }}
+        onToggleRememberWindowState={toggleRememberWindowState}
         onOpenAppLog={openAppLog}
         onOpenExtensionReleases={() => {
           void (window as RendererWindow).super?.shell?.openExternalUrl(

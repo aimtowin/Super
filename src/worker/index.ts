@@ -2228,10 +2228,26 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
         importId: libraryService.abandonImport(request.command.importId),
       };
     case 'asset.refresh': {
-      const refresh = libraryService.refreshManagedAssets(request.command.libraryId, {
+      // Never run the full-library walk on the Worker command stack. The async
+      // path scans with yields and returns only after bounded batches commit;
+      // browse/status commands can be served between those batches.
+      const libraryId = request.command.libraryId;
+      const refresh = await libraryService.refreshManagedAssetsAsync(libraryId, {
         includeAssets: true,
       });
-      scheduleThumbnailScene(request.command.libraryId, 'refresh', undefined, undefined, { fullRepair: true });
+      // The response is posted first; new/changed assets get a bounded
+      // thumbnail scene. A whole-database repair is deliberately not part of
+      // this user-facing refresh, because its synchronous repair queries used
+      // to monopolize the same Worker event loop.
+      setTimeout(() => {
+        try {
+          scheduleThumbnailScene(libraryId, 'refresh');
+        } catch (error) {
+          libraryService.reportDiagnostic('thumbnail-schedule.manual-refresh', error, {
+            libraryId,
+          });
+        }
+      }, 0);
       return {
         ok: true,
         type: 'asset.refreshed',

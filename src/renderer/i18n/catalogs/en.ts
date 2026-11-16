@@ -1424,6 +1424,9 @@ export const en = {
     imageSequenceAutoDetect: "Detect image sequences during import",
     imageSequenceAutoDetectHint:
       "Automatically recognize consecutively numbered images with matching dimensions as a sequence.",
+    rememberWindowState: "Remember window size and position",
+    rememberWindowStateHint:
+      "Restore the previous position, size and maximized state when the app reopens.",
     browserExtensionTitle: "Browser extension",
     browserExtensionIntro:
       "Save web images and videos into the active library with the Chrome / Edge extension. Media is downloaded by the browser (with cookies and the page Referer) and uploaded to this machine, bypassing most hotlink protections. Keep Super running with a library open.",

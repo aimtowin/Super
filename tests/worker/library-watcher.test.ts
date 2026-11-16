@@ -329,6 +329,63 @@ it('yields between commit batches and drains events arriving while a scan is run
   expect(service.listAssets({ libraryId: library.libraryId, recursive: true })).toHaveLength(181);
 });
 
+it('yields during a manual async refresh and shares a duplicate click', async () => {
+  const root = temporaryRoot();
+  const service = newService({ observerFactory: observerHarness().factory, scheduler: new ManualScheduler() });
+  const library = service.createLibrary({ displayName: 'Manual refresh yield', selectedParentPath: root });
+  for (let index = 0; index < 300; index++) {
+    writeFileSync(path.join(library.libraryPath, 'Assets', `manual-${index}.txt`), 'x');
+  }
+
+  let yields = 0;
+  let signalYield!: () => void;
+  const yieldedDuringScan = new Promise<void>((resolve) => { signalYield = resolve; });
+  const originalYield = (service as unknown as {
+    yieldReconciliation(task: unknown): Promise<void>;
+  }).yieldReconciliation.bind(service);
+  vi.spyOn(service as unknown as {
+    yieldReconciliation(task: unknown): Promise<void>;
+  }, 'yieldReconciliation').mockImplementation(async (task) => {
+    yields += 1;
+    if (yields === 3) signalYield();
+    return originalYield(task);
+  });
+
+  const first = service.refreshManagedAssetsAsync(library.libraryId, { includeAssets: true });
+  const second = service.refreshManagedAssetsAsync(library.libraryId, { includeAssets: true });
+  const outcome = await Promise.race([
+    yieldedDuringScan.then(() => 'yielded' as const),
+    first.then(() => 'finished' as const),
+  ]);
+  expect(outcome).toBe('yielded');
+  const [result, duplicate] = await Promise.all([first, second]);
+  expect(duplicate.changedCount).toBe(result.changedCount);
+  expect(duplicate.assets).toEqual(result.assets);
+  expect(result.assets).toHaveLength(300);
+  expect(service.listAssets({ libraryId: library.libraryId, recursive: true })).toHaveLength(300);
+});
+
+it('does not lose a pending reconciliation when paused again during the resume delay', async () => {
+  vi.useFakeTimers();
+  try {
+    const root = temporaryRoot();
+    const service = newService({ observerFactory: observerHarness().factory, scheduler: new ManualScheduler() });
+    const library = service.createLibrary({ displayName: 'Paused reconciliation', selectedParentPath: root });
+    service.setBackgroundMaintenancePaused(true);
+    await service.runOpenBackgroundReconciliation(library.libraryId);
+    service.setBackgroundMaintenancePaused(false);
+    service.setBackgroundMaintenancePaused(true);
+    await vi.advanceTimersByTimeAsync(10_000);
+    service.setBackgroundMaintenancePaused(false);
+    const resume = vi.spyOn(service, 'runOpenBackgroundReconciliation');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(resume).toHaveBeenCalledWith(library.libraryId);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('cancels a pending watcher scan before closing its database', async () => {
   const root = temporaryRoot();
   const observers = observerHarness();

@@ -46,6 +46,9 @@ export const SHOW_EDIT_CONTEXT_MENU_CHANNEL =
   'super:shell:show-edit-context-menu' as const;
 export const SHELL_SWIPE_CHANNEL = 'super:shell:swipe' as const;
 export const WINDOW_CONTROL_CHANNEL = 'super:shell:window-control' as const;
+/** Renderer ↔ Main: main-window placement restore preference. */
+export const WINDOW_STATE_REQUEST_CHANNEL =
+  'super:shell:window-state-request' as const;
 /** Main → Renderer: trigger invert selection (macOS Edit menu, Super-te8p). */
 export const INVERT_SELECTION_CHANNEL = 'super:shell:invert-selection' as const;
 /** Main → Renderer: Edit Copy (⌘C) — file copy when assets selected (Super-166q). */

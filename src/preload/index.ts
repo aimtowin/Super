@@ -16,6 +16,10 @@ import {
   type McpSettingsRequest,
   type SuperMcpSettingsApi,
 } from '../shared/mcp';
+import {
+  windowStatePreferencesSchema,
+  type SuperWindowStateApi,
+} from '../shared/window-state';
 import { searchQuerySchema } from '../shared/asset-types';
 import type { FbxConversionResult, FbxConversionStats } from '../shared/fbx-conversion';
 import type { ModelCompanionAsset } from '../shared/model-companions';
@@ -55,6 +59,7 @@ import {
   APPLICATION_MENU_ITEM_STATE_CHANNEL,
   NATIVE_EDIT_COPY_CHANNEL,
   WINDOW_CONTROL_CHANNEL,
+  WINDOW_STATE_REQUEST_CHANNEL,
   WINDOW_MAXIMIZED_CHANNEL,
   WINDOW_MOVE_STARTED_CHANNEL,
   VIEWER_VIDEO_SHORTCUTS_ACTIVE_CHANNEL,
@@ -2729,6 +2734,23 @@ const shell: SuperShellApi = Object.freeze({
   },
 });
 
+const windowState: SuperWindowStateApi = Object.freeze({
+  async getPreferences() {
+    const result: unknown = await ipcRenderer.invoke(WINDOW_STATE_REQUEST_CHANNEL, {});
+    return windowStatePreferencesSchema.parse(result);
+  },
+  async setRememberWindowState(rememberWindowState: boolean) {
+    if (typeof rememberWindowState !== 'boolean') {
+      throw new TypeError('rememberWindowState must be a boolean.');
+    }
+    const result: unknown = await ipcRenderer.invoke(
+      WINDOW_STATE_REQUEST_CHANNEL,
+      { rememberWindowState },
+    );
+    return windowStatePreferencesSchema.parse(result);
+  },
+});
+
 const appUpdate: SuperAppUpdateApi = Object.freeze({
   async checkForUpdates() {
     return parseAppUpdateCheckResult(
@@ -2970,6 +2992,7 @@ contextBridge.exposeInMainWorld(
   Object.freeze({
     library,
     shell,
+    windowState,
     appUpdate,
     automation,
     mcp,

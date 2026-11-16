@@ -4282,6 +4282,8 @@ export interface RefreshManagedAssetsOptions {
   linkedFolderIds?: readonly string[];
   /** Avoid materializing all AssetSummary objects for background maintenance. */
   includeAssets?: boolean;
+  /** Mark this refresh as manual (user-initiated) vs automatic (watcher). */
+  manual?: boolean;
 }
 
 export interface AssetObserver {
@@ -6038,6 +6040,16 @@ export class LibraryService {
   private readonly closingWatchedLibraries = new WeakSet<OpenLibrary>();
   private readonly pendingReconciliationLibraries = new Set<string>();
   /**
+   * A manual refresh is a cooperative async job. The task is registered here
+   * so the async scanner's cancellation checks work without putting the manual
+   * job into the open/watcher maps (those are owned by background maintenance).
+   */
+  private readonly manualRefreshTasks = new Map<string, OpenReconciliationTask>();
+  /** One in-flight manual refresh per library; concurrent clicks share its result. */
+  private readonly manualRefreshInFlight = new Map<string, Promise<AssetRefreshResult>>();
+  /** Resume timers are kept so a second pause cannot strand a pending reconciliation. */
+  private readonly reconciliationResumeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /**
    * Open automation groups are keyed by their Main-owned execution source.
    * The value is an in-memory reservation until the first real step is
    * recorded. Keeping the reservation out of `operation_history` prevents a
@@ -6145,13 +6157,18 @@ export class LibraryService {
     libraryId: string,
     task: OpenReconciliationTask,
     scope?: WatchedRefreshScope,
-  ): Promise<void> {
+    options?: {
+      includeAssets?: boolean;
+      propagateErrors?: boolean;
+      source?: 'watcher' | 'client';
+    },
+  ): Promise<AssetRefreshResult> {
     let changedCount = 0;
     let missingCount = 0;
     try {
       this.assertReconciliationActive(task);
       const openLibrary = this.openById.get(libraryId);
-      if (!openLibrary || openLibrary.readOnly) return;
+      if (!openLibrary || openLibrary.readOnly) return { changedCount, missingCount };
       const existingAssets = (openLibrary.connection
         .prepare(
           `SELECT asset_id, location_kind, linked_folder_id, relative_file_path
@@ -6221,9 +6238,21 @@ export class LibraryService {
       const discovered = await this.applyDiscoveredAssetsInBatches(task, discovery);
       changedCount += discovered.changedCount;
       missingCount += discovered.missingCount;
+      const assets = options?.includeAssets
+        ? this.listAssets({ libraryId, recursive: true })
+        : undefined;
+      return {
+        changedCount,
+        missingCount,
+        ...(assets === undefined ? {} : { assets }),
+      };
     } catch (error) {
-      if (task.controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;
+      if (task.controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+        return { changedCount, missingCount };
+      }
+      if (options?.propagateErrors) throw error;
       this.diagnose(scope === undefined ? 'open.refresh-managed-assets' : 'asset-watcher.refresh', error, { libraryId });
+      return { changedCount, missingCount };
     } finally {
       // A pause can arrive after some batches committed. Notify those writes
       // too: replaying the scan later will correctly find no diff for them.
@@ -6233,7 +6262,7 @@ export class LibraryService {
           libraryId,
           changedCount,
           missingCount,
-          source: 'watcher',
+          source: options?.source ?? 'watcher',
           ...(this.shouldSuppressWatcherNotification(libraryId)
             ? { suppressWatcherNotification: true } : {}),
         });
@@ -6242,13 +6271,15 @@ export class LibraryService {
   }
 
   private queueWatchedRefresh(libraryId: string, folderId?: string): void {
+    // Keep the dirty scope even while paused. The drain is blocked until
+    // resume, then replays these scopes without walking unrelated roots.
     if (folderId === undefined) this.pendingWatchedAssetRefreshes.add(libraryId);
     else {
       const folders = this.pendingWatchedLinkedRefreshes.get(libraryId) ?? new Set<string>();
       folders.add(folderId);
       this.pendingWatchedLinkedRefreshes.set(libraryId, folders);
     }
-    this.startWatchedRefreshDrain(libraryId);
+    if (!this.backgroundMaintenancePaused) this.startWatchedRefreshDrain(libraryId);
   }
 
   /** Await already-dispatched watcher work (also used by deterministic tests). */
@@ -6258,7 +6289,8 @@ export class LibraryService {
 
   private startWatchedRefreshDrain(libraryId: string): void {
     const openLibrary = this.openById.get(libraryId);
-    if (this.backgroundMaintenancePaused || !openLibrary || this.closingWatchedLibraries.has(openLibrary)
+    if (this.manualRefreshInFlight.has(libraryId)
+      || this.backgroundMaintenancePaused || !openLibrary || this.closingWatchedLibraries.has(openLibrary)
       || this.watchedRefreshDrains.has(libraryId)) return;
     // Defer even the first slice so a watcher callback can never synchronously
     // enumerate a source tree ahead of an arriving browse message.
@@ -7977,6 +8009,8 @@ export class LibraryService {
     if (this.backgroundMaintenancePaused === paused) return;
     this.backgroundMaintenancePaused = paused;
     if (paused) {
+      // Abort in-progress background work so it can stop at its next yield.
+      // Keep the task entries until their finally blocks remove them.
       for (const task of this.watchedRefreshTasks.values()) task.controller.abort();
       for (const [libraryId, task] of this.reconciliationByLibrary) {
         this.pendingReconciliationLibraries.add(libraryId);
@@ -7985,21 +8019,39 @@ export class LibraryService {
       return;
     }
 
+    // The watcher pending sets are the durable dirty scopes. They are added
+    // even while paused, so replay them now instead of relying on the removed
+    // empty path-event map.
     for (const libraryId of new Set([
       ...this.pendingWatchedAssetRefreshes, ...this.pendingWatchedLinkedRefreshes.keys(),
     ])) this.startWatchedRefreshDrain(libraryId);
 
-    const reconciliations = [...this.pendingReconciliationLibraries];
-    this.pendingReconciliationLibraries.clear();
-    for (const libraryId of reconciliations) {
-      if (this.hasOpenLibrary(libraryId)) {
-        // Returning from tray must give the foreground browse a chance to
-        // arrive before a potentially large reconciliation touches SQLite.
-        // A later interactive request extends this window again.
-        this.noteInteractiveActivity(libraryId, 3_000);
-        void this.runOpenBackgroundReconciliation(libraryId);
-      }
+    // Keep pending reconciliation entries until their timer actually starts a
+    // new task. Clearing here used to lose the work if the window was hidden
+    // again during the 10s delay.
+    for (const libraryId of this.pendingReconciliationLibraries) {
+      this.scheduleReconciliationResume(libraryId);
     }
+  }
+
+  private scheduleReconciliationResume(libraryId: string): void {
+    const previous = this.reconciliationResumeTimers.get(libraryId);
+    if (previous !== undefined) clearTimeout(previous);
+    const timer = setTimeout(() => {
+      if (this.reconciliationResumeTimers.get(libraryId) !== timer) return;
+      this.reconciliationResumeTimers.delete(libraryId);
+      // A second pause during the delay leaves the library pending; the next
+      // unpause schedules a fresh timer.
+      if (this.backgroundMaintenancePaused || !this.pendingReconciliationLibraries.has(libraryId)) return;
+      if (!this.hasOpenLibrary(libraryId)) {
+        this.pendingReconciliationLibraries.delete(libraryId);
+        return;
+      }
+      this.pendingReconciliationLibraries.delete(libraryId);
+      void this.runOpenBackgroundReconciliation(libraryId);
+    }, 10_000);
+    timer.unref?.();
+    this.reconciliationResumeTimers.set(libraryId, timer);
   }
 
   private requireOpenLibrary(libraryId: string): OpenLibrary {
@@ -14552,7 +14604,7 @@ export class LibraryService {
         }
       }
     })();
-    this.refreshManagedAssets(input.libraryId);
+    this.refreshManagedAssets(input.libraryId, { linkedFolderIds: [input.folderId] });
     return { rules: this.getLinkedFolderRules(input), hiddenCount, restoredCount };
   }
 
@@ -14662,7 +14714,7 @@ export class LibraryService {
       });
       throw serviceError(error, 'IMPORT_APPLY_FAILED');
     }
-    this.refreshManagedAssets(input.libraryId);
+    this.refreshManagedAssets(input.libraryId, { linkedFolderIds: [input.folderId] });
     const copiedIdentities = new Set(copiedPaths.map(portablePathIdentity));
     const assets = this.listAssets({ libraryId: input.libraryId, folderId: input.folderId, recursive: true })
       .filter((asset) => copiedIdentities.has(portablePathIdentity(asset.relativeFilePath)));
@@ -25438,6 +25490,10 @@ export class LibraryService {
       this.pendingReconciliationLibraries.add(libraryId);
       return;
     }
+    if (this.manualRefreshInFlight.has(libraryId)) {
+      this.pendingReconciliationLibraries.add(libraryId);
+      return;
+    }
     const previous = this.reconciliationByLibrary.get(libraryId);
     previous?.controller.abort();
     const generation = (this.reconciliationGenerationByLibrary.get(libraryId) ?? 0) + 1;
@@ -35015,7 +35071,7 @@ export class LibraryService {
       throw serviceError(error, 'IMPORT_APPLY_FAILED');
     }
 
-    this.refreshManagedAssets(input.libraryId);
+    this.refreshManagedAssets(input.libraryId, { linkedFolderIds: [input.linkedFolderId] });
     const identities = new Set(written.map(portablePathIdentity));
     const assets = this.listAssets({
       libraryId: input.libraryId,
@@ -37929,7 +37985,8 @@ export class LibraryService {
     if (
       task.controller.signal.aborted
       || (this.reconciliationByLibrary.get(task.libraryId) !== task
-        && this.watchedRefreshTasks.get(task.libraryId) !== task)
+        && this.watchedRefreshTasks.get(task.libraryId) !== task
+        && this.manualRefreshTasks.get(task.libraryId) !== task)
       || !this.openById.has(task.libraryId)
     ) {
       throw this.reconciliationAbortError();
@@ -38213,6 +38270,83 @@ export class LibraryService {
     }
     await apply(discovery.managedEntries);
     return { changedCount, missingCount };
+  }
+
+  /**
+   * Cooperative manual refresh. Unlike `refreshManagedAssets`, this path never
+   * runs a filesystem walk or a whole-library commit on the Worker command
+   * stack: discovery is async and commits/yields run in bounded batches.
+   * A second click shares the in-flight result instead of starting a second
+   * scan.
+   */
+  async refreshManagedAssetsAsync(
+    libraryId: string,
+    options: { includeAssets?: boolean } = {},
+  ): Promise<AssetRefreshResult> {
+    const existing = this.manualRefreshInFlight.get(libraryId);
+    if (existing !== undefined) return existing;
+
+    const task: OpenReconciliationTask = {
+      controller: new AbortController(),
+      generation: 0,
+      libraryId,
+      promise: Promise.resolve(),
+    };
+    this.manualRefreshTasks.set(libraryId, task);
+
+    const state: { promise?: Promise<AssetRefreshResult> } = {};
+    state.promise = (async () => {
+      try {
+        await this.quiesceBackgroundRefreshes(libraryId);
+        const result = await this.refreshManagedAssetsOnOpen(libraryId, task, undefined, {
+          includeAssets: options.includeAssets === true,
+          propagateErrors: true,
+          source: 'client',
+        });
+        return result;
+      } finally {
+        if (this.manualRefreshTasks.get(libraryId) === task) {
+          this.manualRefreshTasks.delete(libraryId);
+        }
+        if (this.manualRefreshInFlight.get(libraryId) === state.promise) {
+          this.manualRefreshInFlight.delete(libraryId);
+        }
+        // Watcher events that arrived during the manual job are still dirty.
+        if (this.pendingWatchedAssetRefreshes.has(libraryId)
+          || this.pendingWatchedLinkedRefreshes.get(libraryId)?.size) {
+          this.startWatchedRefreshDrain(libraryId);
+        }
+        if (this.pendingReconciliationLibraries.has(libraryId)
+          && !this.backgroundMaintenancePaused) {
+          this.scheduleReconciliationResume(libraryId);
+        }
+      }
+    })();
+    const started = state.promise!;
+    this.manualRefreshInFlight.set(libraryId, started);
+    return started;
+  }
+
+  /**
+   * Stop background scans at their next yield before a manual refresh starts.
+   * Awaiting the drain prevents a manual and a watcher scan from committing
+   * the same new asset; aborting is cooperative because all disk work yields.
+   */
+  private async quiesceBackgroundRefreshes(libraryId: string): Promise<void> {
+    const waits: Promise<unknown>[] = [];
+    const watched = this.watchedRefreshTasks.get(libraryId);
+    if (watched !== undefined) {
+      watched.controller.abort();
+      waits.push(watched.promise);
+    }
+    const open = this.reconciliationByLibrary.get(libraryId);
+    if (open !== undefined) {
+      open.controller.abort();
+      waits.push(open.promise);
+    }
+    const drain = this.watchedRefreshDrains.get(libraryId);
+    if (drain !== undefined) waits.push(drain);
+    if (waits.length > 0) await Promise.allSettled(waits);
   }
 
   refreshManagedAssets(libraryId: string, options: { includeAssets: true } & RefreshManagedAssetsOptions): AssetRefreshResult & { assets: AssetSummary[] };
@@ -38841,15 +38975,15 @@ export class LibraryService {
     this.reconcileLinkedWatchers(openLibrary);
     markStage('post-phases');
 
-    const result = {
-      changedCount,
-      missingCount,
-      ...(options?.includeAssets
-        ? { assets: this.listAssets({ libraryId, recursive: true }) }
-        : {}),
-    };
-    markStage(options?.includeAssets ? 'list-assets' : 'return');
-    return result;
+      const result = {
+        changedCount,
+        missingCount,
+        ...(options?.includeAssets
+          ? { assets: this.listAssets({ libraryId, recursive: true }) }
+          : {}),
+      };
+      markStage(options?.includeAssets ? 'list-assets' : 'return');
+      return result;
   }
 
   createLibrary(input: {

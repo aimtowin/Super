@@ -44,6 +44,8 @@ export interface AppSettingsDialogProps {
   onToggleShowAiBadges: () => void;
   autoDetectImageSequences: boolean;
   onToggleAutoDetectImageSequences: () => void;
+  rememberWindowState: boolean;
+  onToggleRememberWindowState: () => void;
   onOpenAppLog?: () => void;
   onQuickStart?: () => void;
   onOpenExtensionReleases?: () => void;
@@ -75,6 +77,8 @@ export function AppSettingsDialog({
   onToggleShowAiBadges,
   autoDetectImageSequences,
   onToggleAutoDetectImageSequences,
+  rememberWindowState,
+  onToggleRememberWindowState,
   onOpenAppLog,
   onQuickStart,
   onOpenExtensionReleases,
@@ -182,6 +186,8 @@ export function AppSettingsDialog({
                 onQuickStart={onQuickStart}
                 onOpenAppLog={onOpenAppLog}
                 onOpenExtensionReleases={onOpenExtensionReleases}
+                rememberWindowState={rememberWindowState}
+                onToggleRememberWindowState={onToggleRememberWindowState}
               />
             ) : null}
             {!showingPluginSettings && activeCategory === "assets" ? (

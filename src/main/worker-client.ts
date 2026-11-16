@@ -62,7 +62,8 @@ type TerminalCallback = (reason: WorkerRequestTerminalReason) => void | Promise<
 // processes, AV scanning the fresh bundle) legitimately exceeds 5s before the
 // worker module finishes loading; a too-tight handshake fails startup.
 const READY_TIMEOUT_MS = 15_000;
-const REQUEST_TIMEOUT_MS = 15_000;
+// Increased from 15s to 30s to accommodate tray unpause reconciliation
+const REQUEST_TIMEOUT_MS = 30_000;
 const SEARCH_REQUEST_TIMEOUT_MS = 60_000;
 // Super-2cc492：开库宽限窗口——SMB 冷缓存首读单条查询实测 20-35s，窗口内
 // 的请求放宽到 120s（仍远小于「无限等待」），窗口 120s 后恢复稳态超时。
@@ -72,6 +73,18 @@ const FILE_OPERATION_TIMEOUT_MS = 5 * 60_000;
 const AI_QUEUE_TIMEOUT_MS = 10 * 60_000;
 const SHUTDOWN_TIMEOUT_MS = 2_000;
 const WORKER_CMD_LOG = process.env.SUPER_WORKER_CMD_LOG === '1';
+
+/**
+ * Commands that may take longer than default timeout during heavy operations.
+ * Increased timeout prevents premature failure during tray unpause reconciliation.
+ */
+const LONG_OPERATION_TIMEOUT_MS = 60_000;
+// Only real Worker command types belong here. `asset.refresh` is intentionally
+// unbounded above; `linked-folder.refresh` is an automation-layer command that
+// becomes `asset.refresh`, and `asset.import-managed` is not a Worker command.
+const LONG_OPERATION_COMMANDS = new Set<WorkerCommand['type']>([
+  'asset.import-linked',
+]);
 
 /**
  * Disk-bound library transfer commands. A slow machine or a large Eagle
@@ -161,6 +174,10 @@ export function requestTimeoutForCommand(
     // remaining request gets a longer deadline instead of failing at the old
     // 15s default.
     return SEARCH_REQUEST_TIMEOUT_MS;
+  }
+  if (LONG_OPERATION_COMMANDS.has(commandType)) {
+    // Commands that may take longer during tray unpause reconciliation
+    return LONG_OPERATION_TIMEOUT_MS;
   }
   if (
     commandType === 'extension.save-from-url'

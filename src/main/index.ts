@@ -90,6 +90,9 @@ import {
   bindWindowMoveStartedEvents,
   registerWindowControls,
 } from "./window-controls";
+import { WindowStateStore } from "./window-state";
+import type { WindowStateRequest } from "../shared/window-state";
+import { windowStateRequestSchema } from "../shared/window-state";
 import {
   createWindowsTray,
   type WindowsTrayController,
@@ -125,6 +128,7 @@ import {
   APPLICATION_MENU_ITEM_STATE_CHANNEL,
   SHELL_SWIPE_CHANNEL,
   WINDOW_FOCUS_CHANNEL,
+  WINDOW_STATE_REQUEST_CHANNEL,
   NATIVE_EDIT_COPY_CHANNEL,
   PLUGIN_MANAGER_CHANNEL,
   PLUGIN_INSTALL_PROGRESS_CHANNEL,
@@ -421,6 +425,7 @@ let floatingPreviewWindow: BrowserWindow | undefined;
 let floatingPreviewState: FloatingPreviewState | undefined;
 /** Effective UI locale for native dialogs; synced from Renderer (Super-bwb). */
 let appLocale: AppLocale = "en";
+let windowStateStore: WindowStateStore | undefined;
 let workerClient: LibraryWorkerClient | undefined;
 /** 自动同步调度器（Super-bfsb 后续），随 Worker 生命周期启停。 */
 let syncAutoScheduler: SyncAutoScheduler | undefined;
@@ -1388,6 +1393,17 @@ async function createMainWindow(): Promise<void> {
     width: defaultWidth,
     height: defaultHeight,
   });
+  const restoredPlacement = isolatedPlacement === undefined
+    ? windowStateStore?.readPlacement(screen.getAllDisplays().map((display) => ({
+        x: display.workArea.x,
+        y: display.workArea.y,
+        width: display.workArea.width,
+        height: display.workArea.height,
+      })))
+    : undefined;
+  const initialBounds = isolatedPlacement ?? restoredPlacement?.bounds;
+  const restoreMaximized = isolatedPlacement === undefined
+    && restoredPlacement?.maximized === true;
 
   const devIcon = appIconImage();
   // Super-tluf: the macOS dock otherwise shows the default Electron icon
@@ -1397,11 +1413,9 @@ async function createMainWindow(): Promise<void> {
   }
 
   const window = new BrowserWindow({
-    width: isolatedPlacement?.width ?? defaultWidth,
-    height: isolatedPlacement?.height ?? defaultHeight,
-    ...(isolatedPlacement
-      ? { x: isolatedPlacement.x, y: isolatedPlacement.y }
-      : {}),
+    width: initialBounds?.width ?? defaultWidth,
+    height: initialBounds?.height ?? defaultHeight,
+    ...(initialBounds ? { x: initialBounds.x, y: initialBounds.y } : {}),
     minWidth: 1040,
     minHeight: 680,
     show: false,
@@ -1432,14 +1446,23 @@ async function createMainWindow(): Promise<void> {
   // A blank window in a packaged build must leave the same evidence as one
   // started from Vite; idle windows produce no log entries.
   attachRendererDiagnostics(window);
-  window.on("ready-to-show", () => window.show());
+  window.once("ready-to-show", () => {
+    if (restoreMaximized) window.maximize();
+    window.show();
+  });
   window.on("minimize", () => pauseBackgroundWorkForHiddenWindow());
-  window.on("hide", () => pauseBackgroundWorkForHiddenWindow());
+  window.on("hide", () => {
+    pauseBackgroundWorkForHiddenWindow();
+    // Windows closes the frameless window by hiding it to the tray. Capture the
+    // placement here as well as on `close` so the next launch restores it.
+    windowStateStore?.recordPlacement(window);
+  });
   window.on("restore", () => resumeBackgroundWorkAfterForeground(window));
   window.on("show", () => resumeBackgroundWorkAfterForeground(window));
   // Cleanup while webContents/HWND still exist (`closed` is too late).
   window.on("close", () => {
     clearViewerVideoShortcutCapture(mainContentsId);
+    windowStateStore?.recordPlacement(window);
   });
   window.on("closed", () => {
     if (backgroundWorkResumeTimer !== undefined) {
@@ -6237,6 +6260,9 @@ async function startApplication(): Promise<void> {
   }
   appLogPath = chooseUniqueSessionLogPath(app.getPath("logs"), new Date());
   logger = new AppLogger(appLogPath);
+  windowStateStore = new WindowStateStore(app.getPath("userData"), (error) => {
+    logger?.error("window-state", error);
+  });
   appUpdateService = createAppUpdateService({
     currentVersion: app.getVersion(),
     isPackaged: app.isPackaged,
@@ -8339,6 +8365,19 @@ async function startApplication(): Promise<void> {
   registerWindowControls({
     getMainWindow: () => mainWindow,
     logger,
+  });
+
+  ipcMain.handle(WINDOW_STATE_REQUEST_CHANNEL, (event, input: unknown) => {
+    if (mainWindow === undefined || event.sender !== mainWindow.webContents) {
+      return undefined;
+    }
+    const store = windowStateStore;
+    if (store === undefined) return { rememberWindowState: true };
+    const parsed = windowStateRequestSchema.safeParse(input);
+    if (!parsed.success) return store.preferences;
+    const request: WindowStateRequest = parsed.data;
+    if (request.rememberWindowState === undefined) return store.preferences;
+    return store.setRememberWindowState(request.rememberWindowState);
   });
 
   // Start the window first; the Worker handshake, global plugin activation and

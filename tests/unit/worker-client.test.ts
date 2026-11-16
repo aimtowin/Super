@@ -51,7 +51,7 @@ describe('Worker origin and actual-terminal ownership', () => {
     await Promise.all(pending);
     const reads = Array.from({length: 256}, () => client.request({type: 'folder.list', libraryId: 'library'}).catch(error => error));
     await expect(client.request({type: 'folder.list', libraryId: 'library'})).rejects.toMatchObject({code: 'WORKER_REQUEST_BACKPRESSURE'});
-    await vi.advanceTimersByTimeAsync(15_000); await Promise.all(reads);
+    await vi.advanceTimersByTimeAsync(30_000); await Promise.all(reads);
     await expect(client.request({type: 'folder.list', libraryId: 'library'})).rejects.toMatchObject({code: 'WORKER_REQUEST_BACKPRESSURE'});
     const cancel = client.request({type: 'library.close', libraryId: 'library'});
     reply(child, child.postMessage.mock.calls.at(-1)![0].requestId); await cancel;
@@ -111,7 +111,7 @@ describe('Worker origin and actual-terminal ownership', () => {
     const onTerminal = vi.fn(); const options = { onTerminal };
     const pending = client.request({ type: 'library.close', libraryId: 'library' }, options).catch((error: unknown) => error);
     const requestId = child.postMessage.mock.calls.at(-1)![0].requestId;
-    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(30_000);
     expect(await pending).toMatchObject({ code: 'WORKER_REQUEST_TIMEOUT' });
     expect(onTerminal).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(10 * 60_000 + 1);
@@ -322,15 +322,15 @@ describe('requestTimeoutForCommand', () => {
         code: 'WORKER_REQUEST_TIMEOUT',
         commandType: 'library.close',
       });
-      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.advanceTimersByTimeAsync(30_000);
       await pendingRejection;
       const requestId = child.postMessage.mock.calls.at(-1)![0].requestId;
       expect(logger.info).toHaveBeenCalledWith('worker.request.timeout', expect.any(String),
-        expect.objectContaining({ requestId, commandType: 'library.close', totalMs: 15_000 }));
+        expect.objectContaining({ requestId, commandType: 'library.close', totalMs: 30_000 }));
       await vi.advanceTimersByTimeAsync(2_000);
       child.emit('message', { requestId, result: { ok: true, type: 'library.closed', libraryId: 'library-1' } });
       expect(logger.info).toHaveBeenCalledWith('worker.response.late', expect.any(String),
-        expect.objectContaining({ requestId, commandType: 'library.close', totalMs: 17_000 }));
+        expect.objectContaining({ requestId, commandType: 'library.close', totalMs: 32_000 }));
       expect(child.kill).not.toHaveBeenCalled();
 
       const shutdown = client.shutdown();
@@ -345,7 +345,12 @@ describe('requestTimeoutForCommand', () => {
     }
   });
 
-  it('gives AI queue processing a long timeout (Super-iokf)', () => {
+  it('keeps only the real linked-import command on the long-operation timeout', () => {
+    expect(requestTimeoutForCommand('asset.import-linked')).toBe(60_000);
+    expect(requestTimeoutForCommand('asset.refresh')).toBeNull();
+  });
+
+it('gives AI queue processing a long timeout (Super-iokf)', () => {
     expect(requestTimeoutForCommand('ai.process-queue')).toBe(10 * 60_000);
     expect(requestTimeoutForCommand('asset.analyze')).toBe(10 * 60_000);
   });

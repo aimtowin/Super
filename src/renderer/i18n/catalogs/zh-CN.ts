@@ -1408,6 +1408,9 @@ export const zhCN = {
     imageSequenceAutoDetect: "导入时自动检测序列帧",
     imageSequenceAutoDetectHint:
       "导入连续编号且尺寸一致的图片时，自动识别为序列帧。",
+    rememberWindowState: "记住窗口大小和位置",
+    rememberWindowStateHint:
+      "重新打开时恢复上次关闭时的位置、大小和最大化状态。",
     browserExtensionTitle: "浏览器扩展",
     browserExtensionIntro:
       "用 Chrome / Edge 扩展把网页图片或视频保存到当前资源库。媒体由浏览器侧下载（携带 Cookie 与页面 Referer）再上传到本机应用，可绕过多数防盗链限制。保持本应用运行并打开资源库即可。",

@@ -84,10 +84,14 @@ export function GeneralSettingsPage({
   onOpenAppLog,
   onOpenExtensionReleases,
   onQuickStart,
+  rememberWindowState = true,
+  onToggleRememberWindowState,
 }: {
   onQuickStart?: () => void;
   onOpenAppLog?: () => void;
   onOpenExtensionReleases?: () => void;
+  rememberWindowState?: boolean;
+  onToggleRememberWindowState?: () => void;
 } = {}): ReactNode {
   const { t, preference: localePreference, setLocale } = useLocale();
   return (
@@ -127,6 +131,16 @@ export function GeneralSettingsPage({
           </div>
         </div>
       </SettingsCard>
+      {onToggleRememberWindowState ? (
+        <SettingsCard>
+          <SettingsToggleRow
+            checked={rememberWindowState}
+            hint={t("settings.rememberWindowStateHint")}
+            label={t("settings.rememberWindowState")}
+            onChange={onToggleRememberWindowState}
+          />
+        </SettingsCard>
+      ) : null}
       {onOpenAppLog ? (
         <SettingsCard>
           <div className="app-settings-action-row">
