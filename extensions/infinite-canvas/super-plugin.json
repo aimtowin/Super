@@ -1,0 +1,29 @@
+{
+  "manifestVersion": 1,
+  "id": "com.super.infinite-canvas",
+  "version": "1.0.0",
+  "name": "无限画布",
+  "description": "在查看器中打开独立小窗预览，主界面保持可见；关闭小窗不会把主窗口弹回前台。",
+  "author": "Super",
+  "license": "MIT",
+  "engines": {
+    "super": ">=2.4.5 <3.0.0",
+    "pluginApi": 1
+  },
+  "runtime": {
+    "mode": "restricted",
+    "entry": "entry/main.js",
+    "instanceScope": "global"
+  },
+  "permissions": [
+    "ui.viewer"
+  ],
+  "contributes": {
+    "commands": [],
+    "menus": {},
+    "views": [],
+    "settings": [],
+    "hooks": [],
+    "providers": []
+  }
+}

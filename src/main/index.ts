@@ -423,6 +423,11 @@ let mainWindow: BrowserWindow | undefined;
 /** One capability-minimal, always-on-top image or PDF monitor at a time. */
 let floatingPreviewWindow: BrowserWindow | undefined;
 let floatingPreviewState: FloatingPreviewState | undefined;
+/** Extension-owned detached previews. They never minimize or restore the main window. */
+const detachedFloatingPreviews = new Map<number, {
+  window: BrowserWindow;
+  state: FloatingPreviewState;
+}>();
 /** Effective UI locale for native dialogs; synced from Renderer (Super-bwb). */
 let appLocale: AppLocale = "en";
 let windowStateStore: WindowStateStore | undefined;
@@ -1244,6 +1249,7 @@ function restoreMainAfterFloatingPreview(): void {
 async function openFloatingPreview(input: {
   libraryId: string;
   assetId: string;
+  detached?: boolean;
 }): Promise<RendererResult> {
   const client = workerClient;
   if (!client) {
@@ -1288,12 +1294,16 @@ async function openFloatingPreview(input: {
     return { ok: false, error: createPublicError("ASSET_NOT_FOUND") } satisfies RendererResult;
   }
 
-  // Closing an existing monitor is intentionally silent: it must not restore
-  // the main window while a replacement monitor is being opened.
-  const previous = floatingPreviewWindow;
-  floatingPreviewWindow = undefined;
-  floatingPreviewState = undefined;
-  if (previous && !previous.isDestroyed()) previous.close();
+  const detached = input.detached === true;
+  // Closing an existing default monitor is intentionally silent: it must not
+  // restore the main window while a replacement monitor is being opened.
+  // Detached extension monitors are independent and may coexist.
+  if (!detached) {
+    const previous = floatingPreviewWindow;
+    floatingPreviewWindow = undefined;
+    floatingPreviewState = undefined;
+    if (previous && !previous.isDestroyed()) previous.close();
+  }
 
   const parent = mainWindow;
   if (!parent || parent.isDestroyed()) {
@@ -1327,18 +1337,34 @@ async function openFloatingPreview(input: {
   window.webContents.on("will-navigate", (event) => event.preventDefault());
   attachRendererDiagnostics(window);
 
-  floatingPreviewWindow = window;
-  floatingPreviewState = Object.freeze({
+  const state = Object.freeze({
     assetId: input.assetId,
     mediaType: floatingMediaType,
     sourceUrl,
   });
+  const previewWebContentsId = window.webContents.id;
+  if (detached) {
+    detachedFloatingPreviews.set(previewWebContentsId, { window, state });
+  } else {
+    floatingPreviewWindow = window;
+    floatingPreviewState = state;
+  }
   window.once("ready-to-show", () => {
-    if (floatingPreviewWindow !== window || window.isDestroyed()) return;
+    if (window.isDestroyed()) return;
+    const stillOwned = detached
+      ? detachedFloatingPreviews.get(previewWebContentsId)?.window === window
+      : floatingPreviewWindow === window;
+    if (!stillOwned) return;
     window.show();
-    if (!parent.isDestroyed()) parent.minimize();
+    // Extension previews never take the main viewport away. The default
+    // floating preview keeps its existing minimize/restore contract.
+    if (!detached && !parent.isDestroyed()) parent.minimize();
   });
   window.on("closed", () => {
+    if (detached) {
+      detachedFloatingPreviews.delete(previewWebContentsId);
+      return;
+    }
     if (floatingPreviewWindow !== window) return;
     floatingPreviewWindow = undefined;
     floatingPreviewState = undefined;
@@ -1349,7 +1375,9 @@ async function openFloatingPreview(input: {
     await loadFloatingPreviewRenderer(window);
   } catch (error) {
     logger?.error("floating-preview.load", error, { assetId: input.assetId });
-    if (floatingPreviewWindow === window) {
+    if (detached) {
+      detachedFloatingPreviews.delete(previewWebContentsId);
+    } else if (floatingPreviewWindow === window) {
       floatingPreviewWindow = undefined;
       floatingPreviewState = undefined;
     }
@@ -1360,6 +1388,7 @@ async function openFloatingPreview(input: {
   logger?.info("floating-preview.opened", "Opened a floating media preview.", {
     assetId: input.assetId,
     mediaType: floatingMediaType,
+    detached,
   });
   return {
     ok: true,
@@ -7807,6 +7836,11 @@ async function startApplication(): Promise<void> {
   });
 
   ipcMain.handle(FLOATING_PREVIEW_GET_STATE_CHANNEL, (event) => {
+    const detachedPreview = detachedFloatingPreviews.get(event.sender.id);
+    if (detachedPreview) {
+      if (detachedPreview.window.isDestroyed()) throw new Error("Floating preview state is unavailable.");
+      return detachedPreview.state;
+    }
     const window = floatingPreviewWindow;
     const state = floatingPreviewState;
     if (!window || window.isDestroyed() || !state || event.sender !== window.webContents) {
@@ -7816,6 +7850,11 @@ async function startApplication(): Promise<void> {
   });
 
   ipcMain.on(FLOATING_PREVIEW_CLOSE_CHANNEL, (event) => {
+    const detachedPreview = detachedFloatingPreviews.get(event.sender.id);
+    if (detachedPreview) {
+      if (!detachedPreview.window.isDestroyed()) detachedPreview.window.close();
+      return;
+    }
     const window = floatingPreviewWindow;
     if (!window || window.isDestroyed() || event.sender !== window.webContents) return;
     window.close();
@@ -7946,6 +7985,7 @@ async function startApplication(): Promise<void> {
         }
         return pluginProviderScheduler.resolveAiProvider(input);
       },
+      appVersion: app.getVersion(),
       resolveLibraryDirectory: async (libraryId) => {
         const client = workerClient;
         if (client === undefined) return undefined;
@@ -7969,6 +8009,7 @@ async function startApplication(): Promise<void> {
           if (requestType === 'plugin-manager.resolve'
             || requestType === 'plugin-manager.safe-mode'
             || requestType === 'plugin-manager.install-local'
+            || requestType === 'plugin-manager.install-server-extension'
             || requestType === 'plugin-manager.install-github'
             || requestType === 'plugin-manager.uninstall'
             || requestType === 'plugin-manager.trust'
@@ -8503,6 +8544,10 @@ if (!hasSingleInstanceLock) {
     floatingPreviewWindow = undefined;
     floatingPreviewState = undefined;
     if (floatingWindow && !floatingWindow.isDestroyed()) floatingWindow.destroy();
+    for (const detachedPreview of detachedFloatingPreviews.values()) {
+      if (!detachedPreview.window.isDestroyed()) detachedPreview.window.destroy();
+    }
+    detachedFloatingPreviews.clear();
     if (automaticUpdateTimer !== undefined) {
       clearTimeout(automaticUpdateTimer);
       automaticUpdateTimer = undefined;

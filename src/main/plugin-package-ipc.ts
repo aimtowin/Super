@@ -33,6 +33,7 @@ import type { PluginSettingsSnapshot, PluginSettingsStore } from './plugin-setti
 import type { PluginStorageStore } from './plugin-storage-store';
 import type { PluginMcpExposureStore } from './plugin-mcp-exposure-store';
 import { createPluginUiUrl } from './plugin-ui-assets';
+import { ExtensionCatalogClient } from './extension-catalog';
 import { PluginInstallCancelledError, PluginInstallOperation } from './plugin-install-operation';
 import type { PluginInstallProgress } from '../shared/plugin-install-progress';
 import type {
@@ -81,6 +82,10 @@ function pluginCommandFailureMessage(value: string | undefined): string | undefi
 export interface PluginPackageIpcOptions {
   manager: PluginPackageManager;
   activationCoordinator?: PluginActivationCoordinator;
+  /** Server-only extension catalogue; tests may inject a fake HTTP client. */
+  extensionCatalog?: ExtensionCatalogClient;
+  /** Host application version used for catalogue compatibility checks. */
+  appVersion?: string;
   settingsStore?: PluginSettingsStore;
   storageStore?: PluginStorageStore;
   mcpExposureStore?: PluginMcpExposureStore;
@@ -509,6 +514,27 @@ export function createPluginPackageRequestHandler(options: PluginPackageIpcOptio
         ? await libraryDirectoryFor(request, options)
         : undefined;
       if (requiresLibrary && libraryDirectory === undefined) return { ok: false, code: 'library-not-open' };
+
+      if (request.type === 'plugin-manager.list-server-extensions') {
+        const catalog = options.extensionCatalog ?? new ExtensionCatalogClient();
+        return { ok: true, extensions: await catalog.list() };
+      }
+      if (request.type === 'plugin-manager.install-server-extension') {
+        const catalog = options.extensionCatalog ?? new ExtensionCatalogClient();
+        await catalog.install({
+          manager: options.manager,
+          pluginId: request.pluginId,
+          scope: request.scope,
+          ...(libraryDirectory === undefined ? {} : { libraryDirectory }),
+          currentVersion: options.appVersion ?? '0.0.0',
+        });
+        await options.afterMutation?.({
+          requestType: request.type,
+          ...(request.libraryId === undefined ? {} : { libraryId: request.libraryId }),
+          ...(libraryDirectory === undefined ? {} : { libraryDirectory }),
+        });
+        return { ok: true, saved: true };
+      }
 
       if (request.type === 'plugin-manager.ui-storage-get'
         || request.type === 'plugin-manager.ui-storage-set') {

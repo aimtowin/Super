@@ -14,6 +14,7 @@ import type {
   SuperPluginManagerApi,
 } from '../shared/plugin-manager-api';
 import type { PluginInstallProgress } from '../shared/plugin-install-progress';
+import type { ExtensionCatalogEntry } from '../shared/extension-catalog';
 import { parseGitHubRepositoryUrl } from '../shared/plugin-github-url';
 import { Icon } from './Icons';
 import { iconActionAttrs } from './icon-action-attrs';
@@ -146,6 +147,9 @@ export function PluginSettingsPage({
   const [githubInstallOpen, setGithubInstallOpen] = useState(false);
   const [githubOperationId, setGithubOperationId] = useState<string | undefined>();
   const [githubProgress, setGithubProgress] = useState<PluginInstallProgress | undefined>();
+  const [serverCatalogOpen, setServerCatalogOpen] = useState(false);
+  const [serverCatalog, setServerCatalog] = useState<ExtensionCatalogEntry[] | undefined>();
+  const [serverCatalogLoading, setServerCatalogLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -241,21 +245,6 @@ export function PluginSettingsPage({
 
   const canUseLibraryScope = libraryId !== undefined;
 
-  const githubPackages = useMemo(
-    () => snapshot?.packages.filter((item) => item.source.kind === 'github' && item.status === 'valid') ?? [],
-    [snapshot],
-  );
-  const globalAutoUpdate = snapshot?.autoUpdateAll
-    ?? (githubPackages.length > 0 && githubPackages.every((item) => item.autoUpdate === true));
-
-  const setGlobalAutoUpdate = useCallback(async (enabled: boolean): Promise<void> => {
-    if (enabled && !globalThis.confirm(t('settings.pluginAutoUpdateRisk'))) return;
-    await execute({
-      type: 'plugin-manager.set-global-auto-update',
-      enabled,
-    });
-  }, [execute, t]);
-
   const setEnabledForPackage = useCallback(async (
     pluginPackage: PluginManagerPackageSummary,
     enabled: boolean,
@@ -315,37 +304,69 @@ export function PluginSettingsPage({
     setInstallOpen(false);
     setGithubInstallOpen(false);
     setGithubRepository('');
+    setServerCatalogOpen(false);
+    setServerCatalog(undefined);
+    setServerCatalogLoading(false);
     setInstallError(undefined);
     setGithubOperationId(undefined);
     setGithubProgress(undefined);
   }, [api, githubOperationId, githubProgress]);
 
-  const installScoped = useCallback(async (
-    request: Extract<PluginManagerRequest, { type: 'plugin-manager.install-local' }>,
-  ): Promise<void> => {
+  const openServerCatalog = useCallback(async (): Promise<void> => {
+    if (api === undefined) {
+      setInstallError(t('settings.pluginUnavailable'));
+      return;
+    }
+    setServerCatalogOpen(true);
+    setServerCatalog(undefined);
+    setServerCatalogLoading(true);
+    setInstallError(undefined);
+    try {
+      const response = await api.request({ type: 'plugin-manager.list-server-extensions' });
+      if (!response.ok) {
+        setInstallError(formatPluginManagerFailure(response, t));
+        return;
+      }
+      if (!('extensions' in response)) {
+        setInstallError(t('settings.pluginServerCatalogFailed', { code: 'unexpected-response' }));
+        return;
+      }
+      setServerCatalog(response.extensions);
+    } catch {
+      setInstallError(t('settings.pluginServerCatalogFailed', { code: 'bridge-unavailable' }));
+    } finally {
+      setServerCatalogLoading(false);
+    }
+  }, [api, t]);
+
+  const installServerExtension = useCallback(async (pluginId: string): Promise<void> => {
     if (api === undefined) {
       setInstallError(t('settings.pluginUnavailable'));
       return;
     }
     setBusy(true);
+    setInstallError(undefined);
     try {
-      const response = await api.request(request);
+      const response = await api.request({
+        type: 'plugin-manager.install-server-extension',
+        pluginId,
+        scope: installScope,
+        ...(installScope === 'library' && libraryId !== undefined ? { libraryId } : {}),
+      });
       if (!response.ok) {
-        if (response.code !== 'selection-cancelled') {
-          setInstallError(formatPluginManagerFailure(response, t));
-        }
+        setInstallError(formatPluginManagerFailure(response, t));
         return;
       }
-      setInstallError(undefined);
-      setError(undefined);
       await load();
-      closeInstallDialog();
+      setServerCatalogOpen(false);
+      setServerCatalog(undefined);
+      setInstallOpen(false);
     } catch {
       setInstallError(t('settings.pluginOperationFailed', { code: 'bridge-unavailable' }));
     } finally {
       setBusy(false);
     }
-  }, [api, closeInstallDialog, load, t]);
+  }, [api, installScope, libraryId, load, t]);
 
   const startGithubInstall = useCallback(async (): Promise<void> => {
     if (api === undefined) {
@@ -571,27 +592,6 @@ export function PluginSettingsPage({
                   </div>
                 </div>
                 <p className="plugin-settings-package-description">{newest.description ?? pluginId}</p>
-                {newest.source.kind === 'github' && newest.availableUpdate !== undefined ? (
-                  <div className="plugin-settings-update-row">
-                    <span className="plugin-settings-update-available">
-                      {t('settings.pluginUpdateAvailable', { version: newest.availableUpdate.version })}
-                    </span>
-                    <button
-                      className="secondary-button"
-                      disabled={busy || (newest.scope === 'library' && libraryId === undefined)}
-                      onClick={() => void execute({
-                        type: 'plugin-manager.update-github',
-                        scope: newest.scope,
-                        ...(newest.scope === 'library' && libraryId !== undefined ? { libraryId } : {}),
-                        pluginId,
-                        packageHash: newest.packageHash,
-                      })}
-                      type="button"
-                    >
-                      {t('settings.pluginUpdateNow')}
-                    </button>
-                  </div>
-                ) : null}
                 {newest.status === 'valid'
                   && pluginRequiresTrustedCssDisclosure(newest.permissions)
                   ? <p className="app-settings-hint">{t('settings.pluginThemeTrustedCssHint')}</p>
@@ -767,23 +767,7 @@ export function PluginSettingsPage({
             <span aria-hidden="true" className="app-settings-toggle-track" />
           </span>
         </label>
-        <label className="app-settings-toggle-row plugin-settings-global-auto-update">
-          <span className="app-settings-row-copy">
-            <strong>{t('settings.pluginAutoUpdate')}</strong>
-            <span>{t('settings.pluginAutoUpdateHint')}</span>
-          </span>
-          <span className="app-settings-toggle-control">
-            <input
-              aria-label={t('settings.pluginAutoUpdate')}
-              checked={globalAutoUpdate}
-              disabled={busy || api === undefined}
-              onChange={(event) => void setGlobalAutoUpdate(event.target.checked)}
-              type="checkbox"
-            />
-            <span aria-hidden="true" className="app-settings-toggle-track" />
-          </span>
-        </label>
-      </section>
+        </section>
 
       {error === undefined ? null : <p className="plugin-settings-error" role="status">{error}</p>}
       {loading ? <p className="app-settings-hint">{t('settings.pluginLoading')}</p> : null}
@@ -813,7 +797,9 @@ export function PluginSettingsPage({
               </button>
             )}
             style={{ padding: 0 }}
-            title={githubInstallOpen ? t('settings.pluginGitHubInstallTitle') : t('settings.pluginInstall')}
+            title={serverCatalogOpen
+              ? t('settings.pluginServerCatalogTitle')
+              : githubInstallOpen ? t('settings.pluginGitHubInstallTitle') : t('settings.pluginInstall')}
           >
             <label className="plugin-install-scope-field">
               <span className="micro-label">{t('settings.pluginInstallScope')}</span>
@@ -839,7 +825,66 @@ export function PluginSettingsPage({
             {scopeHoverTip(installScope) ? <p className="app-settings-hint">{scopeHoverTip(installScope)}</p> : null}
             {libraryInstallDisabled ? <p className="app-settings-hint">{t('settings.pluginLibraryClosedHint')}</p> : null}
 
-            {githubInstallOpen ? (
+            {serverCatalogOpen ? (
+              <div className="plugin-install-github-view">
+                <button
+                  className="plugin-install-back"
+                  disabled={busy}
+                  onClick={() => setServerCatalogOpen(false)}
+                  type="button"
+                >
+                  <Icon name="chevron-left" size={14} />
+                  {t('settings.pluginInstallBack')}
+                </button>
+                <div className="plugin-install-github-intro">
+                  <span className="plugin-install-choice-icon"><Icon name="download" size={22} /></span>
+                  <div>
+                    <strong>{t('settings.pluginServerCatalogTitle')}</strong>
+                    <p>{t('settings.pluginServerCatalogHint')}</p>
+                  </div>
+                </div>
+                {installError === undefined ? null : <p className="plugin-settings-error" role="status">{installError}</p>}
+                {serverCatalogLoading ? (
+                  <p className="app-settings-hint">{t('settings.pluginServerCatalogLoading')}</p>
+                ) : serverCatalog === undefined ? null : serverCatalog.length === 0 ? (
+                  <p className="app-settings-hint">{t('settings.pluginServerCatalogEmpty')}</p>
+                ) : (
+                  <div className="plugin-install-choice-grid">
+                    {serverCatalog.map((entry) => {
+                      const installed = (snapshot?.packages ?? []).some((item) =>
+                        item.pluginId === entry.id
+                        && item.version === entry.version
+                        && item.status === 'valid');
+                      return (
+                        <div className="plugin-install-choice" key={entry.id}>
+                          <span className="plugin-install-choice-icon"><Icon name="download" size={22} /></span>
+                          <span className="plugin-install-choice-copy">
+                            <strong>{entry.name}</strong>
+                            <span>{entry.description}</span>
+                            <span className="app-settings-hint">
+                              {t('settings.pluginServerCatalogPlatform', { platform: entry.platform })}
+                              {entry.minAppVersion === undefined
+                                ? ''
+                                : ` · ${t('settings.pluginServerCatalogRequires', { version: entry.minAppVersion })}`}
+                            </span>
+                          </span>
+                          <button
+                            className="primary-button"
+                            disabled={busy || installed || api === undefined || libraryInstallDisabled}
+                            onClick={() => void installServerExtension(entry.id)}
+                            type="button"
+                          >
+                            {installed
+                              ? t('settings.pluginServerCatalogInstalled')
+                              : t('settings.pluginServerCatalogInstall')}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : githubInstallOpen ? (
               <div className="plugin-install-github-view">
                 <button
                   className="plugin-install-back"
@@ -932,34 +977,13 @@ export function PluginSettingsPage({
                 <button
                   className="plugin-install-choice"
                   disabled={busy || api === undefined || libraryInstallDisabled}
-                  onClick={() => void installScoped({
-                    type: 'plugin-manager.install-local',
-                    scope: installScope,
-                    ...(installScope === 'library' && libraryId !== undefined ? { libraryId } : {}),
-                  })}
+                  onClick={() => void openServerCatalog()}
                   type="button"
                 >
-                  <span className="plugin-install-choice-icon"><Icon name="folder" size={22} /></span>
+                  <span className="plugin-install-choice-icon"><Icon name="download" size={22} /></span>
                   <span className="plugin-install-choice-copy">
-                    <strong>{t('settings.pluginInstallLocalAction')}</strong>
-                    <span>{t('settings.pluginInstallLocalHint')}</span>
-                  </span>
-                  <Icon name="chevron-right" size={16} />
-                </button>
-                <button
-                  className="plugin-install-choice"
-                  disabled={busy || api === undefined || libraryInstallDisabled}
-                  onClick={() => {
-                    setGithubRepository('');
-                    setInstallError(undefined);
-                    setGithubInstallOpen(true);
-                  }}
-                  type="button"
-                >
-                  <span className="plugin-install-choice-icon github"><Icon name="github" size={22} /></span>
-                  <span className="plugin-install-choice-copy">
-                    <strong>{t('settings.pluginInstallGitHubAction')}</strong>
-                    <span>{t('settings.pluginInstallGitHubHint')}</span>
+                    <strong>{t('settings.pluginInstallServerAction')}</strong>
+                    <span>{t('settings.pluginInstallServerHint')}</span>
                   </span>
                   <Icon name="chevron-right" size={16} />
                 </button>

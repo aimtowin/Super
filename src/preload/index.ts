@@ -2055,6 +2055,13 @@ const library: SuperLibraryApi = Object.freeze({
     return { ok: true, value: undefined };
   },
 
+  async openDetachedPreview({ libraryId, assetId }: { libraryId: string; assetId: string }): Promise<LibraryApiResult<void>> {
+    const result = await request({ type: 'asset.preview.float.request', libraryId, assetId, detached: true });
+    if (!result.ok) return failure(result);
+    if (result.type !== 'asset.preview.floating-opened') throw new Error('Unexpected detached-preview response.');
+    return { ok: true, value: undefined };
+  },
+
   async closePreview({ libraryId, assetId }: { libraryId: string; assetId: string }): Promise<LibraryApiResult<void>> {
     const result = await request({ type: 'asset.close-preview.request', libraryId, assetId });
     if (!result.ok) return failure(result);

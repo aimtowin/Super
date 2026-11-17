@@ -59,6 +59,7 @@ import {
   type ViewerDisplayTransform,
 } from "./viewer-display-transform";
 import { PluginViewerActionButtons } from "./plugin-viewer-actions";
+import { DialogShell } from "./ui/patterns";
 import { PluginViewerOverlays } from "./plugin-viewer-overlays";
 import { ProxyPlaybackNotice } from "./ProxyPlaybackNotice";
 import { createProxyFallbackRunGuard } from "./proxy-fallback-run";
@@ -238,6 +239,8 @@ export const AssetPreviewModal = forwardRef<
     useState<ViewerContextMenuPosition | null>(null);
   const [fitRequestToken, setFitRequestToken] = useState(0);
   const [floatingPreview, setFloatingPreview] = useState(false);
+  const [detachedPreviewAvailable, setDetachedPreviewAvailable] = useState(false);
+  const [detachedTutorialOpen, setDetachedTutorialOpen] = useState(false);
   const resolutionRef = useRef<PreviewResolution | null>(null);
   const playbackErrorRef = useRef<string | null>(null);
   const requestedProxyFallbackRef = useRef<string | null>(null);
@@ -645,6 +648,63 @@ export const AssetPreviewModal = forwardRef<
       setFloatingPreview(false);
     }
   }
+
+  async function openDetachedPreview() {
+    try {
+      const result = await api.openDetachedPreview({
+        libraryId,
+        assetId: asset.assetId,
+      });
+      if (!result.ok) setError(t("preview.floatPreviewFailed"));
+    } catch {
+      setError(t("preview.floatPreviewFailed"));
+    }
+  }
+
+  function requestDetachedPreview(): void {
+    try {
+      if (globalThis.localStorage.getItem("superApi.infinite-canvas.tutorial.v1") !== "done") {
+        setDetachedTutorialOpen(true);
+        return;
+      }
+    } catch {
+      // Storage failures must not block the preview; show the guide again.
+      setDetachedTutorialOpen(true);
+      return;
+    }
+    void openDetachedPreview();
+  }
+
+  function startDetachedPreview(): void {
+    try {
+      globalThis.localStorage.setItem("superApi.infinite-canvas.tutorial.v1", "done");
+    } catch {
+      // Non-fatal.
+    }
+    setDetachedTutorialOpen(false);
+    void openDetachedPreview();
+  }
+
+  useEffect(() => {
+    if (pluginApi === undefined) {
+      setDetachedPreviewAvailable(false);
+      return;
+    }
+    let cancelled = false;
+    void pluginApi.request({ type: 'plugin-manager.list', libraryId }).then((response) => {
+      if (cancelled) return;
+      if (!response.ok || !('resolutions' in response)) {
+        setDetachedPreviewAvailable(false);
+        return;
+      }
+      setDetachedPreviewAvailable(response.resolutions.some((resolution) =>
+        resolution.pluginId === 'com.super.infinite-canvas'
+        && resolution.status === 'resolved'));
+    }).catch(() => {
+      if (!cancelled) setDetachedPreviewAvailable(false);
+    });
+    return () => { cancelled = true; };
+  }, [libraryId, pluginApi, pluginContributionRefreshKey]);
 
   async function toggleFullscreen() {
     if (document.fullscreenElement) {
@@ -1098,6 +1158,11 @@ export const AssetPreviewModal = forwardRef<
                   ? openFloatingPreview
                   : undefined
               }
+              onDetachedPreview={
+                detachedPreviewAvailable && asset.mediaType === "image" && ready && resolution?.url
+                  ? requestDetachedPreview
+                  : undefined
+              }
               key={asset.assetId}
               onColorSpaceChange={selectColorSpace}
               onFullscreen={() => void toggleFullscreen()}
@@ -1281,6 +1346,27 @@ export const AssetPreviewModal = forwardRef<
           />
         ) : null}
       </ShellSurface>
+      {detachedTutorialOpen ? (
+        <div className="dialog-backdrop" role="presentation">
+          <DialogShell
+            className="create-dialog"
+            dialogId="infinite-canvas-tutorial"
+            footer={(
+              <button className="primary-button" onClick={startDetachedPreview} type="button">
+                {t("preview.infiniteCanvasTutorialStart")}
+              </button>
+            )}
+            title={t("preview.infiniteCanvasTutorialTitle")}
+          >
+            <p className="app-settings-hint">{t("preview.infiniteCanvasTutorialIntro")}</p>
+            <ol className="infinite-canvas-tutorial-steps">
+              <li>{t("preview.infiniteCanvasTutorialStep1")}</li>
+              <li>{t("preview.infiniteCanvasTutorialStep2")}</li>
+              <li>{t("preview.infiniteCanvasTutorialStep3")}</li>
+            </ol>
+          </DialogShell>
+        </div>
+      ) : null}
     </ViewerSurface>
   );
 });

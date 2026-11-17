@@ -24,6 +24,7 @@ import {
   pluginInstallOperationIdSchema,
   type PluginInstallProgress,
 } from './plugin-install-progress';
+import { extensionCatalogEntrySchema } from './extension-catalog';
 
 const pluginIdSchema = z.string().min(3).max(64).regex(/^[a-z0-9][a-z0-9._-]{1,62}[a-z0-9]$/u);
 const versionSchema = z.string().min(1).max(128);
@@ -171,6 +172,12 @@ export const pluginManagerRequestSchema = z.discriminatedUnion('type', [
     deadlineMs: z.number().int().positive().max(5_000).optional(),
   }),
   z.strictObject({ type: z.literal('plugin-manager.install-local'), ...scopedRequestFields }),
+  z.strictObject({ type: z.literal('plugin-manager.list-server-extensions') }),
+  z.strictObject({
+    type: z.literal('plugin-manager.install-server-extension'),
+    ...scopedRequestFields,
+    pluginId: pluginIdSchema,
+  }),
   z.strictObject({
     type: z.literal('plugin-manager.install-github'),
     ...scopedRequestFields,
@@ -680,6 +687,10 @@ export const pluginManagerResponseSchema = z.union([
     resolutions: z.array(pluginManagerResolutionSummarySchema).max(20_000),
     safeMode: z.boolean(),
     autoUpdateAll: z.boolean().optional(),
+  }),
+  z.strictObject({
+    ok: z.literal(true),
+    extensions: z.array(extensionCatalogEntrySchema).max(200),
   }),
   z.strictObject({
     ok: z.literal(true),

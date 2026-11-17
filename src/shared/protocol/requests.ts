@@ -1133,6 +1133,8 @@ export const rendererRequestSchema = z.discriminatedUnion('type', [
     type: z.literal('asset.preview.float.request'),
     libraryId: identifierSchema,
     assetId: identifierSchema,
+    /** Extension mode: keep the main window visible and do not restore it on close. */
+    detached: z.boolean().optional(),
   }),
   z.strictObject({
     type: z.literal('asset.close-preview.request'),

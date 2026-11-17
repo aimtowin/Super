@@ -1,0 +1,28 @@
+{
+  "catalogVersion": 1,
+  "generatedAt": "2026-11-17T18:20:00+08:00",
+  "extensions": [
+    {
+      "id": "com.super.infinite-canvas",
+      "name": "无限画布",
+      "version": "1.0.0",
+      "description": "在查看器中打开独立小窗预览，主界面保持可见；关闭小窗不会把主窗口弹回前台。",
+      "author": "Super",
+      "platform": "win32-x64",
+      "minAppVersion": "2.4.6",
+      "asset": {
+        "path": "infinite-canvas/1.0.0/com.super.infinite-canvas-1.0.0-win32-x64.zip",
+        "size": 1936,
+        "sha256": "b1d9d03cc7fde8549913fb317b9cad3b34665cca6925385ec915bae060894d8b"
+      },
+      "tutorial": {
+        "title": "无限画布已就绪",
+        "steps": [
+          "在查看器中找到“悬浮预览”右侧的“无限画布”按钮。",
+          "点击后会在独立小窗中打开当前资产，主界面保持可见，可以继续浏览。",
+          "关闭小窗时主界面不会自动弹回前台；默认悬浮预览行为不变。"
+        ]
+      }
+    }
+  ]
+}

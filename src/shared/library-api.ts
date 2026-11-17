@@ -733,6 +733,8 @@ export interface SuperLibraryApi {
   requestPreview(input: { libraryId: string; assetId: string; mode: 'client' | 'fullscreen'; intent?: 'viewer' | 'hover' | 'proxy-fallback'; exrPlane?: number; colorSpace?: string }): Promise<LibraryApiResult<PreviewResolution>>;
   /** Move an already-viewable image or PDF into a Main-authorized floating window. */
   openFloatingPreview(input: { libraryId: string; assetId: string }): Promise<LibraryApiResult<void>>;
+  /** Extension-only detached preview: keep the main viewport visible and untouched. */
+  openDetachedPreview(input: { libraryId: string; assetId: string }): Promise<LibraryApiResult<void>>;
   closePreview(input: { libraryId: string; assetId: string }): Promise<LibraryApiResult<void>>;
   // 3D viewer (slice C, Super-qvc6): companion-texture index for model
   // previews. Only library-relative paths + ids; no absolute paths.

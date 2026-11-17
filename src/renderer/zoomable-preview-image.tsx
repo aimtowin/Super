@@ -69,6 +69,7 @@ export const ZoomableImage = forwardRef<
     onFullscreen?: () => void;
     /** Opens the current static image in Main's separate always-on-top window. */
     onFloat?: () => void;
+    onDetachedPreview?: () => void;
     floating?: boolean;
     onSwipeNext?: () => void;
     onSwipePrevious?: () => void;
@@ -94,6 +95,7 @@ export const ZoomableImage = forwardRef<
     isFullscreen = false,
     onFullscreen,
     onFloat,
+    onDetachedPreview,
     floating = false,
     onSwipeNext,
     onSwipePrevious,
@@ -412,6 +414,17 @@ export const ZoomableImage = forwardRef<
             {...iconActionAttrs(t("preview.floatPreview"))}
           >
             <Icon name="pop-out" size={14} />
+          </button>
+        )}
+        {onDetachedPreview && (
+          <button
+            data-hover-tip-placement="above"
+            onClick={onDetachedPreview}
+            tabIndex={VIEWER_CHROME_TAB_INDEX}
+            type="button"
+            {...iconActionAttrs(t("preview.infiniteCanvas"))}
+          >
+            <Icon name="panel-right" size={14} />
           </button>
         )}
       </div>
