@@ -126,6 +126,7 @@ export const zhCN = {
     retry: "重试",
     refresh: "刷新",
     back: "返回",
+    next: "下一步",
     apply: "应用",
     skip: "跳过",
     unknownTime: "未知时间",
@@ -250,6 +251,7 @@ export const zhCN = {
     rootFolder: "资源库根目录",
     trash: "回收站",
     tagManagement: "标签管理",
+    extensions: "拓展",
     back: "后退",
     forward: "前进",
     libraryPrefix: "资源库 >",
@@ -299,7 +301,8 @@ export const zhCN = {
     linkedFolderHint: "右键编辑规则；Shift+右键转换为托管。可拖入所选托管资产。",
     importLinkedFolder: "导入链接文件夹",
     newFolder: "新建文件夹",
-    tagManagement: "标签管理"
+    tagManagement: "标签管理",
+    extensions: "拓展"
   },
   tagMgmt: {
     title: "标签管理",
@@ -1274,6 +1277,9 @@ export const zhCN = {
     pluginAutoUpdateHint: "设置刷新时自动下载所有 GitHub 拓展的兼容更新。默认关闭。",
     pluginAutoUpdateRisk: "开启后将从 GitHub 下载并替换本机拓展代码，可能引入恶意或不兼容变更；新版本可能提升权限、改为非受限模式或附带原生模块。网络与 GitHub 可用性会影响更新，失败时保留当前版本。权限或运行模式变更时仍会要求确认，不会静默启用。确定开启自动更新？",
     pluginEnable: "启用拓展",
+    pluginEnableDialogTitle: "启用拓展",
+    pluginEnableDialogCancel: "取消",
+    pluginEnableDialogConfirm: "确定启用",
     pluginEnableRisk: "启用“{plugin}”？它将以{runtime}运行，并申请以下权限：{permissions}。启用后拓展代码可以执行这些能力；如果来源或权限无法确认，请取消。确定启用？",
     pluginSourceLocalPackage: "本地 ZIP 拓展包",
     pluginSourceLocalDirectory: "本地文件夹",
@@ -1677,6 +1683,7 @@ export const zhCN = {
     infiniteCanvasTutorialStep2: "当前资产会在独立小窗中打开，主界面保持可见，可以继续浏览。",
     infiniteCanvasTutorialStep3: "关闭小窗时主界面不会自动弹回前台；默认悬浮预览不受影响。",
     infiniteCanvasTutorialStart: "开始使用",
+    infiniteCanvasTutorialProgress: "第 {current} / {total} 步",
     floatPreviewFailed: "无法打开悬浮预览，请重试。",
     pbrBaseColorTitle: "PBR 通道：基础色",
     pbrNormalTitle: "PBR 通道：法线",

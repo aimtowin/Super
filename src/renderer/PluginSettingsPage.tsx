@@ -150,6 +150,9 @@ export function PluginSettingsPage({
   const [serverCatalogOpen, setServerCatalogOpen] = useState(false);
   const [serverCatalog, setServerCatalog] = useState<ExtensionCatalogEntry[] | undefined>();
   const [serverCatalogLoading, setServerCatalogLoading] = useState(false);
+  const [pendingEnable, setPendingEnable] = useState<PluginManagerPackageSummary | undefined>();
+  const [extensionTutorialOpen, setExtensionTutorialOpen] = useState(false);
+  const [extensionTutorialStep, setExtensionTutorialStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -261,16 +264,8 @@ export function PluginSettingsPage({
       return;
     }
     if (pluginPackage.scope === 'library' && pluginPackage.trust !== 'trusted') {
-      if (!globalThis.confirm(pluginEnableRiskMessage(pluginPackage, t))) return;
-      const trustSaved = await execute({
-        type: 'plugin-manager.trust',
-        scope: 'library',
-        libraryId,
-        pluginId: pluginPackage.pluginId,
-        packageHash: pluginPackage.packageHash,
-        decision: 'trusted',
-      });
-      if (!trustSaved) return;
+      setPendingEnable(pluginPackage);
+      return;
     }
     await execute({
       type: 'plugin-manager.resolve',
@@ -280,7 +275,40 @@ export function PluginSettingsPage({
       packageHash: pluginPackage.packageHash,
       ...(pluginPackage.scope === 'user' ? { propagateUserScoped: true } : {}),
     });
-  }, [execute, libraryId, t]);
+  }, [execute, libraryId]);
+
+  const confirmEnablePackage = useCallback(async (): Promise<void> => {
+    const pluginPackage = pendingEnable;
+    setPendingEnable(undefined);
+    if (pluginPackage === undefined || libraryId === undefined) return;
+    const trustSaved = await execute({
+      type: 'plugin-manager.trust',
+      scope: 'library',
+      libraryId,
+      pluginId: pluginPackage.pluginId,
+      packageHash: pluginPackage.packageHash,
+      decision: 'trusted',
+    });
+    if (!trustSaved) return;
+    await execute({
+      type: 'plugin-manager.resolve',
+      libraryId,
+      pluginId: pluginPackage.pluginId,
+      selection: pluginPackage.scope === 'user' ? 'use-global' : 'use-library',
+      packageHash: pluginPackage.packageHash,
+      ...(pluginPackage.scope === 'user' ? { propagateUserScoped: true } : {}),
+    });
+  }, [execute, libraryId, pendingEnable]);
+
+  const finishExtensionTutorial = useCallback((): void => {
+    try {
+      globalThis.localStorage.setItem('superApi.infinite-canvas.tutorial.v1', 'done');
+    } catch {
+      // Storage failures only make the tutorial repeat; never block the user.
+    }
+    setExtensionTutorialOpen(false);
+    setExtensionTutorialStep(0);
+  }, []);
 
   const openInstallDialog = useCallback(() => {
     setGithubRepository('');
@@ -361,6 +389,10 @@ export function PluginSettingsPage({
       setServerCatalogOpen(false);
       setServerCatalog(undefined);
       setInstallOpen(false);
+      if (pluginId === 'com.super.infinite-canvas') {
+        setExtensionTutorialStep(0);
+        setExtensionTutorialOpen(true);
+      }
     } catch {
       setInstallError(t('settings.pluginOperationFailed', { code: 'bridge-unavailable' }));
     } finally {
@@ -741,7 +773,7 @@ export function PluginSettingsPage({
             <span>{t('settings.pluginsHint')}</span>
           </div>
           <button
-            className="secondary-button"
+            className="secondary-button plugin-settings-install-button"
             disabled={busy || api === undefined}
             onClick={openInstallDialog}
             type="button"
@@ -856,7 +888,7 @@ export function PluginSettingsPage({
                         && item.version === entry.version
                         && item.status === 'valid');
                       return (
-                        <div className="plugin-install-choice" key={entry.id}>
+                        <div className="plugin-install-choice plugin-server-choice" key={entry.id}>
                           <span className="plugin-install-choice-icon"><Icon name="download" size={22} /></span>
                           <span className="plugin-install-choice-copy">
                             <strong>{entry.name}</strong>
@@ -995,6 +1027,77 @@ export function PluginSettingsPage({
           </DialogShell>
         </div>
       ) : null}
+      {extensionTutorialOpen ? (
+        <div className="dialog-backdrop" role="presentation">
+          <DialogShell
+            className="create-dialog"
+            dialogId="infinite-canvas-install-tutorial"
+            footer={(
+              <>
+                {extensionTutorialStep > 0 ? (
+                  <button
+                    className="secondary-button"
+                    onClick={() => setExtensionTutorialStep((step) => Math.max(0, step - 1))}
+                    type="button"
+                  >
+                    {t('common.back')}
+                  </button>
+                ) : null}
+                {extensionTutorialStep < 2 ? (
+                  <button
+                    className="primary-button"
+                    onClick={() => setExtensionTutorialStep((step) => Math.min(2, step + 1))}
+                    type="button"
+                  >
+                    {t('common.next')}
+                  </button>
+                ) : (
+                  <button className="primary-button" onClick={finishExtensionTutorial} type="button">
+                    {t('preview.infiniteCanvasTutorialStart')}
+                  </button>
+                )}
+              </>
+            )}
+            title={t('preview.infiniteCanvasTutorialTitle')}
+          >
+            <p className="app-settings-hint">{t('preview.infiniteCanvasTutorialIntro')}</p>
+            <p className="app-settings-hint">
+              {t('preview.infiniteCanvasTutorialProgress', {
+                current: extensionTutorialStep + 1,
+                total: 3,
+              })}
+            </p>
+            <p className="infinite-canvas-tutorial-step">
+              {t([
+                'preview.infiniteCanvasTutorialStep1',
+                'preview.infiniteCanvasTutorialStep2',
+                'preview.infiniteCanvasTutorialStep3',
+              ][extensionTutorialStep] as 'preview.infiniteCanvasTutorialStep1')}
+            </p>
+          </DialogShell>
+        </div>
+      ) : null}
+      {pendingEnable === undefined ? null : (
+        <div className="dialog-backdrop" role="presentation">
+          <DialogShell
+            className="create-dialog"
+            dialogId="plugin-enable-confirm"
+            footer={(
+              <>
+                <button className="secondary-button" onClick={() => setPendingEnable(undefined)} type="button">
+                  {t('settings.pluginEnableDialogCancel')}
+                </button>
+                <button className="primary-button" onClick={() => void confirmEnablePackage()} type="button">
+                  {t('settings.pluginEnableDialogConfirm')}
+                </button>
+              </>
+            )}
+            title={t('settings.pluginEnableDialogTitle')}
+          >
+            <p className="app-settings-hint">{pluginEnableRiskMessage(pendingEnable, t)}</p>
+          </DialogShell>
+        </div>
+      )}
     </div>
   );
 }

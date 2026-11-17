@@ -74,6 +74,78 @@ async function mainWindowState(application: Awaited<ReturnType<typeof electron.l
   });
 }
 
+test('the extensions entry installs from the server and starts the guide immediately', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'super-extension-install-ui-e2e-'));
+  const catalog = await startCatalogServer();
+  let application: Awaited<ReturnType<typeof electron.launch>> | undefined;
+  try {
+    application = await electron.launch({
+      executablePath: resolveElectronExecutablePath(),
+      args: [process.cwd()],
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        SUPER_E2E: '1',
+        SUPER_E2E_USER_DATA_PATH: path.join(root, 'profile'),
+        SUPER_E2E_CREATE_PARENT_PATH: root,
+        SUPER_PLUGIN_CATALOG_URL: catalog.url,
+        SUPER_DISABLE_AUTOMATIC_UPDATES: '1',
+      },
+    });
+    const window = await application.firstWindow();
+    await window.getByRole('button', { name: '跳过引导', exact: true }).click();
+    await window.getByRole('button', { name: '创建资源库' }).click();
+    await window.getByRole('textbox', { name: '名称' }).fill('Extension install UI');
+    await window.getByRole('button', { name: '创建', exact: true }).click();
+    await expect(window.getByRole('heading', { name: '导入资产以开始整理' })).toBeVisible();
+
+    const expandSidebar = window.getByRole('button', { name: '展开导航', exact: true });
+    if (await expandSidebar.isVisible()) await expandSidebar.click();
+    const sidebarEntry = window.getByRole('button', { name: '拓展', exact: true });
+    await expect(sidebarEntry).toBeVisible();
+    await sidebarEntry.click();
+    const settings = window.getByRole('dialog', { name: '通用设置' });
+    await expect(settings).toBeVisible();
+    await settings.getByRole('tab', { name: '拓展', exact: true }).click();
+    await application.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(900, 760);
+    });
+    await window.waitForTimeout(200);
+    const installBox = await settings.getByRole('button', { name: '安装拓展', exact: true }).boundingBox();
+    expect(installBox).not.toBeNull();
+    expect(installBox!.height).toBeLessThan(40);
+    await settings.getByRole('button', { name: '安装拓展', exact: true }).click();
+    const installDialog = window.getByRole('dialog', { name: '安装拓展' });
+    await expect(installDialog).toBeVisible();
+    await installDialog.locator('.plugin-install-choice').click();
+    await expect(window.getByText('无限画布', { exact: true })).toBeVisible({ timeout: 15_000 });
+    const serverInstallBox = await window.locator('.plugin-server-choice .primary-button').boundingBox();
+    expect(serverInstallBox).not.toBeNull();
+    expect(serverInstallBox!.height).toBeLessThan(40);
+    expect(serverInstallBox!.width).toBeGreaterThan(40);
+    await window.locator('.plugin-server-choice .primary-button').click();
+
+    const installTutorial = window.getByRole('dialog', { name: '无限画布已就绪' });
+    await expect(installTutorial).toBeVisible({ timeout: 15_000 });
+    await installTutorial.getByRole('button', { name: '下一步' }).click();
+    await installTutorial.getByRole('button', { name: '下一步' }).click();
+    await installTutorial.getByRole('button', { name: '开始使用' }).click();
+    await expect(installTutorial).toBeHidden();
+
+    const packageCard = settings.locator('.plugin-settings-package').filter({ hasText: '无限画布' });
+    await expect(packageCard).toBeVisible({ timeout: 15_000 });
+    await packageCard.locator('.plugin-settings-enable-toggle').click();
+    const enableDialog = window.getByRole('dialog', { name: '启用拓展' });
+    await expect(enableDialog).toBeVisible();
+    await enableDialog.getByRole('button', { name: '确定启用' }).click();
+    await expect(enableDialog).toBeHidden();
+  } finally {
+    catalog.server.close();
+    await application?.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('server-installed infinite canvas opens a detached preview and teaches it once', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'super-infinite-canvas-e2e-'));
   const source = path.join(root, 'infinite-canvas.png');

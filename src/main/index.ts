@@ -427,6 +427,7 @@ let floatingPreviewState: FloatingPreviewState | undefined;
 const detachedFloatingPreviews = new Map<number, {
   window: BrowserWindow;
   state: FloatingPreviewState;
+  assetKey: string;
 }>();
 /** Effective UI locale for native dialogs; synced from Renderer (Super-bwb). */
 let appLocale: AppLocale = "en";
@@ -1251,6 +1252,22 @@ async function openFloatingPreview(input: {
   assetId: string;
   detached?: boolean;
 }): Promise<RendererResult> {
+  const detached = input.detached === true;
+  const detachedAssetKey = `${input.libraryId}\u0000${input.assetId}`;
+  if (detached) {
+    const existing = [...detachedFloatingPreviews.values()].find(
+      (entry) => entry.assetKey === detachedAssetKey && !entry.window.isDestroyed(),
+    );
+    if (existing !== undefined) {
+      existing.window.show();
+      existing.window.focus();
+      return {
+        ok: true,
+        type: "asset.preview.floating-opened",
+        assetId: input.assetId,
+      } satisfies RendererResult;
+    }
+  }
   const client = workerClient;
   if (!client) {
     return { ok: false, error: createPublicError("INTERNAL_ERROR") } satisfies RendererResult;
@@ -1294,7 +1311,6 @@ async function openFloatingPreview(input: {
     return { ok: false, error: createPublicError("ASSET_NOT_FOUND") } satisfies RendererResult;
   }
 
-  const detached = input.detached === true;
   // Closing an existing default monitor is intentionally silent: it must not
   // restore the main window while a replacement monitor is being opened.
   // Detached extension monitors are independent and may coexist.
@@ -1344,7 +1360,11 @@ async function openFloatingPreview(input: {
   });
   const previewWebContentsId = window.webContents.id;
   if (detached) {
-    detachedFloatingPreviews.set(previewWebContentsId, { window, state });
+    detachedFloatingPreviews.set(previewWebContentsId, {
+      window,
+      state,
+      assetKey: detachedAssetKey,
+    });
   } else {
     floatingPreviewWindow = window;
     floatingPreviewState = state;

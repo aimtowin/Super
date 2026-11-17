@@ -8025,6 +8025,24 @@ select.ai-config-input.ai-config-languages {
   transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
 }
 
+.plugin-server-choice {
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+}
+
+.plugin-server-choice > .primary-button,
+.plugin-settings-install-button {
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.infinite-canvas-tutorial-step {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: calc(13px * var(--app-font-scale));
+  line-height: 1.6;
+}
+
 .plugin-install-choice:hover:not(:disabled) {
   border-color: var(--accent);
   background: var(--raised-2);

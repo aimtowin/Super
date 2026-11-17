@@ -92,6 +92,14 @@ test('detached preview keeps the main viewport and default preview restores it',
       if (!result.ok) throw new Error(JSON.stringify(result.error));
     }, assetId);
     await expect.poll(async () => (await mainWindowState(application!)).count).toBe(2);
+    // The same asset must not be opened twice as duplicate detached monitors.
+    await window.evaluate(async ({ libraryId, assetId }) => {
+      const api = (globalThis as typeof globalThis & { super: { library: SuperLibraryApi } }).super.library;
+      const result = await api.openDetachedPreview({ libraryId, assetId });
+      if (!result.ok) throw new Error(JSON.stringify(result.error));
+    }, assetId);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect((await mainWindowState(application)).count).toBe(2);
     let mainState = await mainWindowState(application);
     expect(mainState.visible).toBe(true);
     expect(mainState.minimized).toBe(false);

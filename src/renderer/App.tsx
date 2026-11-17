@@ -10419,6 +10419,10 @@ function AppInner() {
           );
         }}
         onEnterTagManagement={() => void enterTagManagement()}
+        onOpenExtensions={() => {
+          setAppSettingsCategory("plugins");
+          setAppSettingsOpen(true);
+        }}
         onChoosePluginSidebarView={(viewId) => void enterPluginSidebarView(viewId)}
         onChooseFolder={(folderId) => void chooseFolder(folderId)}
         onResetFolderCreateParent={() => setSidebarFolderScope("root")}

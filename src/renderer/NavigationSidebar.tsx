@@ -620,6 +620,7 @@ export interface NavigationSidebarProps {
   onEnterTrash: () => void;
   onTrashContextMenu?: (event: React.MouseEvent) => void;
   onEnterTagManagement: () => void;
+  onOpenExtensions?: () => void;
   onChoosePluginSidebarView?: (viewId: string) => void;
   onChooseFolder: (folderId: string) => void;
   onResetFolderCreateParent: () => void;
@@ -766,6 +767,7 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
     onEnterTrash,
     onTrashContextMenu,
     onEnterTagManagement,
+    onOpenExtensions,
     onChoosePluginSidebarView,
     onChooseFolder,
     onResetFolderCreateParent,
@@ -1624,6 +1626,12 @@ export function NavigationSidebar(props: NavigationSidebarProps) {
           icon="tag"
           label={t("nav.tagManagement")}
           onClick={() => onEnterTagManagement()}
+        />
+        <NavRow
+          disabled={onOpenExtensions === undefined}
+          icon="box"
+          label={t("nav.extensions")}
+          onClick={() => onOpenExtensions?.()}
         />
         {pluginSidebarViews.map((view) => (
           <NavRow
