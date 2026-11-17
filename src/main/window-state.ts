@@ -28,6 +28,7 @@ export interface DisplayWorkArea {
 export interface StoredWindowPlacement {
   bounds: WindowBounds;
   maximized: boolean;
+  fullscreen: boolean;
 }
 
 export interface WindowPlacementSource {
@@ -49,6 +50,7 @@ const windowStateSchema = z.strictObject({
   rememberWindowState: z.boolean(),
   bounds: boundsSchema.optional(),
   maximized: z.boolean().optional(),
+  fullscreen: z.boolean().optional(),
 });
 
 type WindowStateSnapshot = z.infer<typeof windowStateSchema>;
@@ -136,16 +138,18 @@ export class WindowStateStore {
     return {
       bounds,
       maximized: this.#state.maximized === true,
+      fullscreen: this.#state.fullscreen === true,
     };
   }
 
   /**
-   * Record the normal (pre-maximize) bounds so toggling maximize later still
-   * has a useful restore target. Minimized/fullscreen states are not written:
-   * they are transient presentation states, not the user's chosen placement.
+   * Record the normal (pre-maximize/fullscreen) bounds so toggling either
+   * presentation state later still has a useful restore target. Minimized is
+   * transient and is not written; fullscreen IS remembered now because users
+   * expect a fullscreen window to reopen fullscreen.
    */
   recordPlacement(window: WindowPlacementSource): boolean {
-    if (window.isMinimized() || window.isFullScreen()) return false;
+    if (window.isMinimized()) return false;
     const bounds = window.getNormalBounds();
     if (!validBounds(bounds)) return false;
     this.#state = {
@@ -158,6 +162,7 @@ export class WindowStateStore {
         height: Math.round(bounds.height),
       },
       maximized: window.isMaximized(),
+      fullscreen: window.isFullScreen(),
     };
     return this.#persist();
   }

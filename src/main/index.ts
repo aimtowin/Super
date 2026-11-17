@@ -1404,6 +1404,8 @@ async function createMainWindow(): Promise<void> {
   const initialBounds = isolatedPlacement ?? restoredPlacement?.bounds;
   const restoreMaximized = isolatedPlacement === undefined
     && restoredPlacement?.maximized === true;
+  const restoreFullscreen = isolatedPlacement === undefined
+    && restoredPlacement?.fullscreen === true;
 
   const devIcon = appIconImage();
   // Super-tluf: the macOS dock otherwise shows the default Electron icon
@@ -1447,7 +1449,8 @@ async function createMainWindow(): Promise<void> {
   // started from Vite; idle windows produce no log entries.
   attachRendererDiagnostics(window);
   window.once("ready-to-show", () => {
-    if (restoreMaximized) window.maximize();
+    if (restoreFullscreen) window.setFullScreen(true);
+    else if (restoreMaximized) window.maximize();
     window.show();
   });
   window.on("minimize", () => pauseBackgroundWorkForHiddenWindow());

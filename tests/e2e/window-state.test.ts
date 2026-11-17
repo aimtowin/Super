@@ -65,6 +65,7 @@ async function setBounds(
   return application.evaluate(async ({ BrowserWindow }, next: WindowBounds) => {
     const window = BrowserWindow.getAllWindows()[0];
     if (!window) throw new Error("Main window is missing.");
+    if (window.isFullScreen()) window.setFullScreen(false);
     if (window.isMaximized()) window.unmaximize();
     await new Promise((resolve) => setTimeout(resolve, 150));
     window.setBounds(next);
@@ -87,11 +88,16 @@ async function closeApplication(
 async function readWindowState(application: ElectronApplication): Promise<{
   bounds: WindowBounds;
   maximized: boolean;
+  fullscreen: boolean;
 }> {
   return application.evaluate(({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows()[0];
     if (!window) throw new Error("Main window is missing.");
-    return { bounds: window.getBounds(), maximized: window.isMaximized() };
+    return {
+      bounds: window.getBounds(),
+      maximized: window.isMaximized(),
+      fullscreen: window.isFullScreen(),
+    };
   });
 }
 
@@ -116,6 +122,7 @@ test("restores the last window placement and honors the opt-out", async () => {
     window = await application.firstWindow();
     const restored = await readWindowState(application);
     expect(restored.maximized).toBe(false);
+    expect(restored.fullscreen).toBe(false);
     expect(restored.bounds.width).toBe(1200);
     expect(restored.bounds.height).toBe(800);
     expect(Math.abs(restored.bounds.x - 120)).toBeLessThanOrEqual(2);
@@ -132,9 +139,62 @@ test("restores the last window placement and honors the opt-out", async () => {
       ({ screen }) => screen.getPrimaryDisplay().workAreaSize,
     );
     expect(defaultPlacement.maximized).toBe(false);
+    expect(defaultPlacement.fullscreen).toBe(false);
     expect(defaultPlacement.bounds.width).toBe(Math.min(1440, workArea.width));
     expect(defaultPlacement.bounds.height).toBe(Math.min(900, workArea.height));
     expect(await preferences(window)).toEqual({ rememberWindowState: false });
+  } finally {
+    if (application !== undefined) await application.close().catch(() => undefined);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("restores a maximized window after restart", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "super-window-maximized-e2e-"));
+  const profile = path.join(root, "profile");
+  mkdirSync(profile);
+
+  let application: ElectronApplication | undefined;
+  try {
+    application = await launch(profile);
+    let window = await application.firstWindow();
+    await dismissQuickStart(window);
+    await application.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.maximize();
+    });
+    await expect.poll(async () => (await readWindowState(application!)).maximized).toBe(true);
+    await closeApplication(application, window);
+
+    application = await launch(profile);
+    window = await application.firstWindow();
+    await expect.poll(async () => (await readWindowState(application!)).maximized).toBe(true);
+    expect((await readWindowState(application)).fullscreen).toBe(false);
+  } finally {
+    if (application !== undefined) await application.close().catch(() => undefined);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("restores a main-window fullscreen placement after restart", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "super-window-fullscreen-e2e-"));
+  const profile = path.join(root, "profile");
+  mkdirSync(profile);
+
+  let application: ElectronApplication | undefined;
+  try {
+    application = await launch(profile);
+    let window = await application.firstWindow();
+    await dismissQuickStart(window);
+    await application.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setFullScreen(true);
+    });
+    await expect.poll(async () => (await readWindowState(application!)).fullscreen).toBe(true);
+    await closeApplication(application, window);
+
+    application = await launch(profile);
+    window = await application.firstWindow();
+    await expect.poll(async () => (await readWindowState(application!)).fullscreen).toBe(true);
+    expect((await readWindowState(application)).maximized).toBe(false);
   } finally {
     if (application !== undefined) await application.close().catch(() => undefined);
     rmSync(root, { recursive: true, force: true });

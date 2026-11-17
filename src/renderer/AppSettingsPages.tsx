@@ -340,9 +340,9 @@ export function AppearanceSettingsPage(): ReactNode {
         <div className="app-settings-elevation-rail">
           <Slider
             aria-label={t("settings.appFontSizeSection")}
-            aria-valuetext={t(`settings.appFontSizeLevel${fontSizeLevel}` as const)}
+            valueText={t(`settings.appFontSizeLevel${fontSizeLevel}` as const)}
             className="app-settings-elevation-slider"
-            max={4}
+            max={6}
             min={1}
             onValueChange={(value) =>
               setFontSizeLevel(clampAppFontSizeLevel(value))

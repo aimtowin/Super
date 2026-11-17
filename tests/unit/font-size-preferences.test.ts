@@ -24,31 +24,34 @@ function memoryStorage(options?: { throwOnWrite?: boolean }) {
 }
 
 describe('application font-size preferences', () => {
-  it('defines four stable app-only levels with level two as the default', () => {
-    expect(DEFAULT_APP_FONT_SIZE_LEVEL).toBe(2);
+  it('defines six stable app-only levels with level four as the default', () => {
+    expect(DEFAULT_APP_FONT_SIZE_LEVEL).toBe(4);
     expect([
       appFontScaleForLevel(1),
       appFontScaleForLevel(2),
       appFontScaleForLevel(3),
       appFontScaleForLevel(4),
-    ]).toEqual([0.9, 1, 1.1, 1.2]);
-    expect(clampAppFontSizeLevel(0)).toBe(2);
+      appFontScaleForLevel(5),
+      appFontScaleForLevel(6),
+    ]).toEqual([0.9, 1, 1.1, 1.2, 1.3, 1.4]);
+    expect(clampAppFontSizeLevel(0)).toBe(4);
     expect(clampAppFontSizeLevel(2.6)).toBe(3);
-    expect(clampAppFontSizeLevel(5)).toBe(2);
+    expect(clampAppFontSizeLevel(5)).toBe(5);
+    expect(clampAppFontSizeLevel(9)).toBe(4);
   });
 
   it('persists the level independently from system or browser preferences', () => {
     const storage = memoryStorage();
-    expect(loadAppFontSizePreferences(storage)).toEqual({ version: 1, level: 2 });
-    expect(saveAppFontSizeLevel(4, storage)).toBe(true);
-    expect(storage.memory.get(APP_FONT_SIZE_PREFERENCES_KEY)).toBe('{"version":1,"level":4}');
     expect(loadAppFontSizePreferences(storage)).toEqual({ version: 1, level: 4 });
+    expect(saveAppFontSizeLevel(6, storage)).toBe(true);
+    expect(storage.memory.get(APP_FONT_SIZE_PREFERENCES_KEY)).toBe('{"version":1,"level":6}');
+    expect(loadAppFontSizePreferences(storage)).toEqual({ version: 1, level: 6 });
   });
 
   it('rejects invalid records and treats storage failures as non-fatal', () => {
     const storage = memoryStorage();
     storage.memory.set(APP_FONT_SIZE_PREFERENCES_KEY, '{"version":1,"level":9}');
-    expect(loadAppFontSizePreferences(storage)).toEqual({ version: 1, level: 2 });
+    expect(loadAppFontSizePreferences(storage)).toEqual({ version: 1, level: 4 });
     expect(saveAppFontSizeLevel(3, memoryStorage({ throwOnWrite: true }))).toBe(false);
   });
 
@@ -64,8 +67,8 @@ describe('application font-size preferences', () => {
     } as unknown as Document;
 
     try {
-      applyAppFontSizeLevel(4);
-      expect(values).toEqual(new Map([['--app-font-scale', '1.2']]));
+      applyAppFontSizeLevel(6);
+      expect(values).toEqual(new Map([['--app-font-scale', '1.4']]));
     } finally {
       if (previous === undefined) delete (globalThis as { document?: Document }).document;
       else (globalThis as { document?: Document }).document = previous;

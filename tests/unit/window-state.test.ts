@@ -50,10 +50,10 @@ describe("window state store", () => {
     const store = new WindowStateStore(directory);
     const bounds = { x: 120, y: 80, width: 1200, height: 800 };
     expect(store.recordPlacement(windowStub(bounds))).toBe(true);
-    expect(store.readPlacement(displays)).toEqual({ bounds, maximized: false });
+    expect(store.readPlacement(displays)).toEqual({ bounds, maximized: false, fullscreen: false });
 
     const reloaded = new WindowStateStore(directory);
-    expect(reloaded.readPlacement(displays)).toEqual({ bounds, maximized: false });
+    expect(reloaded.readPlacement(displays)).toEqual({ bounds, maximized: false, fullscreen: false });
     expect(JSON.parse(readFileSync(reloaded.filePath, "utf8"))).toMatchObject({
       version: 1,
       rememberWindowState: true,
@@ -66,7 +66,26 @@ describe("window state store", () => {
     const store = new WindowStateStore(temporaryDirectory());
     const bounds = { x: 40, y: 20, width: 1200, height: 800 };
     store.recordPlacement(windowStub(bounds, { maximized: true }));
-    expect(store.readPlacement(displays)).toEqual({ bounds, maximized: true });
+    expect(store.readPlacement(displays)).toEqual({ bounds, maximized: true, fullscreen: false });
+  });
+
+  it("persists the fullscreen flag with normal bounds", () => {
+    const directory = temporaryDirectory();
+    const store = new WindowStateStore(directory);
+    const bounds = { x: 40, y: 20, width: 1200, height: 800 };
+    expect(store.recordPlacement(windowStub(bounds, { fullScreen: true }))).toBe(true);
+    expect(store.readPlacement(displays)).toEqual({
+      bounds,
+      maximized: false,
+      fullscreen: true,
+    });
+
+    const reloaded = new WindowStateStore(directory);
+    expect(reloaded.readPlacement(displays)).toEqual({
+      bounds,
+      maximized: false,
+      fullscreen: true,
+    });
   });
 
   it("disables restore but keeps the preference across reloads", () => {
@@ -83,6 +102,7 @@ describe("window state store", () => {
     expect(reloaded.readPlacement(displays)).toEqual({
       bounds: { x: 10, y: 10, width: 1200, height: 800 },
       maximized: false,
+      fullscreen: false,
     });
   });
 
@@ -98,16 +118,20 @@ describe("window state store", () => {
     expect(store.readPlacement(displays)).toEqual({
       bounds: { x: 10, y: 10, width: 1040, height: 680 },
       maximized: false,
+      fullscreen: false,
     });
   });
 
-  it("ignores minimized and fullscreen states instead of overwriting placement", () => {
+  it("ignores the minimized state while keeping the last placement", () => {
     const store = new WindowStateStore(temporaryDirectory());
     const normal = { x: 10, y: 10, width: 1200, height: 800 };
     store.recordPlacement(windowStub(normal));
     expect(store.recordPlacement(windowStub(normal, { minimized: true }))).toBe(false);
-    expect(store.recordPlacement(windowStub(normal, { fullScreen: true }))).toBe(false);
-    expect(store.readPlacement(displays)).toEqual({ bounds: normal, maximized: false });
+    expect(store.readPlacement(displays)).toEqual({
+      bounds: normal,
+      maximized: false,
+      fullscreen: false,
+    });
   });
 
   it("falls back to defaults for a corrupt state file", () => {

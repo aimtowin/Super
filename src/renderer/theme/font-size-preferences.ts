@@ -2,11 +2,11 @@ import { z } from 'zod';
 
 import type { ThemePreferencesStorage } from './theme-preferences';
 
-export const APP_FONT_SIZE_LEVELS = [1, 2, 3, 4] as const;
+export const APP_FONT_SIZE_LEVELS = [1, 2, 3, 4, 5, 6] as const;
 export type AppFontSizeLevel = (typeof APP_FONT_SIZE_LEVELS)[number];
 
 export const APP_FONT_SIZE_PREFERENCES_KEY = 'superApi.font-size.v1';
-export const DEFAULT_APP_FONT_SIZE_LEVEL: AppFontSizeLevel = 2;
+export const DEFAULT_APP_FONT_SIZE_LEVEL: AppFontSizeLevel = 4;
 
 const appFontSizePreferencesSchema = z.object({
   version: z.literal(1),
@@ -15,6 +15,8 @@ const appFontSizePreferencesSchema = z.object({
     z.literal(2),
     z.literal(3),
     z.literal(4),
+    z.literal(5),
+    z.literal(6),
   ]),
 });
 
@@ -25,6 +27,8 @@ const SCALE_BY_LEVEL: Readonly<Record<AppFontSizeLevel, number>> = {
   2: 1,
   3: 1.1,
   4: 1.2,
+  5: 1.3,
+  6: 1.4,
 };
 
 export function clampAppFontSizeLevel(value: number): AppFontSizeLevel {
