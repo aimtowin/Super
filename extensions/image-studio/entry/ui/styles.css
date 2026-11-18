@@ -199,6 +199,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .stage-loading { align-items: center; color: var(--secondary); display: flex; flex-direction: column; gap: 12px; inset: 0; justify-content: center; position: absolute; }
 .loader-ring { border: 2px solid color-mix(in srgb, var(--accent) 22%, transparent); border-radius: 999px; border-top-color: var(--accent); height: 30px; width: 30px; animation: spin .9s linear infinite; }
 .stage-loading p { font-size: 11px; margin: 0; }
+.stage-loading small { color: var(--tertiary); font-size: 10px; }
+.stage-download { align-content: center; display: grid; gap: 9px; min-height: 230px; padding: 24px; }
+.stage-download-head { align-items: center; display: flex; justify-content: space-between; gap: 12px; }
+.stage-download-head strong { color: var(--text); font-size: 12px; }
+.stage-download-percent { color: var(--accent); font-size: 12px; font-variant-numeric: tabular-nums; }
+.stage-download-bar { background: color-mix(in srgb, var(--bg) 60%, var(--raised)); border-radius: 999px; height: 6px; overflow: hidden; }
+.stage-download-bar span { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 75%, white 5%), var(--accent)); border-radius: inherit; display: block; height: 100%; transition: width 180ms ease; width: 0; }
+.stage-download-bytes { color: var(--tertiary); font-size: 10px; font-variant-numeric: tabular-nums; }
+.stage-card.is-download-failed .stage-download { color: var(--danger); }
+.stage-card.is-download-failed .stage-download strong { color: var(--danger); }
+.stage-card.is-download-failed .stage-download span { color: var(--secondary); font-size: 10px; line-height: 1.5; }
 .stage-error { align-items: center; color: var(--danger); display: flex; flex-direction: column; gap: 8px; inset: 0; justify-content: center; padding: 28px; position: absolute; text-align: center; }
 .stage-error strong { font-size: 14px; }
 .stage-error p { color: var(--secondary); font-size: 11px; line-height: 1.6; margin: 0; max-width: 420px; }

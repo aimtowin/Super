@@ -20,6 +20,7 @@ const state = {
   channel: 'native',
   count: 1,
   history: [],
+  stageBlobUrls: [],
   pending: new Map(),
   commandErrors: new Map(),
 };
@@ -234,16 +235,24 @@ function renderEmptyStage() {
   stage.append(empty);
 }
 
+function clearStageBlobs() {
+  for (const url of state.stageBlobUrls) URL.revokeObjectURL(url);
+  state.stageBlobUrls = [];
+}
+
 function renderLoadingStage() {
+  clearStageBlobs();
   stage.replaceChildren();
   const loading = document.createElement('div');
   loading.className = 'stage-loading';
   loading.innerHTML = '<span class="loader-ring" aria-hidden="true"></span>'
-    + `<p>正在生成 ${state.count} 张素材…</p>`;
+    + `<p>正在等待上游生成 ${state.count} 张素材…</p>`
+    + '<small>通常需要 1–2 分钟；服务器收到图片后会立即进入下载</small>';
   stage.append(loading);
 }
 
 function renderErrorStage(message, detail) {
+  clearStageBlobs();
   stage.replaceChildren();
   const error = document.createElement('div');
   error.className = 'stage-error';
@@ -255,30 +264,126 @@ function renderErrorStage(message, detail) {
   stage.append(error);
 }
 
+function dataUrlToBlob(url) {
+  const comma = url.indexOf(',');
+  if (comma < 0) throw new Error('invalid-data-url');
+  const meta = url.slice(0, comma);
+  const payload = url.slice(comma + 1);
+  const mime = /data:([^;,]+)/u.exec(meta)?.[1] || 'image/png';
+  const binary = atob(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mime });
+}
+
+async function downloadImageBlob(image, onProgress) {
+  if (typeof image.url === 'string' && image.url.startsWith('data:')) {
+    const blob = dataUrlToBlob(image.url);
+    onProgress(blob.size, blob.size);
+    return blob;
+  }
+  const response = await fetch(image.url, {
+    cache: 'no-store',
+    mode: 'cors',
+    credentials: 'omit',
+  });
+  if (!response.ok) throw new Error(`下载失败（HTTP ${response.status}）`);
+  const headerLength = Number(response.headers.get('content-length') || 0);
+  const total = headerLength > 0 ? headerLength : Number(image.bytes || 0);
+  if (response.body === null) {
+    const blob = await response.blob();
+    onProgress(blob.size, blob.size || total);
+    return blob;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value !== undefined) {
+      chunks.push(value);
+      received += value.byteLength;
+      onProgress(received, total);
+    }
+  }
+  const blob = new Blob(chunks, { type: response.headers.get('content-type') || 'image/png' });
+  onProgress(blob.size, blob.size || total);
+  return blob;
+}
+
 function renderStage(record) {
+  clearStageBlobs();
   stage.replaceChildren();
   const grid = document.createElement('div');
   grid.className = `stage-grid${record.images.length === 1 ? ' single' : ''}`;
+  const downloads = [];
   for (const image of record.images) {
     const card = document.createElement('article');
-    card.className = 'stage-card';
+    card.className = 'stage-card is-downloading';
+    const progress = document.createElement('div');
+    progress.className = 'stage-download';
+    progress.innerHTML = '<div class="stage-download-head"><strong>服务器已接收，正在下载</strong><span class="stage-download-percent">0%</span></div>'
+      + '<div class="stage-download-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>'
+      + `<div class="stage-download-bytes">0 B / ${formatBytes(image.bytes)}</div>`;
     const img = document.createElement('img');
-    img.src = image.url;
     img.alt = record.prompt.slice(0, 80);
-    img.loading = 'lazy';
+    img.hidden = true;
     const meta = document.createElement('div');
     meta.className = 'stage-meta';
     const info = document.createElement('span');
     info.textContent = `${record.channel === 'upscale' ? '超分' : '原生'} · ${image.width} × ${image.height} · ${formatBytes(image.bytes)}`;
-    const link = document.createElement('a');
-    link.href = image.downloadUrl;
-    link.download = '';
-    link.textContent = '下载原图';
-    meta.append(info, link);
-    card.append(img, meta);
+    meta.append(info);
+    card.append(progress, img, meta);
     grid.append(card);
+    const percentNode = progress.querySelector('.stage-download-percent');
+    const barNode = progress.querySelector('.stage-download-bar');
+    const barFill = progress.querySelector('.stage-download-bar span');
+    const bytesNode = progress.querySelector('.stage-download-bytes');
+    const task = downloadImageBlob(image, (received, total) => {
+      const percent = total > 0 ? Math.min(100, Math.round((received / total) * 100)) : 0;
+      if (percentNode) percentNode.textContent = `${percent}%`;
+      if (barNode) barNode.setAttribute('aria-valuenow', String(percent));
+      if (barFill) barFill.style.width = `${percent}%`;
+      if (bytesNode) bytesNode.textContent = `${formatBytes(received)} / ${formatBytes(total || image.bytes)}`;
+    }).then((blob) => {
+      const objectUrl = URL.createObjectURL(blob);
+      state.stageBlobUrls.push(objectUrl);
+      img.src = objectUrl;
+      img.hidden = false;
+      card.classList.remove('is-downloading');
+      card.classList.add('is-downloaded');
+      progress.remove();
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `super-image-${record.id}-${record.images.indexOf(image) + 1}.png`;
+      link.textContent = '下载原图';
+      meta.append(link);
+    }).catch((error) => {
+      card.classList.remove('is-downloading');
+      card.classList.add('is-download-failed');
+      progress.replaceChildren();
+      const title = document.createElement('strong');
+      title.textContent = '下载失败';
+      const detail = document.createElement('span');
+      detail.textContent = error instanceof Error ? error.message : '请稍后重试。';
+      progress.append(title, detail);
+    });
+    downloads.push(task);
   }
   stage.append(grid);
+  return Promise.allSettled(downloads).then(() => {
+    const failed = stage.querySelectorAll('.is-download-failed').length;
+    if (failed === 0) {
+      resultStatus.textContent = '下载完成';
+      resultStatus.classList.remove('is-busy');
+      resultStatus.classList.add('is-done');
+    } else {
+      resultStatus.textContent = `${failed} 张下载失败`;
+      resultStatus.classList.remove('is-busy');
+      resultStatus.classList.add('is-error');
+    }
+  });
 }
 
 function renderHistory() {
@@ -324,6 +429,7 @@ function setUnlocked(unlocked) {
     state.password = '';
     passwordInput.value = '';
     state.history = [];
+    clearStageBlobs();
   }
 }
 
@@ -378,11 +484,11 @@ async function generate() {
       throw new Error(error?.message || '生成失败，请稍后重试。');
     }
     state.history = [result.record, ...state.history.filter((entry) => entry.id !== result.record.id)];
-    renderStage(result.record);
     renderHistory();
-    resultStatus.textContent = '生成完成';
-    resultStatus.classList.add('is-done');
-    showToast(`已生成 ${result.record.images.length} 张素材`);
+    resultStatus.classList.remove('is-busy', 'is-error', 'is-done');
+    resultStatus.textContent = '服务器已接收，正在下载…';
+    showToast(`服务器已接收 ${result.record.images.length} 张素材，开始下载`);
+    void renderStage(result.record);
   } catch (error) {
     const message = error instanceof Error ? error.message : '生成失败。';
     renderErrorStage(message);
@@ -488,6 +594,7 @@ function bind() {
   $('refreshHistory').addEventListener('click', () => void refreshHistory());
   window.addEventListener('pagehide', () => {
     state.password = '';
+    clearStageBlobs();
     for (const pending of state.pending.values()) {
       clearTimeout(pending.timer);
       pending.reject(new Error('view-unmounted'));

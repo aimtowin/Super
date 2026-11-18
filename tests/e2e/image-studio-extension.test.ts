@@ -13,7 +13,7 @@ test.describe.configure({ timeout: 180_000 });
 
 const PNG_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nXQAAAAASUVORK5CYII=';
 
-type ExtensionVersion = '1.0.0' | '1.1.0';
+type ExtensionVersion = '1.1.0' | '1.2.0';
 
 async function startMockServices(): Promise<{
   catalog: Server;
@@ -23,19 +23,19 @@ async function startMockServices(): Promise<{
   setCatalogVersion(version: ExtensionVersion): void;
 }> {
   const zips: Record<ExtensionVersion, { bytes: Buffer; sha256: string }> = {
-    '1.0.0': {
-      bytes: readFileSync(path.join(process.cwd(), 'extensions/dist/com.super.image-studio-1.0.0-win32-x64.zip')),
-      sha256: '',
-    },
     '1.1.0': {
       bytes: readFileSync(path.join(process.cwd(), 'extensions/dist/com.super.image-studio-1.1.0-win32-x64.zip')),
+      sha256: '',
+    },
+    '1.2.0': {
+      bytes: readFileSync(path.join(process.cwd(), 'extensions/dist/com.super.image-studio-1.2.0-win32-x64.zip')),
       sha256: '',
     },
   };
   for (const version of Object.keys(zips) as ExtensionVersion[]) {
     zips[version].sha256 = createHash('sha256').update(zips[version].bytes).digest('hex');
   }
-  let activeVersion: ExtensionVersion = '1.0.0';
+  let activeVersion: ExtensionVersion = '1.1.0';
   const proxyRecords: Array<{
     id: string;
     createdAt: string;
@@ -110,7 +110,7 @@ async function startMockServices(): Promise<{
       response.end(JSON.stringify(catalog));
       return;
     }
-    const match = /^\/com\.super\.image-studio-(1\.[01]\.0)-win32-x64\.zip$/u.exec(request.url ?? '');
+    const match = /^\/com\.super\.image-studio-(1\.[12]\.0)-win32-x64\.zip$/u.exec(request.url ?? '');
     if (match) {
       response.writeHead(200, { 'content-type': 'application/octet-stream' });
       response.end(zips[match[1] as ExtensionVersion].bytes);
@@ -140,7 +140,7 @@ async function startMockServices(): Promise<{
   };
 }
 
-test('image studio installs 1.0.0, auto-updates to 1.1.0, unlocks and generates', async () => {
+test('image studio installs 1.1.0, auto-updates to 1.2.0, unlocks and generates', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'super-image-studio-e2e-'));
   const services = await startMockServices();
   let application: Awaited<ReturnType<typeof electron.launch>> | undefined;
@@ -207,9 +207,9 @@ test('image studio installs 1.0.0, auto-updates to 1.1.0, unlocks and generates'
       if (!resolved.ok) throw new Error('Resolve failed');
       return pkg.version;
     }, libraryId);
-    expect(installedVersion).toBe('1.0.0');
+    expect(installedVersion).toBe('1.1.0');
 
-    services.setCatalogVersion('1.1.0');
+    services.setCatalogVersion('1.2.0');
     const expandSidebar = window.getByRole('button', { name: '展开导航', exact: true });
     if (await expandSidebar.isVisible()) await expandSidebar.click();
 
@@ -223,7 +223,7 @@ test('image studio installs 1.0.0, auto-updates to 1.1.0, unlocks and generates'
       const response = await plugins.request({ type: 'plugin-manager.list', libraryId });
       if (!response.ok || !('packages' in response)) return null;
       return response.packages.find((entry) => entry.pluginId === 'com.super.image-studio')?.version ?? null;
-    }, libraryId)).toBe('1.1.0');
+    }, libraryId)).toBe('1.2.0');
     await window.keyboard.press('Escape');
     await expect(settings).toBeHidden();
 
@@ -244,7 +244,7 @@ test('image studio installs 1.0.0, auto-updates to 1.1.0, unlocks and generates'
     await frame.getByRole('button', { name: /超分/ }).click();
     await frame.getByRole('button', { name: '生成素材' }).click();
     await expect(frame.locator('.stage-card img')).toBeVisible({ timeout: 15_000 });
-    await expect(frame.getByText('生成完成')).toBeVisible();
+    await expect(frame.getByText('下载完成')).toBeVisible();
     await expect(frame.locator('.stage-card')).toContainText('超分');
     await expect(frame.locator('.history-card')).toHaveCount(1);
   } finally {

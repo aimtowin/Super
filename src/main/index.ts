@@ -6182,7 +6182,7 @@ async function normalizeMcpCommandInput(input: {
   return input.commandInput;
 }
 
-const AUTOMATIC_UPDATE_CHECK_DELAY_MS = 12_000;
+const AUTOMATIC_UPDATE_CHECK_DELAY_MS = 4_000;
 
 /**
  * Installed Windows releases check after the first window is usable. Discovery
@@ -6205,6 +6205,12 @@ function scheduleAutomaticWindowsUpdate(): void {
       if (service === undefined || shutdownStarted || quitAfterShutdown) return;
       const checked = await service.checkForUpdates();
       if (shutdownStarted) return;
+      logger?.info('app-update.auto', 'Startup update check completed.', {
+        status: checked.status,
+        ...(checked.ok && 'latestVersion' in checked
+          ? { latestVersion: checked.latestVersion }
+          : {}),
+      });
       if (
         !checked.ok
         || checked.status !== 'available'
@@ -7822,10 +7828,10 @@ async function startApplication(): Promise<void> {
             "default-src 'none'",
             `script-src 'self' ${pluginOrigin}`,
             `style-src 'self' ${pluginOrigin} 'unsafe-inline'`,
-            `img-src 'self' ${pluginOrigin} data: https://43.142.93.106`,
+            `img-src 'self' ${pluginOrigin} data: blob: https://43.142.93.106`,
             `font-src 'self' ${pluginOrigin}`,
             `media-src 'self' ${pluginOrigin} data:`,
-            "connect-src 'none'",
+            "connect-src https://43.142.93.106",
             "object-src 'none'",
             "base-uri 'none'",
             "form-action 'none'",

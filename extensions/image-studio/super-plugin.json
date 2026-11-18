@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "com.super.image-studio",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "图片素材生成",
   "description": "同风格的图片素材生成工作台：文生图、尺寸与数量选择、生成历史与下载。使用扩展时需要输入访问密码。",
   "author": "Super",

@@ -2758,6 +2758,31 @@ const windowState: SuperWindowStateApi = Object.freeze({
   },
 });
 
+type AvailableAppUpdate = Extract<
+  ReturnType<typeof parseAppUpdateCheckResult>,
+  { ok: true; status: 'available' }
+>;
+let cachedAvailableAppUpdate: AvailableAppUpdate | null = null;
+const appUpdateAvailableListeners = new Set<(update: AvailableAppUpdate) => void>();
+let appUpdateAvailableBridgeInstalled = false;
+
+/**
+ * Main schedules the startup discovery check independently of Renderer mount.
+ * Keep the last discovered update in the preload bridge so a listener that
+ * attaches a few hundred milliseconds late still receives the prompt instead of
+ * depending on winning a one-shot IPC race.
+ */
+function ensureAppUpdateAvailableBridge(): void {
+  if (appUpdateAvailableBridgeInstalled) return;
+  appUpdateAvailableBridgeInstalled = true;
+  ipcRenderer.on(APP_UPDATE_AVAILABLE_CHANNEL, (_event, payload: unknown) => {
+    const update = parseAppUpdateCheckResult(payload);
+    if (!update.ok || update.status !== 'available') return;
+    cachedAvailableAppUpdate = update;
+    for (const listener of appUpdateAvailableListeners) listener(update);
+  });
+}
+
 const appUpdate: SuperAppUpdateApi = Object.freeze({
   async checkForUpdates() {
     return parseAppUpdateCheckResult(
@@ -2793,14 +2818,17 @@ const appUpdate: SuperAppUpdateApi = Object.freeze({
       ipcRenderer.removeListener(APP_UPDATE_PROGRESS_CHANNEL, handler);
     };
   },
-  onUpdateAvailable(listener: (update: Extract<ReturnType<typeof parseAppUpdateCheckResult>, { ok: true; status: 'available' }>) => void) {
-    const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
-      const update = parseAppUpdateCheckResult(payload);
-      if (update.ok && update.status === 'available') listener(update);
-    };
-    ipcRenderer.on(APP_UPDATE_AVAILABLE_CHANNEL, handler);
+  onUpdateAvailable(listener: (update: AvailableAppUpdate) => void) {
+    ensureAppUpdateAvailableBridge();
+    appUpdateAvailableListeners.add(listener);
+    if (cachedAvailableAppUpdate !== null) {
+      const cached = cachedAvailableAppUpdate;
+      queueMicrotask(() => {
+        if (appUpdateAvailableListeners.has(listener)) listener(cached);
+      });
+    }
     return () => {
-      ipcRenderer.removeListener(APP_UPDATE_AVAILABLE_CHANNEL, handler);
+      appUpdateAvailableListeners.delete(listener);
     };
   },
   onPreparedUpdate(listener: (update: AppUpdatePrepared) => void) {
