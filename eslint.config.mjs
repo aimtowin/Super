@@ -18,6 +18,9 @@ export default tseslint.config(
       'docs/internal/**',
       'dist/**',
       'out/**',
+      // Packaged extension assets are built/tested as plugin bundles, not as
+      // host TypeScript modules; their browser/Node globals differ.
+      'extensions/**',
       'coverage/**',
       'node_modules/**',
       // Emscripten-generated glue (acquired by scripts/build-ufbx-wasm.mjs).

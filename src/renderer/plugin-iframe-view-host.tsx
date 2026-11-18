@@ -380,7 +380,7 @@ export function PluginIframeViewHost({
           announceMounted();
         }}
         ref={frameRef}
-        sandbox="allow-scripts"
+        sandbox="allow-scripts allow-downloads allow-forms"
         src={view.url}
         title={title ?? view.title}
       />

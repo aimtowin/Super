@@ -7822,7 +7822,7 @@ async function startApplication(): Promise<void> {
             "default-src 'none'",
             `script-src 'self' ${pluginOrigin}`,
             `style-src 'self' ${pluginOrigin} 'unsafe-inline'`,
-            `img-src 'self' ${pluginOrigin} data:`,
+            `img-src 'self' ${pluginOrigin} data: https://43.142.93.106`,
             `font-src 'self' ${pluginOrigin}`,
             `media-src 'self' ${pluginOrigin} data:`,
             "connect-src 'none'",

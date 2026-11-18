@@ -1,0 +1,20 @@
+[Unit]
+Description=Super Image Studio proxy
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/super-image-studio
+EnvironmentFile=/opt/super-image-studio/image-studio.env
+ExecStart=/usr/local/bin/node /opt/super-image-studio/server.mjs
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/www/super-updates/image-studio
+
+[Install]
+WantedBy=multi-user.target

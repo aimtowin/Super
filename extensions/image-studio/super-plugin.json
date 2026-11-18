@@ -1,0 +1,53 @@
+{
+  "manifestVersion": 1,
+  "id": "com.super.image-studio",
+  "version": "1.0.0",
+  "name": "图片素材生成",
+  "description": "同风格的图片素材生成工作台：文生图、尺寸与数量选择、生成历史与下载。使用扩展时需要输入访问密码。",
+  "author": "Super",
+  "license": "MIT",
+  "engines": {
+    "super": ">=2.4.8 <3.0.0",
+    "pluginApi": 1
+  },
+  "runtime": {
+    "mode": "unrestricted",
+    "entry": "entry/main.js",
+    "instanceScope": "library"
+  },
+  "permissions": [
+    "ui.workspace",
+    "storage.read",
+    "storage.write",
+    "net.fetch"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "id": "session",
+        "title": "图片素材生成：校验并读取历史"
+      },
+      {
+        "id": "generate",
+        "title": "图片素材生成：生成图片"
+      },
+      {
+        "id": "cleanup",
+        "title": "图片素材生成：清理临时结果"
+      }
+    ],
+    "menus": {},
+    "views": [
+      {
+        "id": "image-studio",
+        "title": "图片素材生成",
+        "location": "sidebar",
+        "entry": "entry/ui/index.html"
+      }
+    ],
+    "settings": [],
+    "hooks": [],
+    "providers": [],
+    "themes": []
+  }
+}

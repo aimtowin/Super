@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>图片素材生成</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <div class="ambient ambient-a" aria-hidden="true"></div>
+      <div class="ambient ambient-b" aria-hidden="true"></div>
+
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <rect x="3.5" y="3.5" width="17" height="17" rx="4.5"></rect>
+              <circle cx="9" cy="9" r="1.6" fill="currentColor" stroke="none"></circle>
+              <path d="m5.5 17 4.2-4.3a1.5 1.5 0 0 1 2.1 0l2.1 2.1 1.7-1.7a1.5 1.5 0 0 1 2.1 0l2.2 2.2"></path>
+            </svg>
+          </span>
+          <div class="brand-copy">
+            <span class="eyebrow">SUPER · IMAGE STUDIO</span>
+            <h1>图片素材生成</h1>
+          </div>
+        </div>
+        <div class="session-chip" id="sessionChip">
+          <span class="session-dot" aria-hidden="true"></span>
+          <span id="sessionLabel">未解锁</span>
+          <button class="text-button" id="lockButton" type="button" hidden>锁定</button>
+        </div>
+      </header>
+
+      <section class="lock-screen" id="lockScreen" aria-labelledby="lockTitle">
+        <form class="lock-card" id="unlockForm">
+          <div class="lock-orbit" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <span class="lock-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <rect x="4.5" y="10" width="15" height="10" rx="2.5"></rect>
+              <path d="M8 10V7.5a4 4 0 0 1 8 0V10"></path>
+              <path d="M12 14v2.5"></path>
+            </svg>
+          </span>
+          <span class="eyebrow">PRIVATE WORKBENCH</span>
+          <h2 id="lockTitle">输入访问密码</h2>
+          <p class="lock-copy">安装无需鉴权。生成图片与读取历史时，需要输入唯一的访问密码。密码只保存在当前页面内存中，不会写入项目文件。</p>
+          <label class="password-field">
+            <span class="visually-hidden">访问密码</span>
+            <input id="password" type="password" autocomplete="current-password" placeholder="访问密码" spellcheck="false" />
+            <button class="primary-button" id="unlockButton" type="submit">解锁工作台</button>
+          </label>
+          <p class="form-error" id="unlockError" role="alert" hidden></p>
+          <p class="lock-hint">密码由工作台维护者提供。连续尝试可能触发临时限流。</p>
+        </form>
+      </section>
+
+      <main class="studio" id="studio" hidden>
+        <aside class="controls" aria-label="生成参数">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">CREATE</span>
+              <h2>生成一张素材</h2>
+            </div>
+            <span class="model-pill">gpt-image-2.6</span>
+          </div>
+
+          <label class="field prompt-field">
+            <span class="field-label">画面描述 <span class="field-hint">越具体越稳定</span></span>
+            <textarea id="prompt" rows="6" maxlength="4000" placeholder="例如：雨夜霓虹灯下的未来城市街角，电影感构图，蓝紫色与暖橙色灯光，细腻材质，16:9"></textarea>
+            <span class="prompt-meta"><span id="promptCount">0 / 4000</span><span>中文或英文均可</span></span>
+          </label>
+
+          <div class="examples" id="examples" aria-label="提示词示例">
+            <button type="button" data-prompt="极简产品摄影，哑光陶瓷咖啡杯，柔和侧光，暖灰背景，留白构图，商业质感">产品摄影</button>
+            <button type="button" data-prompt="雨夜霓虹灯下的未来城市街角，电影感构图，蓝紫色与暖橙色灯光，细腻材质，16:9">电影氛围</button>
+            <button type="button" data-prompt="长毛猫坐在窗台上，午后阳光，浅景深，胶片质感，温暖安静">生活质感</button>
+          </div>
+
+          <div class="field">
+            <span class="field-label">画面尺寸 <span class="field-hint">宽高需为 16 的倍数</span></span>
+            <div class="chips size-chips" id="sizePresets"></div>
+            <div class="custom-size">
+              <label>宽 <input id="customWidth" type="number" min="256" max="4096" step="16" value="1024" inputmode="numeric" /></label>
+              <span>×</span>
+              <label>高 <input id="customHeight" type="number" min="256" max="4096" step="16" value="1024" inputmode="numeric" /></label>
+              <button type="button" id="applySize" class="ghost-button">应用</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="field-label">生成数量 <span class="field-hint">每张独立计费</span></span>
+            <div class="chips count-chips" id="counts" role="group" aria-label="生成数量">
+              <button type="button" data-count="1" class="is-active">1 张</button>
+              <button type="button" data-count="2">2 张</button>
+              <button type="button" data-count="3">3 张</button>
+              <button type="button" data-count="4">4 张</button>
+            </div>
+          </div>
+
+          <div class="cost-note">
+            <span class="cost-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5v9M9.5 9.5h5M9.5 14.5h5"></path></svg>
+            </span>
+            <span>通过 Super 生图代理连接上游网关；失败请求不自动重试，避免重复扣费。</span>
+          </div>
+
+          <button class="primary-button generate-button" id="generateButton" type="button">
+            <span class="button-spinner" aria-hidden="true"></span>
+            <span class="button-label">生成素材</span>
+          </button>
+          <p class="hint-text" id="controlStatus">准备就绪</p>
+        </aside>
+
+        <section class="results" aria-label="生成结果">
+          <div class="results-heading">
+            <div>
+              <span class="eyebrow">LATEST OUTPUT</span>
+              <h2>本次生成</h2>
+            </div>
+            <span class="status-pill" id="resultStatus">等待生成</span>
+          </div>
+          <div class="stage" id="stage">
+            <div class="empty-stage">
+              <span class="empty-glyph" aria-hidden="true">✦</span>
+              <strong>从一个画面描述开始</strong>
+              <p>左侧设置尺寸与数量，生成的素材会出现在这里。</p>
+            </div>
+          </div>
+
+          <div class="history-heading">
+            <div>
+              <span class="eyebrow">RECENT</span>
+              <h2>生成历史</h2>
+            </div>
+            <button type="button" class="ghost-button" id="refreshHistory">刷新历史</button>
+          </div>
+          <div class="history-grid" id="history"></div>
+          <p class="history-empty" id="historyEmpty">还没有生成记录。生成成功后，这里会保留最近的历史。</p>
+        </section>
+      </main>
+
+      <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>
