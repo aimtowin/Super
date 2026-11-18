@@ -36,6 +36,8 @@ async function startMockServices(): Promise<{
     zips[version].sha256 = createHash('sha256').update(zips[version].bytes).digest('hex');
   }
   let activeVersion: ExtensionVersion = '1.1.0';
+  const imageBytes = Buffer.from(PNG_DATA_URL.split(',')[1] ?? '', 'base64');
+  let proxyPort = 0;
   const proxyRecords: Array<{
     id: string;
     createdAt: string;
@@ -46,6 +48,24 @@ async function startMockServices(): Promise<{
     images: Array<{ url: string; downloadUrl: string; width: number; height: number; bytes: number }>;
   }> = [];
   const proxy = createServer((request, response) => {
+    if (request.url === '/image.png') {
+      response.writeHead(200, {
+        'content-type': 'image/png',
+        'content-length': imageBytes.byteLength,
+      });
+      let offset = 0;
+      const timer = setInterval(() => {
+        if (offset >= imageBytes.byteLength) {
+          clearInterval(timer);
+          response.end();
+          return;
+        }
+        const next = Math.min(imageBytes.byteLength, offset + 14);
+        response.write(imageBytes.subarray(offset, next));
+        offset = next;
+      }, 120);
+      return;
+    }
     let raw = '';
     request.setEncoding('utf8');
     request.on('data', (chunk) => { raw += chunk; });
@@ -71,8 +91,8 @@ async function startMockServices(): Promise<{
           model: body.channel === 'upscale' ? 'gpt-image-upscale' : 'gpt-image-native',
           size: body.size,
           images: [{
-            url: PNG_DATA_URL,
-            downloadUrl: PNG_DATA_URL,
+            url: `http://127.0.0.1:${proxyPort}/image.png`,
+            downloadUrl: `http://127.0.0.1:${proxyPort}/image.png`,
             width: 1024,
             height: 1024,
             bytes: 68,
@@ -129,6 +149,7 @@ async function startMockServices(): Promise<{
     || catalogAddress === null || typeof catalogAddress === 'string') {
     throw new Error('No service port');
   }
+  proxyPort = proxyAddress.port;
   return {
     catalog: catalogServer,
     proxy,
@@ -243,6 +264,7 @@ test('image studio installs 1.1.0, auto-updates to 1.2.0, unlocks and generates'
     await frame.getByPlaceholder(/例如/).fill('测试图片素材');
     await frame.getByRole('button', { name: /超分/ }).click();
     await frame.getByRole('button', { name: '生成素材' }).click();
+    await expect(frame.locator('.stage-download')).toBeVisible({ timeout: 15_000 });
     await expect(frame.locator('.stage-card img')).toBeVisible({ timeout: 15_000 });
     await expect(frame.getByText('下载完成')).toBeVisible();
     await expect(frame.locator('.stage-card')).toContainText('超分');

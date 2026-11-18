@@ -14,6 +14,98 @@ function resultKey(requestId) {
   return `igs.res.${requestId}`;
 }
 
+const DOWNLOAD_CHUNK_BYTES = 40 * 1024;
+const DOWNLOAD_PROGRESS_PREFIX = 'igs.dprog.';
+const DOWNLOAD_RESULT_PREFIX = 'igs.dres.';
+const DOWNLOAD_CHUNK_PREFIX = 'igs.dchunk.';
+
+function downloadRequestKey(requestId) {
+  return `igs.dreq.${requestId}`;
+}
+
+function downloadProgressKey(requestId) {
+  return `${DOWNLOAD_PROGRESS_PREFIX}${requestId}`;
+}
+
+function downloadResultKey(requestId) {
+  return `${DOWNLOAD_RESULT_PREFIX}${requestId}`;
+}
+
+function downloadChunkKey(requestId, index) {
+  return `${DOWNLOAD_CHUNK_PREFIX}${requestId}.${index}`;
+}
+
+async function runDownload(superApi, requestId) {
+  const request = await superApi.storage.get(downloadRequestKey(requestId)).catch(() => null);
+  await superApi.storage.delete(downloadRequestKey(requestId)).catch(() => undefined);
+  if (request === null || typeof request !== 'object' || typeof request.url !== 'string') {
+    await superApi.storage.set(downloadResultKey(requestId), {
+      ok: false,
+      error: { code: 'BAD_REQUEST', message: '下载请求已失效。' },
+    }).catch(() => undefined);
+    return;
+  }
+  try {
+    const response = await fetch(request.url, { signal: AbortSignal.timeout(600_000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const total = Number(response.headers.get('content-length') || request.bytes || 0);
+    const chunks = [];
+    let received = 0;
+    if (response.body !== null) {
+      const reader = response.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value === undefined) continue;
+        const buffer = Buffer.from(value);
+        received += buffer.byteLength;
+        for (let offset = 0; offset < buffer.byteLength; offset += DOWNLOAD_CHUNK_BYTES) {
+          chunks.push(buffer.subarray(offset, offset + DOWNLOAD_CHUNK_BYTES).toString('base64'));
+        }
+        await superApi.storage.set(downloadProgressKey(requestId), {
+          received,
+          total,
+        }).catch(() => undefined);
+      }
+    }
+    for (let index = 0; index < chunks.length; index += 1) {
+      await superApi.storage.set(downloadChunkKey(requestId, index), chunks[index]);
+    }
+    await superApi.storage.set(downloadResultKey(requestId), {
+      ok: true,
+      chunks: chunks.length,
+      size: received,
+      type: response.headers.get('content-type') || 'image/png',
+      total: total || received,
+    });
+  } catch (error) {
+    await superApi.storage.set(downloadResultKey(requestId), {
+      ok: false,
+      error: {
+        code: 'DOWNLOAD_FAILED',
+        message: error instanceof Error && /timeout|aborted/iu.test(error.message)
+          ? '图片下载超时。'
+          : '图片下载失败，请稍后重试。',
+      },
+    }).catch(() => undefined);
+  }
+}
+
+async function runDownloadCleanup(superApi, requestId) {
+  const result = await superApi.storage.get(downloadResultKey(requestId)).catch(() => null);
+  const count = result !== null && typeof result === 'object' && Number.isInteger(result.chunks)
+    ? Math.max(0, Math.min(512, result.chunks))
+    : 0;
+  for (let index = 0; index < count; index += 1) {
+    await superApi.storage.delete(downloadChunkKey(requestId, index)).catch(() => undefined);
+  }
+  await Promise.all([
+    superApi.storage.delete(downloadRequestKey(requestId)).catch(() => undefined),
+    superApi.storage.delete(downloadProgressKey(requestId)).catch(() => undefined),
+    superApi.storage.delete(downloadResultKey(requestId)).catch(() => undefined),
+  ]);
+}
+
 async function callProxy(path, body) {
   const response = await fetch(`${PROXY_BASE}${path}`, {
     method: 'POST',
@@ -98,6 +190,18 @@ exports.setup = async function setup(superApi) {
     const requestId = Array.isArray(context.assetIds) ? context.assetIds[0] : undefined;
     if (typeof requestId === 'string' && requestId.length > 0) {
       await superApi.storage.delete(resultKey(requestId)).catch(() => undefined);
+    }
+  });
+  await superApi.commands.register('fetch-image', async (context) => {
+    const requestId = Array.isArray(context.assetIds) ? context.assetIds[0] : undefined;
+    if (typeof requestId === 'string' && requestId.length > 0) {
+      void runDownload(superApi, requestId);
+    }
+  });
+  await superApi.commands.register('cleanup-download', async (context) => {
+    const requestId = Array.isArray(context.assetIds) ? context.assetIds[0] : undefined;
+    if (typeof requestId === 'string' && requestId.length > 0) {
+      await runDownloadCleanup(superApi, requestId);
     }
   });
 };

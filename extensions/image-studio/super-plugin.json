@@ -34,6 +34,14 @@
       {
         "id": "cleanup",
         "title": "图片素材生成：清理临时结果"
+      },
+      {
+        "id": "fetch-image",
+        "title": "图片素材生成：后台下载图片"
+      },
+      {
+        "id": "cleanup-download",
+        "title": "图片素材生成：清理下载分块"
       }
     ],
     "menus": {},

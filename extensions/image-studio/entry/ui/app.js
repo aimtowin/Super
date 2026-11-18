@@ -276,40 +276,56 @@ function dataUrlToBlob(url) {
   return new Blob([bytes], { type: mime });
 }
 
+function base64ToBytes(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+async function downloadImageViaRuntime(image, onProgress) {
+  const id = requestId();
+  await storageSet(`igs.dreq.${id}`, { url: image.url, bytes: image.bytes });
+  invokeCommand('fetch-image', id);
+  const started = Date.now();
+  try {
+    let result = null;
+    while (Date.now() - started < RESULT_TIMEOUT_MS) {
+      const progress = await storageGet(`igs.dprog.${id}`);
+      if (progress !== null && typeof progress === 'object') {
+        onProgress(Number(progress.received) || 0, Number(progress.total) || Number(image.bytes) || 0);
+      }
+      result = await storageGet(`igs.dres.${id}`);
+      if (result !== null) break;
+      const commandError = state.commandErrors.get(id);
+      if (commandError !== undefined) throw new Error(commandError);
+      await new Promise((resolve) => setTimeout(resolve, 280));
+    }
+    if (result === null || typeof result !== 'object' || result.ok !== true) {
+      throw new Error(result?.error?.message || '图片下载超时。');
+    }
+    const chunks = [];
+    const count = Math.max(0, Math.min(512, Number(result.chunks) || 0));
+    for (let index = 0; index < count; index += 1) {
+      const value = await storageGet(`igs.dchunk.${id}.${index}`);
+      if (typeof value === 'string') chunks.push(base64ToBytes(value));
+    }
+    const blob = new Blob(chunks, { type: result.type || 'image/png' });
+    onProgress(blob.size, blob.size || Number(image.bytes) || 0);
+    return blob;
+  } finally {
+    invokeCommand('cleanup-download', id);
+    state.commandErrors.delete(id);
+  }
+}
+
 async function downloadImageBlob(image, onProgress) {
   if (typeof image.url === 'string' && image.url.startsWith('data:')) {
     const blob = dataUrlToBlob(image.url);
     onProgress(blob.size, blob.size);
     return blob;
   }
-  const response = await fetch(image.url, {
-    cache: 'no-store',
-    mode: 'cors',
-    credentials: 'omit',
-  });
-  if (!response.ok) throw new Error(`下载失败（HTTP ${response.status}）`);
-  const headerLength = Number(response.headers.get('content-length') || 0);
-  const total = headerLength > 0 ? headerLength : Number(image.bytes || 0);
-  if (response.body === null) {
-    const blob = await response.blob();
-    onProgress(blob.size, blob.size || total);
-    return blob;
-  }
-  const reader = response.body.getReader();
-  const chunks = [];
-  let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value !== undefined) {
-      chunks.push(value);
-      received += value.byteLength;
-      onProgress(received, total);
-    }
-  }
-  const blob = new Blob(chunks, { type: response.headers.get('content-type') || 'image/png' });
-  onProgress(blob.size, blob.size || total);
-  return blob;
+  return downloadImageViaRuntime(image, onProgress);
 }
 
 function renderStage(record) {
