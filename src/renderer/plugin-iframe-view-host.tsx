@@ -170,6 +170,7 @@ export function PluginIframeViewHost({
   const containerRef = useRef<HTMLDivElement>(null);
   const readyRef = useRef(false);
   const mountedRef = useRef(false);
+  const loadedOnceRef = useRef(false);
   const lifecycleRef = useRef<PluginViewLifecycleState>('loading');
   const [lifecycle, setLifecycleState] = useState<PluginViewLifecycleState>('loading');
 
@@ -372,7 +373,16 @@ export function PluginIframeViewHost({
         key={instanceKey}
         onError={() => transition({ type: 'frame-error' })}
         onLoad={() => {
-          transition({ type: 'frame-load' });
+          // A plugin can post `plugin-ui.ready` before the iframe's load event
+          // is delivered. That first load must not downgrade a ready view back
+          // to the loading placeholder (otherwise the placeholder stays on top
+          // of a perfectly usable frame). Later loads are real reloads and do
+          // require a fresh ready handshake.
+          const firstLoad = !loadedOnceRef.current;
+          loadedOnceRef.current = true;
+          if (!(firstLoad && readyRef.current)) {
+            transition({ type: 'frame-load' });
+          }
           // A fresh document (initial load or user reload) needs its own mount
           // announcement; the guard only suppresses re-announcing the same
           // document when ready arrived before the load event.
