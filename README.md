@@ -4,7 +4,7 @@
 
 </div>
 
-# Super Lib v2.4.2
+# Super Lib v2.5.0
 
 <div align="center">
 
@@ -47,7 +47,7 @@ Super Lib 是一款完全免费的本地素材管理应用。把图片、视频�
 
 ## 安装与使用
 
-本次源码版本为 `v2.4.2`，实际发行状态见[验收记录](docs/releases/v2.4.2-validation.md)。更新源为服务器 IP 直连（`https://43.142.93.106`）；2.4.0/2.4.1 客户端可增量升级到 2.4.2（增量包约 3.5 MB）。首次安装请下载 `SuperSetup.exe`；2.3.21 及更早版本无法自动发现新版本，需要手动覆盖安装一次。其他平台的安装包以发布页实际附件为准。
+本次源码版本为 `v2.5.0`，实际发行状态见[验收记录](docs/releases/v2.5.0-validation.md)。更新源为服务器 IP 直连（`https://43.142.93.106`）；2.4.0–2.4.9 客户端可增量升级到 2.5.0（2.4.9 → 2.5.0 约 4 MB）。首次安装请下载 `SuperSetup.exe`；2.3.21 及更早版本无法自动发现新版本，需要手动覆盖安装一次。其他平台的安装包以发布页实际附件为准。
 
 资产库保存在创建时选择的位置。导入会复制素材进入库；链接文件夹会引用原位置的文件，原目录需要保持可访问。详情见[快速上手](docs/user-guide/quick-start.md)。
 
@@ -107,6 +107,4 @@ npm run make:inno
 
 维护者可运行 `node --test scripts/docs/audit-docs.test.mjs` 与 `node scripts/docs/audit-docs.mjs` 检查本地文档引用。仓库分类与清理边界见[仓库指南](docs/REPOSITORY_GUIDE.md)，本次修订证据见[2.3.21 文档核对](docs/reference/documentation-review-2.3.21.md)；[2.3.18 审查](docs/reference/documentation-review-2.3.18.md)保留原时点。
 
-借鉴与开源许可：Super Lib 在开源基础上持续独立开发，感谢原作者及贡献者；保留必要版权声明，并继续以 [MIT 许可证](LICENSE) 开源。
-
-[项目来源与历史技术记录](docs/reference/ORIGINS_AND_TECHNICAL_HISTORY.md)
+[开发纪实](docs/DEVELOPMENT_STORY.md) · [开源致谢](docs/DEVELOPMENT_STORY.md#致谢)

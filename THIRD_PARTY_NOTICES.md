@@ -2,9 +2,13 @@
 
 Super (MIT, see [LICENSE](LICENSE)) 依赖以下开源组件。各组件按其自身许可证提供；完整许可证文本随依赖包或下方链接分发。
 
-## 运行时依赖
+## 上游署名 / Upstream attribution
 
-本软件及部分侧栏 Emoji 分类资源沿用开源实现，原始来源和改编记录已集中归档。图形复用 Super 已有 Icon，未复制远程 SVG；主 [LICENSE](LICENSE) 保留原作者及后续贡献者的必要版权和完整 MIT 许可。
+Super Lib 基于 [dolag233/Serpent 0.1.4](https://github.com/dolag233/Serpent/tree/6aeb146c8f893a2f4be9249195c838a653bcb090) 的代码继续开发。侧栏 Emoji 分类另改编自 [Serpent 0.2.9 的 `entity-appearance.ts`](https://github.com/dolag233/Serpent/blob/f58701a6c06a41c075ef8fe8c6f48b7a6305f498/src/shared/entity-appearance.ts)；图形使用 Super 已有的 Icon，未复制远程 SVG。根目录 [LICENSE](LICENSE) 保留 Serpent contributors 和 Super contributors 的版权声明以及完整 MIT 许可正文。
+
+Super Lib builds on Serpent 0.1.4, and its sidebar emoji grouping was adapted from Serpent 0.2.9. The root [MIT License](LICENSE) preserves both projects' copyright notices. See [致谢](docs/DEVELOPMENT_STORY.md#致谢) / [Acknowledgements](docs/DEVELOPMENT_STORY.en.md#acknowledgements).
+
+## 运行时依赖
 
 | 组件 | 许可证 | 用途 |
 |---|---|---|

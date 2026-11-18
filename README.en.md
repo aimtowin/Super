@@ -47,9 +47,9 @@ Super Lib itself is free. Optional third-party AI services may charge according 
 
 ## Install and use
 
-The current source targets `v2.4.2`; verified Windows x64 release artifacts are documented in the [2.4.2 validation record](docs/releases/v2.4.2-validation.md). The update source is reached by server IP (`https://43.142.93.106`); 2.4.0/2.4.1 clients can incrementally update to 2.4.2 (about 3.5 MB). Download `SuperSetup.exe` for a first installation; 2.3.21 and older clients must install a 2.4.x build manually once. Availability on other platforms depends on the files actually attached to a release.
+The current source targets `v2.5.0`; verified Windows x64 release artifacts are documented in the [2.5.0 validation record](docs/releases/v2.5.0-validation.md). The update source is reached by server IP (`https://43.142.93.106`); 2.4.0–2.4.9 clients can incrementally update to 2.5.0 (2.4.9 to 2.5.0 is about 4 MB). Download `SuperSetup.exe` for a first installation; 2.3.21 and older clients must install a 2.4.x build manually once. Availability on other platforms depends on the files actually attached to a release.
 
-See the [2.4.2 notes](docs/releases/v2.4.2.md) and [validation record](docs/releases/v2.4.2-validation.md) for the startup, layout and on-demand viewer improvements. The [2.4.1 announcement](docs/releases/v2.4.1-announcement.md) covers the auto-update verification and the 2.3.21 folder-navigation performance work. The earlier [2.3.20 notes](docs/releases/v2.3.20.md) describe the sidebar loading fix, and [2.3.19](docs/releases/v2.3.19.md) documents the viewer and library-organization upgrades.
+See the [2.5.0 notes](docs/releases/v2.5.0.md) and [validation record](docs/releases/v2.5.0-validation.md) for the startup-update reliability and image-download progress work, alongside the documented extension channels and independent extension updates. Earlier release records remain available in `docs/releases/`.
 
 Libraries live at the location you choose. Importing copies assets into the library; linking references files at their existing location, which must remain accessible. See the [quick start](docs/user-guide/quick-start.en.md).
 
@@ -107,4 +107,4 @@ See the [2.4.2 notes](docs/releases/v2.4.2.md) and [validation record](docs/rele
 
 License notices for third-party components, media runtimes, and assets are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the license files shipped with each component.
 
-Acknowledgement and open-source license: Super Lib is independently developed on an open-source foundation. We thank the original authors and contributors, retain the required copyright notices, and continue to release the software under the [MIT License](LICENSE).
+[Development story](docs/DEVELOPMENT_STORY.en.md) · [Open-source acknowledgements](docs/DEVELOPMENT_STORY.en.md#acknowledgements)
