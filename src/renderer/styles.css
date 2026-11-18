@@ -7986,6 +7986,25 @@ select.ai-config-input.ai-config-languages {
   border-top: 1px solid var(--divider);
 }
 
+.plugin-settings-auto-update,
+.plugin-settings-update-actions {
+  padding-top: 13px;
+  border-top: 1px solid var(--divider);
+}
+
+.plugin-settings-update-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.plugin-settings-update-buttons .secondary-button,
+.plugin-settings-update-buttons .primary-button {
+  min-width: max-content;
+  white-space: nowrap;
+}
+
 .plugin-runtime-mode-unrestricted {
   color: var(--warning-fg);
 }

@@ -67,6 +67,20 @@
             <span class="model-pill">gpt-image-2.6</span>
           </div>
 
+          <div class="field">
+            <span class="field-label">生成渠道 <span class="field-hint">上游两个独立渠道</span></span>
+            <div class="channel-grid" id="channels" role="group" aria-label="生成渠道">
+              <button type="button" data-channel="native" class="channel-card is-active">
+                <span class="channel-icon" aria-hidden="true">◈</span>
+                <span class="channel-copy"><strong>原生</strong><span>原始细节 · 约 ¥0.1/张</span></span>
+              </button>
+              <button type="button" data-channel="upscale" class="channel-card">
+                <span class="channel-icon" aria-hidden="true">✦</span>
+                <span class="channel-copy"><strong>超分</strong><span>高清放大 · 约 ¥0.02/张</span></span>
+              </button>
+            </div>
+          </div>
+
           <label class="field prompt-field">
             <span class="field-label">画面描述 <span class="field-hint">越具体越稳定</span></span>
             <textarea id="prompt" rows="6" maxlength="4000" placeholder="例如：雨夜霓虹灯下的未来城市街角，电影感构图，蓝紫色与暖橙色灯光，细腻材质，16:9"></textarea>

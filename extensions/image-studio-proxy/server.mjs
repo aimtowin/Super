@@ -10,7 +10,10 @@ const PASSWORD = process.env.IMAGE_STUDIO_PASSWORD || '';
 const OUTPUT_DIR = process.env.IMAGE_STUDIO_OUTPUT_DIR || '/var/www/super-updates/image-studio';
 const PUBLIC_BASE_URL = (process.env.IMAGE_STUDIO_PUBLIC_BASE_URL || 'https://43.142.93.106').replace(/\/+$/u, '');
 const HISTORY_LIMIT = Math.min(Math.max(Number(process.env.IMAGE_STUDIO_HISTORY_LIMIT || 80), 1), 200);
-const MODEL = 'gpt-image-2.6';
+const CHANNELS = Object.freeze({
+  native: process.env.IMAGE_STUDIO_NATIVE_MODEL || 'gpt-image-native',
+  upscale: process.env.IMAGE_STUDIO_UPSCALE_MODEL || 'gpt-image-upscale',
+});
 const TIMEOUT_MS = 310_000;
 const MAX_BODY_BYTES = 128 * 1024;
 const HISTORY_FILE = path.join(OUTPUT_DIR, 'history.json');
@@ -82,6 +85,7 @@ function readBody(request) {
 function validateGenerate(body) {
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
   if (prompt.length < 1 || prompt.length > 4000) throw new Error('INVALID_PROMPT');
+  const channel = body.channel === 'upscale' ? 'upscale' : body.channel === 'native' ? 'native' : 'native';
   const n = Number(body.n ?? 1);
   if (!Number.isInteger(n) || n < 1 || n > 4) throw new Error('INVALID_COUNT');
   const size = typeof body.size === 'string' ? body.size : '1024x1024';
@@ -93,7 +97,7 @@ function validateGenerate(body) {
     || width % 16 !== 0 || height % 16 !== 0) {
     throw new Error('INVALID_SIZE');
   }
-  return { prompt, n, size, width, height };
+  return { prompt, channel, n, size, width, height };
 }
 
 function publicImageUrl(relativePath) {
@@ -203,7 +207,7 @@ async function generate(body) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: CHANNELS[input.channel],
       prompt: input.prompt,
       n: input.n,
       size: input.size,
@@ -232,7 +236,8 @@ async function generate(body) {
     id: randomUUID(),
     createdAt: generatedAt,
     prompt: input.prompt,
-    model: MODEL,
+    channel: input.channel,
+    model: CHANNELS[input.channel],
     size: input.size,
     images,
   };

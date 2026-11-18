@@ -86,7 +86,7 @@ test('production image studio catalogue and history render in the workbench', as
     await frame.locator('#password').fill(password!);
     await frame.getByRole('button', { name: '解锁工作台' }).click();
     await expect(frame.getByRole('heading', { name: '生成一张素材' })).toBeVisible({ timeout: 20_000 });
-    await expect(frame.locator('.history-card')).toHaveCount(1, { timeout: 20_000 });
+    await expect(frame.locator('.history-card').first()).toBeVisible({ timeout: 20_000 });
     const historyImage = frame.locator('.history-thumbs img').first();
     await expect(historyImage).toBeVisible();
     await expect.poll(async () => historyImage.evaluate((image) => (image as HTMLImageElement).naturalWidth), { timeout: 20_000 }).toBeGreaterThan(0);

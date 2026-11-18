@@ -63,6 +63,7 @@ async function runRequest(superApi, requestId, kind) {
     const payload = await callProxy('/generate', {
       password: request.password,
       prompt: request.prompt,
+      channel: request.channel,
       size: request.size,
       n: request.n,
     });

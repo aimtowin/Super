@@ -127,6 +127,22 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .field { display: grid; gap: 7px; }
 .field-label { color: var(--secondary); display: flex; font-size: 11px; font-weight: 600; justify-content: space-between; gap: 8px; }
 .field-hint { color: var(--tertiary); font-weight: 400; }
+.channel-grid { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.channel-card {
+  align-items: flex-start; background: color-mix(in srgb, var(--bg) 58%, transparent);
+  border: 1px solid var(--line); border-radius: 10px; cursor: pointer; display: flex; gap: 8px;
+  padding: 9px; text-align: left; transition: 120ms ease;
+}
+.channel-card:hover { border-color: color-mix(in srgb, var(--accent) 38%, var(--line)); }
+.channel-card.is-active {
+  background: color-mix(in srgb, var(--accent) 13%, var(--raised));
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.channel-icon { color: var(--accent); font-size: 15px; line-height: 1.2; }
+.channel-copy { display: grid; gap: 2px; min-width: 0; }
+.channel-copy strong { font-size: 12px; font-weight: 650; }
+.channel-copy span { color: var(--tertiary); font-size: 9px; line-height: 1.35; }
 .prompt-field textarea {
   background: color-mix(in srgb, var(--bg) 72%, transparent); border: 1px solid var(--control-line);
   border-radius: 11px; color: var(--text); line-height: 1.6; min-height: 116px; padding: 11px 12px; resize: vertical; width: 100%;

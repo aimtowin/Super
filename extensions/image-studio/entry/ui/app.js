@@ -17,6 +17,7 @@ const state = {
   password: '',
   busy: false,
   size: { width: 1024, height: 1024 },
+  channel: 'native',
   count: 1,
   history: [],
   pending: new Map(),
@@ -182,6 +183,13 @@ function setSize(width, height, options = {}) {
   if (options.toast) showToast(`尺寸已设为 ${state.size.width} × ${state.size.height}`);
 }
 
+function setChannel(channel) {
+  state.channel = channel === 'upscale' ? 'upscale' : 'native';
+  for (const button of $('channels').querySelectorAll('button')) {
+    button.classList.toggle('is-active', button.dataset.channel === state.channel);
+  }
+}
+
 function setCount(value) {
   state.count = Math.min(4, Math.max(1, value));
   for (const button of counts.querySelectorAll('button')) {
@@ -261,7 +269,7 @@ function renderStage(record) {
     const meta = document.createElement('div');
     meta.className = 'stage-meta';
     const info = document.createElement('span');
-    info.textContent = `${image.width} × ${image.height} · ${formatBytes(image.bytes)}`;
+    info.textContent = `${record.channel === 'upscale' ? '超分' : '原生'} · ${image.width} × ${image.height} · ${formatBytes(image.bytes)}`;
     const link = document.createElement('a');
     link.href = image.downloadUrl;
     link.download = '';
@@ -296,7 +304,7 @@ function renderHistory() {
     const meta = document.createElement('div');
     meta.className = 'history-meta';
     const stamp = document.createElement('span');
-    stamp.textContent = `${formatTime(record.createdAt)} · ${record.images.length} 张`;
+    stamp.textContent = `${formatTime(record.createdAt)} · ${record.channel === 'upscale' ? '超分' : '原生'} · ${record.images.length} 张`;
     const link = document.createElement('a');
     link.href = record.images[0]?.downloadUrl || '#';
     link.download = '';
@@ -361,6 +369,7 @@ async function generate() {
     const result = await runCommand('generate', {
       password: state.password,
       prompt,
+      channel: state.channel,
       size: `${state.size.width}x${state.size.height}`,
       n: state.count,
     });
@@ -437,6 +446,9 @@ function bind() {
   for (const button of counts.querySelectorAll('button')) {
     button.addEventListener('click', () => setCount(Number(button.dataset.count)));
   }
+  for (const button of $('channels').querySelectorAll('button')) {
+    button.addEventListener('click', () => setChannel(button.dataset.channel));
+  }
   $('applySize').addEventListener('click', () => {
     setSize(Number(customWidth.value), Number(customHeight.value), { toast: true });
   });
@@ -486,6 +498,7 @@ function bind() {
 
 parseContext();
 bind();
+setChannel(state.channel);
 renderSizes();
 renderEmptyStage();
 setUnlocked(false);

@@ -13,30 +13,34 @@ test.describe.configure({ timeout: 180_000 });
 
 const PNG_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nXQAAAAASUVORK5CYII=';
 
-async function startMockServices(): Promise<{ catalog: Server; proxy: Server; catalogUrl: string; proxyUrl: string }> {
-  const zip = readFileSync(path.join(process.cwd(), 'extensions/dist/com.super.image-studio-1.0.0-win32-x64.zip'));
-  const sha256 = createHash('sha256').update(zip).digest('hex');
-  const catalog = {
-    catalogVersion: 1,
-    extensions: [{
-      id: 'com.super.image-studio',
-      name: '图片素材生成',
-      version: '1.0.0',
-      description: 'image studio',
-      author: 'Super',
-      platform: 'win32-x64',
-      minAppVersion: '2.4.8',
-      asset: {
-        path: 'com.super.image-studio-1.0.0-win32-x64.zip',
-        size: zip.byteLength,
-        sha256,
-      },
-    }],
+type ExtensionVersion = '1.0.0' | '1.1.0';
+
+async function startMockServices(): Promise<{
+  catalog: Server;
+  proxy: Server;
+  catalogUrl: string;
+  proxyUrl: string;
+  setCatalogVersion(version: ExtensionVersion): void;
+}> {
+  const zips: Record<ExtensionVersion, { bytes: Buffer; sha256: string }> = {
+    '1.0.0': {
+      bytes: readFileSync(path.join(process.cwd(), 'extensions/dist/com.super.image-studio-1.0.0-win32-x64.zip')),
+      sha256: '',
+    },
+    '1.1.0': {
+      bytes: readFileSync(path.join(process.cwd(), 'extensions/dist/com.super.image-studio-1.1.0-win32-x64.zip')),
+      sha256: '',
+    },
   };
+  for (const version of Object.keys(zips) as ExtensionVersion[]) {
+    zips[version].sha256 = createHash('sha256').update(zips[version].bytes).digest('hex');
+  }
+  let activeVersion: ExtensionVersion = '1.0.0';
   const proxyRecords: Array<{
     id: string;
     createdAt: string;
     prompt: string;
+    channel: string;
     model: string;
     size: string;
     images: Array<{ url: string; downloadUrl: string; width: number; height: number; bytes: number }>;
@@ -63,7 +67,8 @@ async function startMockServices(): Promise<{ catalog: Server; proxy: Server; ca
           id: `record-${proxyRecords.length + 1}`,
           createdAt: new Date().toISOString(),
           prompt: body.prompt,
-          model: 'gpt-image-2.6',
+          channel: body.channel === 'upscale' ? 'upscale' : 'native',
+          model: body.channel === 'upscale' ? 'gpt-image-upscale' : 'gpt-image-native',
           size: body.size,
           images: [{
             url: PNG_DATA_URL,
@@ -83,13 +88,32 @@ async function startMockServices(): Promise<{ catalog: Server; proxy: Server; ca
   });
   const catalogServer = createServer((request, response) => {
     if (request.url === '/latest.json') {
+      const zip = zips[activeVersion];
+      const catalog = {
+        catalogVersion: 1,
+        extensions: [{
+          id: 'com.super.image-studio',
+          name: '图片素材生成',
+          version: activeVersion,
+          description: 'image studio',
+          author: 'Super',
+          platform: 'win32-x64',
+          minAppVersion: '2.4.8',
+          asset: {
+            path: `com.super.image-studio-${activeVersion}-win32-x64.zip`,
+            size: zip.bytes.byteLength,
+            sha256: zip.sha256,
+          },
+        }],
+      };
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify(catalog));
       return;
     }
-    if (request.url === '/com.super.image-studio-1.0.0-win32-x64.zip') {
+    const match = /^\/com\.super\.image-studio-(1\.[01]\.0)-win32-x64\.zip$/u.exec(request.url ?? '');
+    if (match) {
       response.writeHead(200, { 'content-type': 'application/octet-stream' });
-      response.end(zip);
+      response.end(zips[match[1] as ExtensionVersion].bytes);
       return;
     }
     response.writeHead(404);
@@ -110,10 +134,13 @@ async function startMockServices(): Promise<{ catalog: Server; proxy: Server; ca
     proxy,
     catalogUrl: `http://127.0.0.1:${catalogAddress.port}/latest.json`,
     proxyUrl: `http://127.0.0.1:${proxyAddress.port}`,
+    setCatalogVersion(version) {
+      activeVersion = version;
+    },
   };
 }
 
-test('image studio installs, unlocks with the password and generates an asset', async () => {
+test('image studio installs 1.0.0, auto-updates to 1.1.0, unlocks and generates', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'super-image-studio-e2e-'));
   const services = await startMockServices();
   let application: Awaited<ReturnType<typeof electron.launch>> | undefined;
@@ -145,7 +172,7 @@ test('image studio installs, unlocks with the password and generates an asset', 
       if (!libraries.ok || !libraries.value[0]) throw new Error('Missing library');
       return libraries.value[0].libraryId;
     });
-    await window.evaluate(async (libraryId) => {
+    const installedVersion = await window.evaluate(async (libraryId) => {
       const plugins = (globalThis as typeof globalThis & { super: { plugins: SuperPluginManagerApi } }).super.plugins;
       const listed = await plugins.request({ type: 'plugin-manager.list-server-extensions' });
       if (!listed.ok || !('extensions' in listed)) throw new Error('Missing catalogue');
@@ -178,10 +205,28 @@ test('image studio installs, unlocks with the password and generates an asset', 
         propagateUserScoped: true,
       });
       if (!resolved.ok) throw new Error('Resolve failed');
+      return pkg.version;
     }, libraryId);
+    expect(installedVersion).toBe('1.0.0');
 
+    services.setCatalogVersion('1.1.0');
     const expandSidebar = window.getByRole('button', { name: '展开导航', exact: true });
     if (await expandSidebar.isVisible()) await expandSidebar.click();
+
+    await window.getByRole('button', { name: '拓展', exact: true }).click();
+    const settings = window.getByRole('dialog', { name: '通用设置' });
+    await expect(settings).toBeVisible();
+    await settings.getByRole('tab', { name: '拓展', exact: true }).click();
+    await expect(settings.getByText('已更新 1 个拓展')).toBeVisible({ timeout: 20_000 });
+    await expect.poll(async () => window.evaluate(async (libraryId) => {
+      const plugins = (globalThis as typeof globalThis & { super: { plugins: SuperPluginManagerApi } }).super.plugins;
+      const response = await plugins.request({ type: 'plugin-manager.list', libraryId });
+      if (!response.ok || !('packages' in response)) return null;
+      return response.packages.find((entry) => entry.pluginId === 'com.super.image-studio')?.version ?? null;
+    }, libraryId)).toBe('1.1.0');
+    await window.keyboard.press('Escape');
+    await expect(settings).toBeHidden();
+
     const studioEntry = window.getByRole('button', { name: '图片素材生成', exact: true });
     await expect(studioEntry).toBeVisible({ timeout: 15_000 });
     await studioEntry.click();
@@ -196,9 +241,11 @@ test('image studio installs, unlocks with the password and generates an asset', 
     await frame.getByRole('button', { name: '解锁工作台' }).click();
     await expect(frame.getByRole('heading', { name: '生成一张素材' })).toBeVisible();
     await frame.getByPlaceholder(/例如/).fill('测试图片素材');
+    await frame.getByRole('button', { name: /超分/ }).click();
     await frame.getByRole('button', { name: '生成素材' }).click();
     await expect(frame.locator('.stage-card img')).toBeVisible({ timeout: 15_000 });
     await expect(frame.getByText('生成完成')).toBeVisible();
+    await expect(frame.locator('.stage-card')).toContainText('超分');
     await expect(frame.locator('.history-card')).toHaveCount(1);
   } finally {
     services.catalog.close();

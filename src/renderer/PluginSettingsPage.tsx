@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -39,6 +40,20 @@ type InstallScope = 'user' | 'library';
 type RendererShellApi = {
   openExternalUrl(url: string): Promise<{ ok: boolean }>;
 };
+
+function compareExtensionVersions(left: string, right: string): number {
+  const parse = (value: string): number[] => value
+    .split('-')[0]!
+    .split('.')
+    .slice(0, 3)
+    .map((part) => Number.parseInt(part, 10) || 0);
+  const a = parse(left);
+  const b = parse(right);
+  for (let index = 0; index < 3; index += 1) {
+    if (a[index]! !== b[index]!) return a[index]! - b[index]!;
+  }
+  return 0;
+}
 
 function formatPluginManagerFailure(
   response: Extract<Awaited<ReturnType<SuperPluginManagerApi['request']>>, { ok: false }>,
@@ -157,6 +172,19 @@ export function PluginSettingsPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [installError, setInstallError] = useState<string | undefined>();
+  const [autoUpdateExtensions, setAutoUpdateExtensions] = useState<boolean>(() => {
+    try {
+      return globalThis.localStorage.getItem('super.extensions.auto-update.v1') !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const [availableUpdates, setAvailableUpdates] = useState<Array<{
+    entry: ExtensionCatalogEntry;
+    package: PluginManagerPackageSummary;
+  }>>([]);
+  const [extensionUpdateMessage, setExtensionUpdateMessage] = useState<string | undefined>();
+  const updateCheckStarted = useRef(false);
 
   useEffect(() => {
     if (api?.onInstallProgress === undefined) return undefined;
@@ -197,6 +225,110 @@ export function PluginSettingsPage({
     const timer = globalThis.setTimeout(() => void load(), 0);
     return () => globalThis.clearTimeout(timer);
   }, [load, refreshKey]);
+
+  const checkServerUpdates = useCallback(async (autoInstall: boolean): Promise<void> => {
+    if (api === undefined || snapshot === undefined) return;
+    const installed = snapshot.packages.filter((item) =>
+      item.status === 'valid' && item.sourceFingerprint.startsWith('server:'));
+    if (installed.length === 0) {
+      setAvailableUpdates([]);
+      return;
+    }
+    try {
+      const response = await api.request({ type: 'plugin-manager.list-server-extensions' });
+      if (!response.ok || !('extensions' in response)) {
+        if (!autoInstall) setExtensionUpdateMessage(t('settings.pluginExtensionsUpdateFailed'));
+        return;
+      }
+      const updates = installed.flatMap((item) => {
+        const entry = response.extensions.find((candidate) => candidate.id === item.pluginId);
+        return entry !== undefined && compareExtensionVersions(entry.version, item.version) > 0
+          ? [{ entry, package: item }]
+          : [];
+      });
+      setAvailableUpdates(updates);
+      if (updates.length === 0) {
+        setExtensionUpdateMessage(t('settings.pluginExtensionsUpToDate'));
+        return;
+      }
+      if (!autoInstall) {
+        setExtensionUpdateMessage(t('settings.pluginUpdatesAvailable', { count: updates.length }));
+        return;
+      }
+      setBusy(true);
+      let installedCount = 0;
+      const previousResolutions = new Map(
+        snapshot.resolutions.map((resolution) => [resolution.pluginId, resolution]),
+      );
+      for (const update of updates) {
+        const result = await api.request({
+          type: 'plugin-manager.install-server-extension',
+          pluginId: update.entry.id,
+          scope: update.package.scope,
+          ...(update.package.scope === 'library' && libraryId !== undefined ? { libraryId } : {}),
+        });
+        if (result.ok) installedCount += 1;
+      }
+      if (installedCount > 0) {
+        // Keep the previous enablement decision across a server update. The
+        // package hash changes with every release, so without resolving the
+        // new hash the extension would appear installed but disabled.
+        const refreshed = await api.request({
+          type: 'plugin-manager.list',
+          ...(libraryId === undefined ? {} : { libraryId }),
+        });
+        if (refreshed.ok && 'packages' in refreshed) {
+          for (const update of updates) {
+            const previous = previousResolutions.get(update.entry.id);
+            if (previous?.status !== 'resolved' || libraryId === undefined) continue;
+            const nextPackage = refreshed.packages.find((item) =>
+              item.pluginId === update.entry.id
+              && item.version === update.entry.version
+              && item.status === 'valid');
+            if (nextPackage === undefined) continue;
+            if (nextPackage.trust !== 'trusted') {
+              const trusted = await api.request({
+                type: 'plugin-manager.trust',
+                scope: nextPackage.scope,
+                ...(nextPackage.scope === 'library' ? { libraryId } : {}),
+                pluginId: nextPackage.pluginId,
+                packageHash: nextPackage.packageHash,
+                decision: 'trusted',
+              });
+              if (!trusted.ok) continue;
+            }
+            await api.request({
+              type: 'plugin-manager.resolve',
+              libraryId,
+              pluginId: nextPackage.pluginId,
+              selection: nextPackage.scope === 'user' ? 'use-global' : 'use-library',
+              packageHash: nextPackage.packageHash,
+              ...(nextPackage.scope === 'user' ? { propagateUserScoped: true } : {}),
+            });
+          }
+        }
+        setExtensionUpdateMessage(t('settings.pluginExtensionsUpdated', { count: installedCount }));
+        setAvailableUpdates([]);
+        await load();
+      } else {
+        setExtensionUpdateMessage(t('settings.pluginExtensionsUpdateFailed'));
+      }
+    } catch {
+      setExtensionUpdateMessage(t('settings.pluginExtensionsUpdateFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }, [api, libraryId, load, snapshot, t]);
+
+  useEffect(() => {
+    if (snapshot === undefined || updateCheckStarted.current) return;
+    updateCheckStarted.current = true;
+    void checkServerUpdates(autoUpdateExtensions);
+  }, [autoUpdateExtensions, checkServerUpdates, snapshot]);
+
+  const installAvailableUpdates = useCallback(async (): Promise<void> => {
+    await checkServerUpdates(true);
+  }, [checkServerUpdates]);
 
   const execute = useCallback(async (request: PluginManagerRequest): Promise<boolean> => {
     if (api === undefined) {
@@ -799,7 +931,61 @@ export function PluginSettingsPage({
             <span aria-hidden="true" className="app-settings-toggle-track" />
           </span>
         </label>
-        </section>
+        <label className="app-settings-toggle-row plugin-settings-auto-update">
+          <span className="app-settings-row-copy">
+            <strong>{t('settings.pluginAutoUpdateExtensions')}</strong>
+            <span>{t('settings.pluginAutoUpdateExtensionsHint')}</span>
+          </span>
+          <span className="app-settings-toggle-control">
+            <input
+              aria-label={t('settings.pluginAutoUpdateExtensions')}
+              checked={autoUpdateExtensions}
+              disabled={busy || api === undefined}
+              onChange={(event) => {
+                const next = event.target.checked;
+                setAutoUpdateExtensions(next);
+                updateCheckStarted.current = false;
+                try {
+                  globalThis.localStorage.setItem('super.extensions.auto-update.v1', next ? '1' : '0');
+                } catch {
+                  // The preference still applies for this page session.
+                }
+              }}
+              type="checkbox"
+            />
+            <span aria-hidden="true" className="app-settings-toggle-track" />
+          </span>
+        </label>
+        <div className="app-settings-action-row plugin-settings-update-actions">
+          <span className="app-settings-row-copy">
+            <strong>{t('settings.pluginCheckUpdates')}</strong>
+            <span>{extensionUpdateMessage ?? t('settings.pluginAutoUpdateExtensionsHint')}</span>
+          </span>
+          <div className="plugin-settings-update-buttons">
+            <button
+              className="secondary-button"
+              disabled={busy || api === undefined}
+              onClick={() => {
+                updateCheckStarted.current = true;
+                void checkServerUpdates(false);
+              }}
+              type="button"
+            >
+              {t('settings.pluginCheckUpdates')}
+            </button>
+            {availableUpdates.length > 0 ? (
+              <button
+                className="primary-button"
+                disabled={busy || api === undefined}
+                onClick={() => void installAvailableUpdates()}
+                type="button"
+              >
+                {t('settings.pluginUpdateAll')}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </section>
 
       {error === undefined ? null : <p className="plugin-settings-error" role="status">{error}</p>}
       {loading ? <p className="app-settings-hint">{t('settings.pluginLoading')}</p> : null}

@@ -1,6 +1,6 @@
 {
   "catalogVersion": 1,
-  "generatedAt": "2026-11-18T16:50:00+08:00",
+  "generatedAt": "2026-11-18T18:35:00+08:00",
   "extensions": [
     {
       "id": "com.super.infinite-canvas",
@@ -27,15 +27,15 @@
     {
       "id": "com.super.image-studio",
       "name": "图片素材生成",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "description": "同风格的图片素材生成工作台：文生图、尺寸与数量选择、生成历史与下载。使用扩展时需要输入访问密码。",
       "author": "Super",
       "platform": "win32-x64",
       "minAppVersion": "2.4.8",
       "asset": {
-        "path": "image-studio/1.0.0/com.super.image-studio-1.0.0-win32-x64.zip",
-        "size": 15283,
-        "sha256": "72eb93889907d17b910e29602136f311ea9b623d789367ded3cdd6fe52fed6e2"
+        "path": "image-studio/1.1.0/com.super.image-studio-1.1.0-win32-x64.zip",
+        "size": 15861,
+        "sha256": "cdfeaf0f50e14f4b038abc383e4549c6a0de107f4581d697880828aa79d9462d"
       },
       "tutorial": {
         "title": "图片素材生成已就绪",
