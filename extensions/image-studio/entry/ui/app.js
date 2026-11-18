@@ -359,15 +359,20 @@ function renderStage(record) {
       link.download = `super-image-${record.id}-${record.images.indexOf(image) + 1}.png`;
       link.textContent = '下载原图';
       meta.append(link);
-    }).catch((error) => {
+    }).catch(() => {
+      // Hosts before the streaming-download capability blocked iframe fetch
+      // with `connect-src 'none'`. Fall back to the original image element so
+      // the generated asset still arrives; the next host build shows progress.
       card.classList.remove('is-downloading');
-      card.classList.add('is-download-failed');
-      progress.replaceChildren();
-      const title = document.createElement('strong');
-      title.textContent = '下载失败';
-      const detail = document.createElement('span');
-      detail.textContent = error instanceof Error ? error.message : '请稍后重试。';
-      progress.append(title, detail);
+      progress.remove();
+      img.hidden = false;
+      img.src = image.url;
+      card.classList.add('is-downloaded');
+      const link = document.createElement('a');
+      link.href = image.downloadUrl;
+      link.download = '';
+      link.textContent = '下载原图';
+      meta.append(link);
     });
     downloads.push(task);
   }

@@ -1,6 +1,6 @@
 {
   "catalogVersion": 1,
-  "generatedAt": "2026-11-18T19:20:00+08:00",
+  "generatedAt": "2026-11-18T19:25:00+08:00",
   "extensions": [
     {
       "id": "com.super.infinite-canvas",
@@ -34,8 +34,8 @@
       "minAppVersion": "2.4.8",
       "asset": {
         "path": "image-studio/1.2.0/com.super.image-studio-1.2.0-win32-x64.zip",
-        "size": 17474,
-        "sha256": "5700cd900e2d7827f3f7efba268a12fbd955a56c700fa3454e5faaa3af2c59ae"
+        "size": 17574,
+        "sha256": "ce0162f2a17b1e92e1df51ad702d4296886cb160f7b11137dc5cffb1b768bbee"
       },
       "tutorial": {
         "title": "图片素材生成已就绪",
